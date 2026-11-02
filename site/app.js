@@ -127,7 +127,11 @@ import { loadKingdom } from "./store.js";
   };
   const weekRows = (i, withFarms = false) => {
     const rows = withFarms ? grouped[i] : plain[i];
-    return rows.map((e) => ({ ...row(i, e, rows, withFarms && e.rank != null), farms: (e.farms ?? []).map((f) => row(i, f, [])) }));
+    // A summed Main lists the parts of its total under it: its own Fort Count first, then each Farm's.
+    return rows.map((e) => ({
+      ...row(i, e, rows, withFarms && e.rank != null),
+      parts: e.farms?.length ? [{ ...row(i, { ...e, fortCount: e.own, rank: null }, []), self: true }, ...e.farms.map((f) => row(i, f, []))] : [],
+    }));
   };
 
   // ---------- views ----------
@@ -148,27 +152,29 @@ import { loadKingdom } from "./store.js";
   }
 
   function rankList(rows, { limit = Infinity, deltas = false, stagger = false } = {}) {
-    const top = Math.max(1, ...rows.flatMap((r) => [r.e.fortCount, ...r.farms.map((f) => f.e.fortCount)]));
-    const li = (r, n, { farm = false } = {}) => {
+    const top = Math.max(1, ...rows.map((r) => r.e.fortCount));
+    const li = (r, n, { part = false } = {}) => {
       const place = r.e.rank != null && r.e.rank <= 3 ? PLACE[r.e.rank - 1] : "";
-      const cls = ["row", place, farm && "farm", deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
+      const cls = ["row", place, part && "part", deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
       const tie = r.tie ? `<span class="tag tie" title="Tied on ${r.e.fortCount} forts. The Council set this order.">Tie<span class="long"> · Council order</span></span>` : "";
       const tags = tie
         + (r.e.unlinked ? `<span class="tag farm" title="A Farm not yet linked to its Main">Farm · unlinked</span>` : "")
-        + (farm ? `<span class="tag farm" title="A Farm of the Main above. Its Fort Count is added to the Main's.">Farm</span>` : "");
-      const split = r.e.farms?.length ? ` title="${r.e.own} own + ${r.e.fortCount - r.e.own} from Farms"` : "";
+        + (part ? (r.self
+          ? `<span class="tag farm" title="The Main's own Fort Count, part of the total above">Main</span>`
+          : `<span class="tag farm" title="A Farm of the Main above. Its Fort Count is part of the total above.">Farm</span>`) : "");
+      const total = r.parts?.length ? `<small>total</small>` : "";
       return `
       <li class="${cls}"${stagger ? ` style="--d:${700 + n * 70}ms"` : ""}>
-        <span class="pos num">${farm ? "" : r.e.rank ?? "–"}</span>
+        <span class="pos num">${part ? "" : r.e.rank ?? "–"}</span>
         <span class="row-main">
           <span class="row-name">${who(r.g)}${tags}</span>
           <span class="bar"><i style="width:${(r.e.fortCount / top) * 100}%;animation-delay:${900 + Math.min(n, 15) * 90}ms"></i></span>
         </span>
-        <b class="count num"${split}>${r.e.fortCount}</b>
+        <b class="count num">${r.e.fortCount}${total}</b>
         ${deltas ? deltaHtml(r.delta, r.isNew) : ICON_GO}
       </li>`;
     };
-    return `<ol class="rank-list">${rows.slice(0, limit).map((r, n) => li(r, n) + r.farms.map((f) => li(f, n, { farm: true })).join("")).join("")}</ol>`;
+    return `<ol class="rank-list">${rows.slice(0, limit).map((r, n) => li(r, n) + r.parts.map((p) => li(p, n, { part: true })).join("")).join("")}</ol>`;
   }
 
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
@@ -303,7 +309,7 @@ import { loadKingdom } from "./store.js";
           <button data-farms="0" class="${state.withFarms ? "" : "on"}" aria-pressed="${!state.withFarms}">Mains</button>
           <button data-farms="1" class="${state.withFarms ? "on" : ""}" aria-pressed="${state.withFarms}">Main + Farm</button>
         </div>`;
-      const farmNote = `<div class="note">${ICON_INFO}<span>Each Main's Fort Count includes its Farms', and the Mains are ranked on that sum. Farms sit under their Main with their own Fort Counts. Unlinked Farms are not ranked.</span></div>`;
+      const farmNote = `<div class="note">${ICON_INFO}<span>A Main with Farms shows a total: its own Fort Count plus each Farm's, listed under it. Mains are ranked on that total. Unlinked Farms are not ranked.</span></div>`;
       return `<div class="wrap page">${head}
         <div class="toolbar"><div class="chips">${chips}</div>${toggle}</div>
         <section class="card ranking">
