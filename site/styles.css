@@ -298,12 +298,15 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .row.second .bar i { background: linear-gradient(90deg, rgba(165, 123, 255, .35), var(--silver)); }
 .row.third .bar i { background: linear-gradient(90deg, rgba(165, 123, 255, .35), var(--bronze)); }
 .row .count { text-align: right; font-size: 17px; font-weight: 600; }
-/* A Farm row sits indented under its Main: quieter name, count and bar, so it never reads as ranked. */
-.row.farm .row-main { padding-left: 20px; border-left: 1px solid var(--line-2); }
-.row.farm .linkish { font-weight: 500; color: var(--muted); }
-.row.farm .linkish:hover { color: var(--link); }
-.row.farm .count { font-size: 15px; font-weight: 500; color: var(--muted); }
-.row.farm .bar i { background: var(--line-strong); }
+/* "Main + Farm": a Main's count is a total, and the parts that add up to it (the Main's own Fort Count,
+   then each Farm's) sit indented under it, quieter, so they never read as ranked or as extra. */
+.row .count small { display: block; font: 400 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.row.part { padding-top: 8px; padding-bottom: 8px; }
+.row.part .row-main { padding-left: 20px; border-left: 1px solid var(--line-2); }
+.row.part .linkish { font-weight: 500; color: var(--muted); }
+.row.part .linkish:hover { color: var(--link); }
+.row.part .count { font-size: 15px; font-weight: 500; color: var(--muted); }
+.row.part .bar i { background: var(--line-strong); }
 .row .go { opacity: 0; transform: translateX(-4px); transition: opacity .2s, transform .2s; }
 .row:hover .go, .row:focus-within .go { opacity: 1; transform: none; }
 .delta { font: 500 12px var(--mono); white-space: nowrap; text-align: right; }
