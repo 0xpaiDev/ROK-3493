@@ -4,8 +4,9 @@ Usage:  py tools/build_data.py "path/to/3493 Data.xlsx"
 
 Character ID is the key everywhere; names change, IDs don't.
 Fort weekly blocks sit side by side in the "Fort Weekly Log" sheet, one block
-per week (Week Start, Week End, Rank, Player, Fort Count, Character ID), so new
-weeks can keep being added to the right. Ranks are not stored: the site computes them.
+per week of six columns read by position (week start, week end, rank, Governor name,
+Fort Count, Character ID), so new weeks can keep being added to the right. The sheet's
+rank column is ignored: the site computes ranks, and ties keep the sheet's order.
 """
 import json
 import re

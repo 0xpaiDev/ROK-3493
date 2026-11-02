@@ -11,10 +11,10 @@ export function rankWeek(entries) {
 // missing from counts as 0; a Partial Week counts only when they are ranked in it.
 // A week with no completeness set is Complete.
 export function fortAverage(weeks, characterId) {
-  const found = weeks.map((w) => w.entries.find((e) => e.id === characterId));
-  const first = found.findIndex(Boolean);
+  const entryPerWeek = weeks.map((w) => w.entries.find((e) => e.id === characterId));
+  const first = entryPerWeek.findIndex(Boolean);
   if (first < 0) return null;
-  const counts = found
+  const counts = entryPerWeek
     .map((e, i) => (e ? e.fortCount : weeks[i].completeness === "partial" ? null : 0))
     .slice(first)
     .filter((n) => n !== null);

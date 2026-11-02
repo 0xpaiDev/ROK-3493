@@ -57,7 +57,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
     p.played = counts.length;
     p.total = counts.reduce((a, b) => a + b, 0);
     // A Governor without a Character ID ("needs ID") gets no average: never match by name.
-    p.avg = (p.id && fortAverage(weeks, p.id)?.average) || 0;
+    p.avg = p.id ? fortAverage(weeks, p.id)?.average ?? null : null;
     p.best = p.played ? Math.max(...counts) : 0;
     p.last = p.fort[weeks.length - 1]?.fortCount ?? null;
   }
@@ -87,7 +87,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
     const top = rows[0]?.e.fortCount || 1;
     const cls = ["first", "second", "third"];
     return `<ol class="rank-list">${rows.slice(0, limit).map((r, i) => `
-      <li class="rank-row ${i < 3 ? "top " + cls[i] : ""}">
+      <li class="rank-row ${r.e.rank <= 3 ? "top " + cls[r.e.rank - 1] : ""}">
         <span class="pos">${r.e.rank}</span>
         <div class="name">${who(r.p)}<div class="bar"><i style="width:${(r.e.fortCount / top) * 100}%"></i></div></div>
         <span class="fort-count num">${r.e.fortCount}</span>
@@ -100,7 +100,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
     const sum = (wk) => wk.entries.reduce((a, e) => a + e.fortCount, 0);
     const total = sum(w), prevTotal = i > 0 ? sum(weeks[i - 1]) : null;
     const hunters = w.entries.length, prevHunters = i > 0 ? weeks[i - 1].entries.length : null;
-    const bestAvg = [...fortPlayers].sort((a, b) => b.avg - a.avg).slice(0, 5);
+    const bestAvg = fortPlayers.filter((p) => p.avg != null).sort((a, b) => b.avg - a.avg).slice(0, 5);
     const risers = rows.filter((r) => r.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5);
     const R = C.rewards;
 
@@ -170,7 +170,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
     const head = `
       <div class="section-head">
         <div><div class="eyebrow">Fort grind</div><h1>Fort Rankings</h1>
-          <p class="muted">${state.fortView === "weekly" ? "Weekly results. Arrows compare each player to their own previous week." : "Performance across every logged week. Averages start at each Governor's first ranked week: a missed Complete Week counts as 0, a Partial Week counts only when ranked."}</p></div>
+          <p class="muted">${state.fortView === "weekly" ? "Weekly results. Arrows compare each Governor to their own previous week." : "Performance across every logged week. Averages start at each Governor's first ranked week: a missed Complete Week counts as 0, a Partial Week counts only when ranked."}</p></div>
         <div class="seg" role="tablist">
           <button data-fortview="weekly" class="${state.fortView === "weekly" ? "on" : ""}">Weekly</button>
           <button data-fortview="avg" class="${state.fortView === "avg" ? "on" : ""}">Averages</button>
@@ -188,7 +188,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
         </section>`;
     }
 
-    const sorters = { avg: (p) => p.avg, best: (p) => p.best, total: (p) => p.total, played: (p) => p.played * 1e6 + p.avg, last: (p) => p.last ?? -1 };
+    const sorters = { avg: (p) => p.avg ?? -1, best: (p) => p.best, total: (p) => p.total, played: (p) => p.played * 1e6 + (p.avg ?? 0), last: (p) => p.last ?? -1 };
     const list = [...fortPlayers].sort((a, b) => sorters[state.avgSort](b) - sorters[state.avgSort](a));
     const maxCount = Math.max(...fortPlayers.map((p) => p.best));
     const th = (k, label) => `<th class="r ${state.avgSort === k ? "sorted" : ""}"><button data-avgsort="${k}">${label}</button></th>`;
@@ -199,7 +199,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
           <tbody>${list.map((p, n) => `<tr>
             <td class="muted num">${n + 1}</td>
             <td class="name-cell">${who(p)}</td>
-            <td class="r num"><b>${one(p.avg)}</b></td>
+            <td class="r num">${p.avg != null ? `<b>${one(p.avg)}</b>` : '<span class="muted" title="needs ID">–</span>'}</td>
             <td class="r num">${p.best}</td>
             <td class="r num">${p.total}</td>
             <td class="r num">${p.played}/${weeks.length}</td>
@@ -264,7 +264,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
             <td class="r num"><b>${big(p.roster.power)}</b></td>
             <td class="r num">${big(p.roster.highestPower)}</td>
             <td class="r num">${big(p.roster.resources)}</td>
-            <td class="r num">${p.played ? one(p.avg) : '<span class="muted">–</span>'}</td>
+            <td class="r num">${p.avg != null ? one(p.avg) : '<span class="muted">–</span>'}</td>
           </tr>`).join("") || `<tr><td colspan="7" class="empty">No governor matches “${esc(state.rosterQ)}”</td></tr>`}</tbody>
         </table></div>
         ${list.length > state.rosterLimit ? `<button class="more" data-more>Show more (${list.length - state.rosterLimit} left)</button>` : ""}
@@ -284,7 +284,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
       <div class="dlg-body">
         ${p.names.length > 1 ? `<div><div class="eyebrow" style="margin-bottom:8px">Also known as</div><div class="aka">${p.names.filter((n) => n !== p.name).map((n) => `<span>${esc(n)}</span>`).join("")}</div></div>` : ""}
         <div class="kv">
-          <div><small>Fort average</small><b class="num">${p.played ? one(p.avg) : "–"}</b></div>
+          <div><small>Fort average</small><b class="num">${p.avg != null ? one(p.avg) : "–"}</b></div>
           <div><small>Best week</small><b class="num">${p.best || "–"}</b></div>
           <div><small>Weeks ranked</small><b class="num">${p.played}/${weeks.length}</b></div>
           ${r ? `<div><small>Power</small><b class="num">${big(r.power)}</b></div><div><small>Highest power</small><b class="num">${big(r.highestPower)}</b></div><div><small>Resources</small><b class="num">${big(r.resources)}</b></div>` : ""}
