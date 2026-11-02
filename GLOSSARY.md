@@ -22,7 +22,7 @@ _Avoid_: Gov ID, player ID
 A Governor that a person plays as their primary account.
 
 **Farm**:
-A Governor linked as a secondary account of some Main. Its forts still count for the Kingdom but are never added to its Main's total; it is shown alongside its Main.
+A Governor linked as a secondary account of some Main. Its forts still count for the Kingdom and are added to its Main's total only in the "Main + Farm" view of the Weekly Ranking; it is shown alongside its Main.
 _Avoid_: Alt, second account
 
 **Migrated**:
