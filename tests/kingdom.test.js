@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -220,4 +220,44 @@ test("a Lilith stats export becomes a Roster Snapshot dated from its filename, w
 test("an export value that is not a number is refused, naming its row", () => {
   const cells = [exportHeader, ["149673994", "FKK CATHAY", "12x", "124247670", "0", "5421254", "67"]];
   assert.throws(() => parseStatsExport("3493_20261101_20261101_statsExport.xlsx", cells), /row 2.*Power/i);
+});
+
+// ---------- Mains ranking ----------
+const main = (id) => ({ id, name: "Gov " + id, kind: "main", mainId: null });
+const farm = (id, mainId = null) => ({ id, name: "Gov " + id, kind: "farm", mainId });
+
+test("the default Mains ranking leaves Farms out and ranks the Mains among themselves", () => {
+  const governors = [main("a"), farm("f", "a"), main("b")];
+  const rows = mainsRanking([entry("a", 30), entry("f", 20), entry("b", 10)], governors);
+  assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["b", 2]]);
+});
+
+test("with Farms shown, a Main's Farms sit under it with their own Fort Counts, never added to the Main's", () => {
+  const governors = [main("a"), farm("f1", "a"), farm("f2", "a"), main("b")];
+  const rows = mainsRanking([entry("b", 40), entry("a", 30), entry("f1", 25), entry("f2", 5)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.fortCount, r.farms.map((f) => [f.id, f.fortCount])]), [
+    ["b", 40, []],
+    ["a", 30, [["f1", 25], ["f2", 5]]],
+  ]);
+});
+
+test("a Main with 0 forts appears under the ranked Mains, unranked, when one of its Farms has forts", () => {
+  const governors = [main("a"), main("z"), farm("f", "z")];
+  const rows = mainsRanking([entry("a", 30), entry("f", 12)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.name, r.fortCount, r.rank, r.farms.map((f) => f.id)]), [
+    ["a", "Gov a", 30, 1, []],
+    ["z", "Gov z", 0, null, ["f"]],
+  ]);
+});
+
+test("an unlinked Farm is its own unranked row, placed by Fort Count, and the Mains keep their ranks", () => {
+  const governors = [main("a"), main("b"), farm("u")];
+  const rows = mainsRanking([entry("a", 30), entry("u", 20), entry("b", 10)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.unlinked ?? false]), [["a", 1, false], ["u", null, true], ["b", 2, false]]);
+});
+
+test("a needs-ID entry never collects the unlinked Farms", () => {
+  const governors = [main("a"), farm("u")];
+  const rows = mainsRanking([entry("a", 30), { id: null, name: "Nameless", fortCount: 25 }, entry("u", 20)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.farms.map((f) => f.id)]), [["a", []], [null, []], ["u", []]]);
 });

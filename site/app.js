@@ -1,4 +1,4 @@
-import { rankWeek, fortAverage, fortWeekAt, findInRanking } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, findInRanking } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 
 (async () => {
@@ -78,15 +78,27 @@ import { loadKingdom } from "./store.js";
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
   D.ghEvents.forEach((ev) => (ev.label = `${fmtDay(ev.startsOn)}–${fmtDay(ev.endsOn)} ${ev.endsOn.slice(0, 4)}`));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
-  const ranked = weeks.map((w) => rankWeek(w.entries));
-  ranked.forEach((entries, i) => entries.forEach((e) => (get(e.id, e.name).fort[i] = e)));
+  // Mains rank among Mains; a Farm's entry keeps its Fort Count and no rank.
+  const grouped = weeks.map((w) => mainsRanking(w.entries, D.governors, { withFarms: true }));
+  grouped.forEach((rows, i) => rows.forEach((r) => {
+    if (r.rank != null || r.unlinked) get(r.id, r.name).fort[i] = r;
+    r.farms.forEach((f) => (get(f.id, f.name).fort[i] = { ...f, rank: null }));
+  }));
+  const record = new Map(D.governors.map((x) => [x.id, x]));
+  const farmTag = (g) => {
+    const rec = g.id ? record.get(g.id) : null;
+    if (rec?.kind !== "farm") return "";
+    return rec.mainId ? `<span class="tag farm" title="Farm of ${esc(record.get(rec.mainId)?.name)}">Farm</span>` : `<span class="tag farm">Farm · unlinked</span>`;
+  };
+  const farmsOf = (id) => D.governors.filter((x) => x.kind === "farm" && x.mainId === id);
   // Name History only adds names to Governors already shown somewhere.
   D.nameHistory.forEach((n) => governors.has(n.id) && get(n.id, n.name));
 
   for (const g of governors.values()) {
-    // Most recent fort name wins, then roster, then whatever we saw first.
+    // The current name on record wins (Roster Snapshots keep it up to date). A pasted fort name is
+    // only a fallback, e.g. for a "needs ID" entry with no Governor on record.
     const lastFort = [...g.fort].reverse().find(Boolean);
-    g.name = lastFort?.name || g.roster?.name || g.names[0];
+    g.name = (g.id && record.get(g.id)?.name) || g.roster?.name || lastFort?.name || g.names[0];
     const counts = g.fort.filter(Boolean).map((e) => e.fortCount);
     g.played = counts.length;
     g.total = counts.reduce((a, b) => a + b, 0);
@@ -98,15 +110,21 @@ import { loadKingdom } from "./store.js";
   const fortGovernors = [...governors.values()].filter((g) => g.played);
   const byKey = (k) => governors.get(k);
 
-  const weekRows = (i) => ranked[i].map((e) => {
+  // One Weekly Ranking row per Main (and, with Farms, per unlinked Farm), each with its Farm rows.
+  const row = (i, e, rows) => {
     const g = get(e.id, e.name);
     const prev = i > 0 ? g.fort[i - 1] : null;
-    const tie = ranked[i].some((o) => o !== e && o.fortCount === e.fortCount);
-    return { g, e, tie, delta: prev ? e.fortCount - prev.fortCount : null, isNew: i > 0 && !prev };
-  });
+    const tie = e.rank != null && rows.some((o) => o !== e && o.rank != null && o.fortCount === e.fortCount);
+    const moved = g.fort[i] != null; // a 0-fort Main shown for its Farms was not ranked this week
+    return { g, e, tie, delta: moved && prev ? e.fortCount - prev.fortCount : null, isNew: moved && i > 0 && !prev };
+  };
+  const weekRows = (i, withFarms = false) => {
+    const rows = withFarms ? grouped[i] : mainsRanking(weeks[i].entries, D.governors);
+    return rows.map((e) => ({ ...row(i, e, rows), farms: (e.farms ?? []).map((f) => row(i, f, [])) }));
+  };
 
   // ---------- views ----------
-  const state = { fortView: "weekly", fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
+  const state = { fortView: "weekly", withFarms: false, fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
 
   function podium(rows) {
     const step = (r, place) => {
@@ -123,22 +141,26 @@ import { loadKingdom } from "./store.js";
   }
 
   function rankList(rows, { limit = Infinity, deltas = false, stagger = false } = {}) {
-    const top = rows[0]?.e.fortCount || 1;
-    return `<ol class="rank-list">${rows.slice(0, limit).map((r, n) => {
-      const place = r.e.rank <= 3 ? PLACE[r.e.rank - 1] : "";
-      const cls = ["row", place, deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
+    const top = Math.max(1, ...rows.flatMap((r) => [r.e.fortCount, ...r.farms.map((f) => f.e.fortCount)]));
+    const li = (r, n, { farm = false } = {}) => {
+      const place = r.e.rank != null && r.e.rank <= 3 ? PLACE[r.e.rank - 1] : "";
+      const cls = ["row", place, farm && "farm", deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
       const tie = r.tie ? `<span class="tag tie" title="Tied on ${r.e.fortCount} forts. The Council set this order.">Tie<span class="long"> · Council order</span></span>` : "";
+      const tags = tie
+        + (r.e.unlinked ? `<span class="tag farm" title="A Farm not yet linked to its Main">Farm · unlinked</span>` : "")
+        + (farm ? `<span class="tag farm" title="A Farm of the Main above. Its Fort Count is never added to the Main's.">Farm</span>` : "");
       return `
       <li class="${cls}"${stagger ? ` style="--d:${700 + n * 70}ms"` : ""}>
-        <span class="pos num">${r.e.rank}</span>
+        <span class="pos num">${farm ? "" : r.e.rank ?? "–"}</span>
         <span class="row-main">
-          <span class="row-name">${who(r.g)}${tie}</span>
+          <span class="row-name">${who(r.g)}${tags}</span>
           <span class="bar"><i style="width:${(r.e.fortCount / top) * 100}%;animation-delay:${900 + Math.min(n, 15) * 90}ms"></i></span>
         </span>
         <b class="count num">${r.e.fortCount}</b>
         ${deltas ? deltaHtml(r.delta, r.isNew) : ICON_GO}
       </li>`;
-    }).join("")}</ol>`;
+    };
+    return `<ol class="rank-list">${rows.slice(0, limit).map((r, n) => li(r, n) + r.farms.map((f) => li(f, n, { farm: true })).join("")).join("")}</ol>`;
   }
 
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
@@ -206,8 +228,8 @@ import { loadKingdom } from "./store.js";
       <section class="wrap body-grid">
         <div class="card ranking reveal" style="--d:620ms">
           <div class="card-head">
-            <div><div class="eyebrow">Weekly Ranking</div><h2>Week ${wn}, top ${Math.min(10, count)}</h2></div>
-            <a href="#fort">All ${count} Governors →</a>
+            <div><div class="eyebrow">Weekly Ranking · Mains</div><h2>Week ${wn}, top ${Math.min(10, rows.length)}</h2></div>
+            <a href="#fort">All ${rows.length} Mains →</a>
           </div>
           ${partial ? partialNote : ""}
           ${rankList(rows, { limit: 10, stagger: true })}
@@ -238,14 +260,14 @@ import { loadKingdom } from "./store.js";
     const q = query.trim();
     if (!q || !weeks.length) return "";
     const i = weeks.length - 1, wn = isoWeek(weeks[i].start);
-    const hits = findInRanking(ranked[i], D.nameHistory, q);
+    const hits = findInRanking(grouped[i].flatMap((r) => [...(r.rank != null || r.unlinked ? [r] : []), ...r.farms]), D.nameHistory, q);
     if (!hits.length) {
       return q.length < 2 ? "" : `<p class="find-none">No Governor in the Week ${wn} Weekly Ranking matches “${esc(q)}”. <a href="#fort">Search Fort Rankings →</a></p>`;
     }
     return hits.slice(0, 3).map((e) => {
       const g = get(e.id, e.name);
       return `<button class="find-hit" data-gov="${esc(g.key)}">
-        <span class="r num">#${e.rank}</span>
+        <span class="r num">${e.rank != null ? "#" + e.rank : "Farm"}</span>
         <span class="who"><b class="ell">${esc(g.name)}</b><small>${g.id ? "Character ID " + esc(g.id) : "needs ID"}</small></span>
         <span class="fc"><b class="num">${e.fortCount}</b><small>forts</small></span>
       </button>`;
@@ -266,15 +288,23 @@ import { loadKingdom } from "./store.js";
     if (state.fortView === "weekly") {
       const i = state.fortWeek, w = weeks[i];
       const chips = weeks.map((wk, n) => `<button class="chip ${n === i ? "on" : ""}" data-week="${n}" aria-pressed="${n === i}"><b>Week ${isoWeek(wk.start)}</b><small>${fmtRange(wk)}</small></button>`).reverse().join("");
+      const rows = weekRows(i, state.withFarms);
+      const mains = rows.filter((r) => r.e.rank != null).length;
+      const toggle = `<div class="seg" role="group" aria-label="Which Governors">
+          <button data-farms="0" class="${state.withFarms ? "" : "on"}" aria-pressed="${!state.withFarms}">Mains</button>
+          <button data-farms="1" class="${state.withFarms ? "on" : ""}" aria-pressed="${state.withFarms}">Main + Farm</button>
+        </div>`;
+      const farmNote = `<div class="note">${ICON_INFO}<span>Farms sit under their Main with their own Fort Counts. A Farm's forts are never added to its Main's, and only Mains are ranked.</span></div>`;
       return `<div class="wrap page">${head}
-        <div class="chips">${chips}</div>
+        <div class="toolbar"><div class="chips">${chips}</div>${toggle}</div>
         <section class="card ranking">
           <div class="card-head">
             <div><div class="eyebrow">Weekly Ranking</div><h2>Week ${isoWeek(w.start)} · ${fmtRange(w)}</h2></div>
-            <span class="muted">${w.entries.length} ranked</span>
+            <span class="muted">${mains} Mains ranked</span>
           </div>
           ${w.completeness === "partial" ? partialNote : ""}
-          ${rankList(weekRows(i), { deltas: true })}
+          ${state.withFarms ? farmNote : ""}
+          ${rankList(rows, { deltas: true })}
         </section></div>`;
     }
 
@@ -288,7 +318,7 @@ import { loadKingdom } from "./store.js";
           <thead><tr><th>#</th><th>Governor</th>${th("avg", "Fort Average")}${th("best", "Best")}${th("total", "Total")}${th("played", "Weeks")}${th("last", "Last week")}<th>Trend</th></tr></thead>
           <tbody>${list.map((g, n) => `<tr>
             <td class="faint num mono">${n + 1}</td>
-            <td class="name-cell">${who(g)}</td>
+            <td class="name-cell">${who(g)} ${farmTag(g)}</td>
             <td class="r num">${g.avg != null ? `<b>${one(g.avg)}</b>` : '<span class="muted" title="needs ID">–</span>'}</td>
             <td class="r num">${g.best}</td>
             <td class="r num">${g.total}</td>
@@ -371,14 +401,20 @@ import { loadKingdom } from "./store.js";
     const g = byKey(key);
     if (!g) return;
     const r = g.roster;
+    // Farm links come from the Council's Farm-link screen; keyed by Character ID only.
+    const rec = g.id ? record.get(g.id) : null;
+    const mainOf = rec?.kind === "farm" && rec.mainId ? get(rec.mainId, record.get(rec.mainId)?.name) : null;
+    const farms = g.id ? farmsOf(g.id).map((f) => get(f.id, f.name)) : [];
     dlg.innerHTML = `
       <div class="dlg-head">
         <div class="eyebrow">${g.id ? "Character ID " + esc(g.id) : "needs ID · no Character ID on record"}</div>
         <h2 id="governor-name">${esc(g.name)}</h2>
+        ${rec?.kind === "farm" ? `<p class="dlg-sub">${mainOf ? `farm of ${who(mainOf)}` : '<span class="tag farm">Farm · unlinked</span>'}</p>` : ""}
         <button class="dlg-close" aria-label="Close" data-close>×</button>
       </div>
       <div class="dlg-body">
         ${g.names.length > 1 ? `<div><div class="eyebrow">Name History</div><div class="aka">${g.names.filter((n) => n !== g.name).map((n) => `<span>${esc(n)}</span>`).join("")}</div></div>` : ""}
+        ${farms.length ? `<div><div class="eyebrow">Farms</div><ol class="mini-list">${farms.map((f) => `<li>${who(f)}<span class="muted num">${f.last != null ? f.last + " forts last week" : "not ranked last week"}</span></li>`).join("")}</ol></div>` : ""}
         <div class="kv">
           <div><small>Fort Average</small><b>${g.avg != null ? one(g.avg) : "–"}</b></div>
           <div><small>Best week</small><b>${g.best || "–"}</b></div>
@@ -386,7 +422,7 @@ import { loadKingdom } from "./store.js";
           ${r ? `<div><small>Power</small><b>${big(r.power)}</b></div><div><small>Highest power</small><b>${big(r.highestPower)}</b></div><div><small>Resources</small><b>${big(r.resources)}</b></div>` : ""}
         </div>
         ${g.played ? `<div><div class="eyebrow">Fort history</div>
-          <ol class="mini-list">${g.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted mono">#${e.rank}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
+          <ol class="mini-list">${g.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted mono">${e.rank != null ? "#" + e.rank : "Farm"}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
         ${g.gh.length ? `<div><div class="eyebrow">GH Events</div><ol class="mini-list">${g.gh.map((x) => `<li><span style="flex:1">${esc(x.label)}</span><span class="muted mono">#${x.rank}</span><b class="num">${x.gh} GH</b></li>`).join("")}</ol></div>` : ""}
         ${g.kvk ? `<div><div class="eyebrow">Last KvK</div><div class="kv"><div><small>Rank</small><b>#${g.kvk.rank}</b></div><div><small>Kill points</small><b>${big(g.kvk.killPoints)}</b></div><div><small>Status</small><b>${esc(g.kvk.status)}</b></div></div></div>` : ""}
       </div>`;
@@ -511,6 +547,7 @@ import { loadKingdom } from "./store.js";
     }
     if (t.dataset.fortview) state.fortView = t.dataset.fortview;
     else if (t.dataset.week) state.fortWeek = +t.dataset.week;
+    else if (t.dataset.farms) state.withFarms = t.dataset.farms === "1";
     else if (t.dataset.avgsort) state.avgSort = t.dataset.avgsort;
     else if (t.dataset.rostersort) state.rosterSort = t.dataset.rostersort;
     else if (t.dataset.kvk) state.kvkFilter = t.dataset.kvk;
