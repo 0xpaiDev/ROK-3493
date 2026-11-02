@@ -458,3 +458,11 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 }
 .admin-tabs { margin-left: auto; align-items: center; }
 @media (max-width: 640px) { .admin-tabs { order: 0; width: auto; margin: 0 0 0 auto; padding: 0; border-top: 0; } }
+
+/* Admin: Farm links */
+.admin-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+.admin-form input, .admin-form select { flex: 1 1 220px; min-height: 44px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--line-2); background: var(--surface-2); color: var(--text); font: inherit; font-size: 16px; }
+.admin-form input:focus, .admin-form select:focus { outline: none; border-color: var(--accent); }
+.admin-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.admin-actions .btn { min-height: 36px; padding: 0 14px; }
+#farm-links h3 { margin: 20px 0 10px; }

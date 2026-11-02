@@ -48,3 +48,26 @@ export function findInRanking(ranked, nameHistory, query) {
   const names = (id) => nameHistory.filter((n) => n.id === id).map((n) => n.name);
   return ranked.filter((e) => e.id?.includes(q) || [e.name, ...names(e.id)].some((n) => n.toLowerCase().includes(q)));
 }
+
+// Farm link suggestions: candidate Farm→Main pairs where one Governor's name is a Main's
+// name with a Farm marker added. Suggestions only; nothing is linked without the Council.
+const FARM_MARKER = /^(farm|f)?\s*\d*$/;
+// A name that already ends like a Farm ("Enes farm", "cciell f4") is not offered as a Main.
+const FARM_SHAPED = /(farm|\sf)\s*\d*$/i;
+
+export function farmLinkSuggestions(governors, dismissed = []) {
+  const gone = new Set(dismissed.map((d) => d.farmId + ">" + d.mainId));
+  const out = [];
+  for (const farm of governors) {
+    for (const main of governors) {
+      if (farm === main || gone.has(farm.id + ">" + main.id) || farm.kind === "farm" || main.kind === "farm" || FARM_SHAPED.test(main.name)) continue;
+      const name = farm.name.toLowerCase(), base = main.name.toLowerCase();
+      if (!name.startsWith(base)) continue;
+      const rest = name.slice(base.length);
+      // A digit glued onto a name ending in a digit continues the number (FKK1 → FKK10).
+      if (/\d$/.test(base) && /^\d/.test(rest)) continue;
+      if (rest.trim() && FARM_MARKER.test(rest.trim())) out.push({ farmId: farm.id, mainId: main.id, reason: `${main.name} + ${farm.name.slice(base.length).trim()}` });
+    }
+  }
+  return out;
+}
