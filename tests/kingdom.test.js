@@ -255,3 +255,9 @@ test("an unlinked Farm is its own unranked row, placed by Fort Count, and the Ma
   const rows = mainsRanking([entry("a", 30), entry("u", 20), entry("b", 10)], governors, { withFarms: true });
   assert.deepEqual(rows.map((r) => [r.id, r.rank, r.unlinked ?? false]), [["a", 1, false], ["u", null, true], ["b", 2, false]]);
 });
+
+test("a needs-ID entry never collects the unlinked Farms", () => {
+  const governors = [main("a"), farm("u")];
+  const rows = mainsRanking([entry("a", 30), { id: null, name: "Nameless", fortCount: 25 }, entry("u", 20)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.farms.map((f) => f.id)]), [["a", []], [null, []], ["u", []]]);
+});

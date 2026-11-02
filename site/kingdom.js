@@ -147,7 +147,8 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   const farmOf = new Map(governors.filter((g) => g.kind === "farm").map((g) => [g.id, g.mainId]));
   const mains = rankWeek(entries.filter((e) => !farmOf.has(e.id)));
   if (!withFarms) return mains;
-  const farmsOf = (id) => entries.filter((e) => farmOf.has(e.id) && farmOf.get(e.id) === id);
+  // A "needs ID" entry has no Character ID, so it can never be any Farm's Main.
+  const farmsOf = (id) => (id == null ? [] : entries.filter((e) => farmOf.has(e.id) && farmOf.get(e.id) === id));
   const ranked = new Set(mains.map((m) => m.id));
   // A Main with 0 forts still gets a row when a Farm of its has forts, so the Farm has somewhere to sit.
   const idle = governors
