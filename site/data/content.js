@@ -13,7 +13,7 @@ window.KD_CONTENT = {
     ],
     rules: [
       "Only forts killed by your main account count; farm accounts are ranked separately.",
-      "Scores are logged from the in-game ranking screenshot on Sunday."
+      "Fort Counts are logged from the in-game ranking screenshot on Sunday."
     ]
   },
   news: [

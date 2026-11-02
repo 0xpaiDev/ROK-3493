@@ -68,6 +68,10 @@ A Fort Week whose Weekly Ranking lists every Governor that joined at least one f
 **Partial Week**:
 A Fort Week whose saved Weekly Ranking is known to be incomplete; a Governor missing from it has an unknown Fort Count.
 
+**Fort Average**:
+A Governor's average Fort Count from their first ranked Fort Week to the latest one. A Complete Week they are missing from counts as 0; a Partial Week counts only if they were ranked in it.
+_Avoid_: Average score, avg per week played
+
 **Weekly Award**:
 A reward the Council gives a Main after a Fort Week, as King's Chests or resources. The Weekly Ranking informs it; the Council decides it. Farms never receive one.
 _Avoid_: Prize, bonus
