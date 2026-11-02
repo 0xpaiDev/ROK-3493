@@ -141,7 +141,9 @@ export function parseStatsExport(filename, cells) {
 }
 
 // Mains ranking for a Fort Week. Governors are { id, name, kind, mainId }; a Farm's mainId is its
-// Farm link. Mains are ranked among themselves, so a Farm's Fort Count never moves a Main.
+// Farm link. By default Mains rank on their own Fort Counts and Farms are left out. withFarms
+// attaches each Main's Farms, adds their Fort Counts to the Main's (`own` keeps the Main's), and
+// reranks the Mains on that sum.
 // A ranked Governor not on record ("needs ID") counts as a Main.
 export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   const farmOf = new Map(governors.filter((g) => g.kind === "farm").map((g) => [g.id, g.mainId]));
@@ -153,11 +155,16 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   // A Main with 0 forts still gets a row when a Farm of its has forts, so the Farm has somewhere to sit.
   const idle = governors
     .filter((g) => g.kind !== "farm" && !ranked.has(g.id) && farmsOf(g.id).length)
-    .map((g) => ({ id: g.id, name: g.name, fortCount: 0, rank: null }));
+    .map((g) => ({ id: g.id, name: g.name, fortCount: 0 }));
+  // A Main's Fort Count here is its own plus its Farms'; the Mains rank on that sum.
+  // Entry order stays the tie-break, so Mains tied on the sum keep the Council's order.
+  const sums = [...entries.filter((e) => !farmOf.has(e.id)), ...idle].map((m) => {
+    const farms = farmsOf(m.id);
+    return { ...m, own: m.fortCount, fortCount: m.fortCount + farms.reduce((a, f) => a + f.fortCount, 0), farms };
+  });
   // An unlinked Farm is its own row in Fort Count order, with no rank: Mains rank only among Mains.
   const unlinked = entries
     .filter((e) => farmOf.has(e.id) && !farmOf.get(e.id))
     .map((e) => ({ ...e, rank: null, unlinked: true, farms: [] }));
-  const rows = [...mains, ...idle].map((m) => ({ ...m, farms: farmsOf(m.id) }));
-  return [...rows, ...unlinked].sort((x, y) => y.fortCount - x.fortCount);
+  return [...rankWeek(sums), ...unlinked].sort((x, y) => y.fortCount - x.fortCount);
 }
