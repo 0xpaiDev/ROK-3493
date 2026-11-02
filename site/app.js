@@ -196,7 +196,7 @@ import { loadKingdom } from "./store.js";
 
       <section class="wrap" aria-label="Week ${wn} in numbers">
         <div class="stats">
-          <div class="stat reveal" style="--d:380ms"><div class="label">Forts killed</div><div class="value num" data-count="${total}">${total.toLocaleString("en")}</div><div class="sub">Week ${wn}, all Governors</div></div>
+          <div class="stat reveal" style="--d:380ms"><div class="label">Total Fort Count</div><div class="value num" data-count="${total}">${total.toLocaleString("en")}</div><div class="sub">Week ${wn}, all Governors</div></div>
           <div class="stat reveal" style="--d:440ms"><div class="label">Governors ranked</div><div class="value num" data-count="${count}">${count}</div><div class="sub">Mains and Farms</div></div>
           <div class="stat reveal" style="--d:500ms"><div class="label">Average Fort Count</div><div class="value num" data-count="${count ? Math.round(total / count) : 0}">${count ? Math.round(total / count) : "–"}</div><div class="sub">per ranked Governor</div></div>
           <div class="stat reveal" style="--d:560ms"><div class="label">Next reset</div><div class="value mono num" data-countdown>${document.getElementById("countdown").textContent}</div><div class="sub">${DAY[reset.getUTCDay()]} ${reset.getUTCDate()} ${MON[reset.getUTCMonth()]} · 00:00 UTC</div></div>
@@ -309,7 +309,7 @@ import { loadKingdom } from "./store.js";
           <section class="card">
             <div class="card-head"><div><div class="eyebrow">${esc(ev.name)}</div><h2>${esc(ev.label)}</h2></div></div>
             <ol class="mini-list">${ev.entries.map((e) => {
-              const g = e.id ? byKey(e.id) : get(null, e.name);
+              const g = (e.id && byKey(e.id)) || get(e.id, e.name);
               return `<li><span class="i num">${e.rank}</span>${who(g)}${e.alliance ? `<span class="tag">${esc(e.alliance)}</span>` : ""}<b class="num" style="min-width:52px;text-align:right">${e.gh} GH</b></li>`;
             }).join("")}</ol>
           </section>`).join("")}
