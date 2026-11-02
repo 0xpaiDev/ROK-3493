@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -96,4 +96,118 @@ test("a dismissed pair is not suggested again; other pairs still are", () => {
 test("a suggestion says why: the Main's name plus the Farm marker", () => {
   const [s] = farmLinkSuggestions([gov("1", "RuTHLess"), gov("2", "RuThLesS F1")]);
   assert.equal(s.reason, "RuTHLess + F1");
+});
+
+// Roster Snapshots: rows carry Character ID, name and power; Governors carry their status.
+const row = (id, power, name = "Gov " + id) => ({ id, name, power });
+const member = (id, status = "current", statusSetBy = "snapshot", statusSetAt = "2026-10-26T00:00:00Z") =>
+  ({ id, name: "Gov " + id, status, statusSetBy, statusSetAt });
+const nov1 = (...rows) => ({ takenOn: "2026-11-01", rows });
+
+test("a Top 200 Governor absent from the new Roster Snapshot becomes Migrated", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1"), member("2")],
+    nameHistory: [{ id: "1", name: "Gov 1" }, { id: "2", name: "Gov 2" }],
+    previous: [row("1", 900), row("2", 800)],
+    snapshot: nov1(row("1", 950)),
+  });
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["2", "migrated"]]);
+});
+
+test("an absent Governor who was outside the previous Top 200 is not marked Migrated", () => {
+  const previous = Array.from({ length: 201 }, (_, i) => row(String(i + 1), 1000 - i)); // "201" ranks 201st
+  const result = applyRosterSnapshot({
+    governors: [member("200"), member("201")],
+    nameHistory: [],
+    previous,
+    snapshot: nov1(...previous.filter((r) => r.id !== "200" && r.id !== "201")),
+  });
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["200", "migrated"]]);
+});
+
+test("a Migrated Governor who reappears in the new Roster Snapshot becomes Current", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1"), member("2", "migrated")],
+    nameHistory: [],
+    previous: [row("1", 900)],
+    snapshot: nov1(row("1", 900), row("2", 10)),
+  });
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["2", "current"]]);
+});
+
+test("the Top 200 is the 200 highest-power Governors of the new Roster Snapshot", () => {
+  const rows = Array.from({ length: 202 }, (_, i) => row(String(i + 1), 100 + i)); // "1" and "2" are weakest
+  const result = applyRosterSnapshot({ governors: [], nameHistory: [], previous: null, snapshot: nov1(...rows) });
+  assert.deepEqual([result.top200.length, result.top200.includes("1"), result.top200.includes("2"), result.top200[0]], [200, false, false, "202"]);
+});
+
+test("a name not yet in Name History joins it, dated from the Roster Snapshot", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1"), member("2")],
+    nameHistory: [{ id: "1", name: "OldTaste" }, { id: "1", name: "TasteMyFat" }, { id: "2", name: "vkreçislaw" }],
+    previous: [row("1", 900), row("2", 800)],
+    snapshot: nov1(row("1", 900, "OldTaste"), row("2", 800, "vkreçislaw II"), row("3", 50, "Newcomer")),
+  });
+  assert.deepEqual(result.newNames, [
+    { id: "2", name: "vkreçislaw II", firstSeen: "2026-11-01" },
+    { id: "3", name: "Newcomer", firstSeen: "2026-11-01" },
+  ]);
+});
+
+test("a Character ID never seen before joins as a new Current Governor", () => {
+  const result = applyRosterSnapshot({ governors: [member("1")], nameHistory: [], previous: [row("1", 900)], snapshot: nov1(row("1", 900), row("3", 50, "Newcomer")) });
+  assert.deepEqual(result.newGovernors, [{ id: "3", name: "Newcomer" }]);
+});
+
+test("a Governor whose name changed takes the Roster Snapshot's name as its current name", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1"), member("2")],
+    nameHistory: [],
+    previous: [row("1", 900), row("2", 800)],
+    snapshot: nov1(row("1", 900), row("2", 800, "vkreçislaw II")),
+  });
+  assert.deepEqual(result.renames, [{ id: "2", from: "Gov 2", to: "vkreçislaw II" }]);
+});
+
+test("a Council status change followed by a Roster Snapshot that disagrees ends with the snapshot's status", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1"), member("2", "migrated", "council", "2026-10-30T12:00:00Z")],
+    nameHistory: [],
+    previous: [row("1", 900)],
+    snapshot: nov1(row("1", 900), row("2", 800)),
+  });
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["2", "current"]]);
+});
+
+test("a Council status change made after the Roster Snapshot's day stands: the latest event wins", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1", "current", "council", "2026-11-02T09:00:00Z"), member("2", "migrated", "council", "2026-11-02T09:00:00Z")],
+    nameHistory: [],
+    previous: [row("1", 900)],
+    snapshot: nov1(row("2", 800)),
+  });
+  assert.deepEqual(result.statusChanges, []);
+});
+
+// The first rows of samples/3493_20261101_20261101_statsExport.xlsx, as the sheet holds them: all text.
+const exportHeader = ["Character ID", "Username", "Power", "Highest Power", "Total Kill Points", "Resources Gathered", "Alliance Helps"];
+
+test("a Lilith stats export becomes a Roster Snapshot dated from its filename, with its text values read as numbers", () => {
+  const snapshot = parseStatsExport("3493_20261101_20261101_statsExport.xlsx", [
+    exportHeader,
+    ["149673994", "FKK CATHAY", "124239570", "124247670", "0", "5421254", "67"],
+    ["49913581", "Zhuī Mìng", "103571739", "110941449", "0", "19813500", "19"],
+  ]);
+  assert.deepEqual(snapshot, {
+    takenOn: "2026-11-01",
+    rows: [
+      { id: "149673994", name: "FKK CATHAY", power: 124239570, highestPower: 124247670, killPoints: 0, resources: 5421254, allianceHelps: 67 },
+      { id: "49913581", name: "Zhuī Mìng", power: 103571739, highestPower: 110941449, killPoints: 0, resources: 19813500, allianceHelps: 19 },
+    ],
+  });
+});
+
+test("an export value that is not a number is refused, naming its row", () => {
+  const cells = [exportHeader, ["149673994", "FKK CATHAY", "12x", "124247670", "0", "5421254", "67"]];
+  assert.throws(() => parseStatsExport("3493_20261101_20261101_statsExport.xlsx", cells), /row 2.*Power/i);
 });

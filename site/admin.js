@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the sections from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -64,6 +64,7 @@ async function showAdmin(session) {
       <p class="empty">${esc(s.note)} Coming soon.</p>
     </section>`).join("");
   showFarmLinks(document.getElementById("farm-links"));
+  showRoster(document.getElementById("roster"), session.user.email);
 }
 
 // ---------- Farm links (ticket 06) ----------
@@ -178,6 +179,173 @@ async function showFarmLinks(section, message = "") {
     body.querySelectorAll("button").forEach((x) => (x.disabled = true));
     linkFarm(farm.id, mainId);
   });
+}
+
+// ---------- Roster Snapshot (ticket 05) ----------
+// The rules module parses the export and works out the changes; this section reads, shows and writes.
+
+const SHEETJS = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs";
+
+async function loadRosterState() {
+  const [governors, names, latest] = await Promise.all([
+    allRows("governor", "character_id,current_name,status,status_set_by,status_set_at"),
+    allRows("governor_name", "character_id,name"),
+    supabase.from("roster_snapshot").select("id,taken_on").order("taken_on", { ascending: false }).limit(1),
+  ]);
+  if (latest.error) throw new Error(`roster_snapshot: ${latest.error.message}`);
+  const last = latest.data[0] ?? null;
+  const previous = [];
+  if (last) {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from("roster_snapshot_row").select("character_id,power").eq("snapshot_id", last.id).range(from, from + 999);
+      if (error) throw new Error(`roster_snapshot_row: ${error.message}`);
+      previous.push(...data.map((r) => ({ id: r.character_id, power: r.power })));
+      if (data.length < 1000) break;
+    }
+  }
+  return {
+    last,
+    previous,
+    governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, status: g.status, statusSetBy: g.status_set_by, statusSetAt: g.status_set_at })),
+    nameHistory: names.map((n) => ({ id: n.character_id, name: n.name })),
+  };
+}
+
+async function readExport(file) {
+  const XLSX = await import(SHEETJS);
+  const book = XLSX.read(await file.arrayBuffer());
+  const sheet = book.Sheets[book.SheetNames[0]];
+  return parseStatsExport(file.name, XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }));
+}
+
+async function showRoster(section, email, message = "") {
+  let state;
+  try {
+    state = await loadRosterState();
+  } catch (e) {
+    section.innerHTML = `<div class="panel-head"><h2>Roster Snapshot</h2></div><p class="empty">Could not load the roster: ${esc(e.message)}</p>`;
+    return;
+  }
+  const byId = new Map(state.governors.map((g) => [g.id, g]));
+  const label = (g) => `${g.name} (${g.id})`;
+  const migrated = state.governors.filter((g) => g.status === "migrated").length;
+
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <div class="panel-head"><h2>Roster Snapshot</h2><span class="muted">Latest: ${state.last ? esc(state.last.taken_on) : "none"} · ${migrated} Migrated</span></div>
+    <p class="admin-msg" role="status">${esc(message)}</p>
+
+    <h3>Upload the Lilith stats export</h3>
+    <form id="snapshot-file" class="admin-form">
+      <input type="file" name="file" accept=".xlsx" required aria-label="Lilith stats export">
+      <button class="btn" type="submit">Check changes</button>
+    </form>
+    <div id="snapshot-preview"></div>
+
+    <h3>Set a Governor's status</h3>
+    <form id="set-status" class="admin-form">
+      <input name="gov" list="roster-governors" required placeholder="Governor name or Character ID" aria-label="Governor">
+      <datalist id="roster-governors">${state.governors.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
+      <select name="status" aria-label="Status"><option value="current">Current</option><option value="migrated">Migrated</option></select>
+      <button class="btn" type="submit">Save status</button>
+    </form>`;
+  section.replaceChildren(body);
+  const redraw = (msg) => showRoster(section, email, msg);
+  const msg = body.querySelector(".admin-msg");
+  const preview = body.querySelector("#snapshot-preview");
+
+  body.querySelector("#snapshot-file").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    preview.innerHTML = "";
+    let snapshot;
+    try {
+      snapshot = await readExport(e.target.file.files[0]);
+    } catch (err) {
+      msg.textContent = `Could not read the export: ${err.message}`;
+      return;
+    }
+    // An older export would rewind statuses the newer one already settled.
+    if (state.last && snapshot.takenOn <= state.last.taken_on) {
+      msg.textContent = `This export is from ${snapshot.takenOn}; the latest Roster Snapshot is already ${state.last.taken_on}.`;
+      return;
+    }
+    const changes = applyRosterSnapshot({ governors: state.governors, nameHistory: state.nameHistory, previous: state.previous, snapshot });
+    msg.textContent = "";
+    showSnapshotPreview(preview, snapshot, changes, byId, async (button) => {
+      button.disabled = true;
+      msg.textContent = "Saving…";
+      try {
+        await saveSnapshot(snapshot, changes, email);
+        redraw(`Saved the ${snapshot.takenOn} Roster Snapshot: ${snapshot.rows.length} Governors.`);
+      } catch (err) {
+        button.disabled = false;
+        msg.textContent = `Could not save: ${err.message}`;
+      }
+    });
+  });
+
+  body.querySelector("#set-status").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const typed = e.target.gov.value.trim();
+    const id = typed.match(/\((\d+)\)$/)?.[1] ?? (/^\d+$/.test(typed) ? typed : null);
+    const g = byId.get(id);
+    if (!g) return redraw(`Pick the Governor from the list: "${typed}" is not on it.`);
+    const status = e.target.status.value;
+    const { error } = await supabase.from("governor")
+      .update({ status, status_set_by: "council", status_set_at: new Date().toISOString() })
+      .eq("character_id", g.id);
+    redraw(error ? `Could not save ${g.name}: ${error.message}` : `${g.name} is now ${status === "migrated" ? "Migrated" : "Current"}.`);
+  });
+}
+
+function showSnapshotPreview(el, snapshot, changes, byId, onSave) {
+  const toMigrated = changes.statusChanges.filter((c) => c.to === "migrated");
+  const toCurrent = changes.statusChanges.filter((c) => c.to === "current");
+  const list = (title, items, line) => `<h4>${esc(title)} <span class="muted">${items.length}</span></h4>${items.length
+    ? `<ul class="admin-list">${items.map((x) => `<li>${line(x)}</li>`).join("")}</ul>` : `<p class="empty">None.</p>`}`;
+  const gov = (id, name) => `${esc(name)} <span class="pid">${esc(id)}</span>`;
+  el.innerHTML = `
+    <p>Export dated <b>${esc(snapshot.takenOn)}</b> with ${snapshot.rows.length} Governors. Nothing is saved until you press Save.</p>
+    ${list("Become Migrated (in the last Top 200, missing now)", toMigrated, (c) => gov(c.id, c.name))}
+    ${list("Back to Current", toCurrent, (c) => gov(c.id, c.name))}
+    ${list("New Governors", changes.newGovernors, (g) => gov(g.id, g.name))}
+    ${list("Renamed", changes.renames, (r) => `${esc(r.from)} → ${esc(r.to)} <span class="pid">${esc(r.id)}</span>`)}
+    <p class="muted">${changes.newNames.length} new names join Name History. ${changes.top200.filter((id) => !byId.has(id)).length} of the Top 200 are new Governors.</p>
+    <div class="admin-actions"><button class="btn" id="save-snapshot">Save Roster Snapshot</button></div>`;
+  el.querySelector("#save-snapshot").addEventListener("click", (e) => onSave(e.target));
+}
+
+// Writes in an order that leaves no half snapshot behind: Governors and names first (harmless on
+// their own), then the snapshot and its rows (removed again if the rows fail), then statuses.
+async function saveSnapshot(snapshot, changes, email) {
+  const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${error.message}`); };
+  const people = [...changes.newGovernors.map((g) => ({ character_id: g.id, current_name: g.name })),
+                  ...changes.renames.map((r) => ({ character_id: r.id, current_name: r.to }))];
+  if (people.length) check(await supabase.from("governor").upsert(people, { onConflict: "character_id" }), "Governors");
+  if (changes.newNames.length) {
+    check(await supabase.from("governor_name").upsert(
+      changes.newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
+      { onConflict: "character_id,name", ignoreDuplicates: true }), "Name History");
+  }
+  const made = await supabase.from("roster_snapshot").insert({ taken_on: snapshot.takenOn, uploaded_by: email }).select("id").single();
+  check(made, "Roster Snapshot");
+  const rows = snapshot.rows.map((r) => ({
+    snapshot_id: made.data.id, character_id: r.id, power: r.power, highest_power: r.highestPower,
+    kill_points: r.killPoints, resources_gathered: r.resources, alliance_helps: r.allianceHelps,
+  }));
+  for (let i = 0; i < rows.length; i += 500) {
+    const res = await supabase.from("roster_snapshot_row").insert(rows.slice(i, i + 500));
+    if (res.error) {
+      await supabase.from("roster_snapshot").delete().eq("id", made.data.id);
+      check(res, "Roster Snapshot rows");
+    }
+  }
+  for (const to of ["migrated", "current"]) {
+    const ids = changes.statusChanges.filter((c) => c.to === to).map((c) => c.id);
+    if (ids.length) {
+      check(await supabase.from("governor").update({ status: to, status_set_by: "snapshot", status_set_at: changes.statusSetAt }).in("character_id", ids), "Statuses");
+    }
+  }
 }
 
 signOut.addEventListener("click", async (e) => {

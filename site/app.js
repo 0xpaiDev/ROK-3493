@@ -106,7 +106,7 @@ import { loadKingdom } from "./store.js";
   });
 
   // ---------- views ----------
-  const state = { fortView: "weekly", fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, kvkFilter: "all", find: "" };
+  const state = { fortView: "weekly", fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
 
   function podium(rows) {
     const step = (r, place) => {
@@ -336,20 +336,25 @@ import { loadKingdom } from "./store.js";
     const q = state.rosterQ.trim().toLowerCase();
     const sorters = { power: (g) => g.roster.power, highestPower: (g) => g.roster.highestPower, resources: (g) => g.roster.resources, fort: (g) => g.avg };
     const all = [...governors.values()].filter((g) => g.roster);
-    const list = all
+    const top = all.filter((g) => g.roster.top200);
+    // Top 200 by default; a search looks through everyone so nobody is unfindable.
+    const list = (state.rosterAll || q ? all : top)
       .filter((g) => !q || g.id?.includes(q) || g.names.some((n) => n.toLowerCase().includes(q)))
       .sort((a, b) => (sorters[state.rosterSort](b) || 0) - (sorters[state.rosterSort](a) || 0));
     const th = (k, label) => `<th class="r ${state.rosterSort === k ? "sorted" : ""}"><button data-rostersort="${k}">${label}</button></th>`;
     return `<div class="wrap page">
       <div class="section-head reveal"><div><div class="eyebrow">Kingdom 3493</div><h1>Roster</h1>
-        <p class="muted">${all.length} Governors in the latest Roster Snapshot. Search by any name a Governor has used, or by Character ID.</p></div></div>
-      <div class="toolbar"><input class="search" id="rq" type="search" placeholder="Name or Character ID" aria-label="Search the roster" value="${esc(state.rosterQ)}" autocomplete="off" spellcheck="false"></div>
+        <p class="muted">The Top 200 by power from the latest Roster Snapshot; "All" adds the rest and Migrated Governors. Search by any name a Governor has used, or by Character ID.</p></div></div>
+      <div class="toolbar"><div class="seg" role="group" aria-label="Which Governors">
+          <button data-rosterall="0" class="${state.rosterAll ? "" : "on"}" aria-pressed="${!state.rosterAll}">Top 200</button>
+          <button data-rosterall="1" class="${state.rosterAll ? "on" : ""}" aria-pressed="${state.rosterAll}">All ${all.length}</button>
+        </div><input class="search" id="rq" type="search" placeholder="Name or Character ID" aria-label="Search the roster" value="${esc(state.rosterQ)}" autocomplete="off" spellcheck="false"></div>
       <section class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Governor</th><th>Character ID</th>${th("power", "Power")}${th("highestPower", "Highest")}${th("resources", "Resources")}${th("fort", "Fort Average")}</tr></thead>
-          <tbody>${list.slice(0, state.rosterLimit).map((g, n) => `<tr>
+          <tbody>${list.slice(0, state.rosterLimit).map((g, n) => `<tr class="${g.roster.status === "Migrated" ? "is-migrated" : ""}">
             <td class="faint num mono">${n + 1}</td>
-            <td class="name-cell">${who(g)}</td>
+            <td class="name-cell">${who(g)} ${g.roster.status === "Migrated" ? '<span class="tag migrated">Migrated</span>' : ""}</td>
             <td class="pid num">${esc(g.id)}</td>
             <td class="r num"><b>${big(g.roster.power)}</b></td>
             <td class="r num">${big(g.roster.highestPower)}</td>
@@ -508,6 +513,7 @@ import { loadKingdom } from "./store.js";
     else if (t.dataset.avgsort) state.avgSort = t.dataset.avgsort;
     else if (t.dataset.rostersort) state.rosterSort = t.dataset.rostersort;
     else if (t.dataset.kvk) state.kvkFilter = t.dataset.kvk;
+    else if (t.dataset.rosterall) { state.rosterAll = t.dataset.rosterall === "1"; state.rosterLimit = 50; }
     else if ("more" in t.dataset) state.rosterLimit += 50;
     else return;
     render();
