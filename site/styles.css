@@ -145,6 +145,7 @@ tr.is-away td { color: var(--muted); }
 tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .tag.partial { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; background: none; border: 1px solid rgba(233, 196, 106, .4); color: var(--gold); }
 .tag.tie { text-transform: none; letter-spacing: 0; font-weight: 500; background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: help; }
+.tag.farm { background: none; border: 1px solid var(--line-strong); color: var(--muted); }
 .linkish { background: none; border: 0; padding: 0; cursor: pointer; color: var(--text); font-weight: 600; text-align: left; max-width: 100%; }
 .linkish:hover { color: var(--link); }
 .pid { font: 12px var(--mono); color: var(--faint); }
@@ -297,6 +298,12 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .row.second .bar i { background: linear-gradient(90deg, rgba(165, 123, 255, .35), var(--silver)); }
 .row.third .bar i { background: linear-gradient(90deg, rgba(165, 123, 255, .35), var(--bronze)); }
 .row .count { text-align: right; font-size: 17px; font-weight: 600; }
+/* A Farm row sits indented under its Main: quieter name, count and bar, so it never reads as ranked. */
+.row.farm .row-main { padding-left: 20px; border-left: 1px solid var(--line-2); }
+.row.farm .linkish { font-weight: 500; color: var(--muted); }
+.row.farm .linkish:hover { color: var(--link); }
+.row.farm .count { font-size: 15px; font-weight: 500; color: var(--muted); }
+.row.farm .bar i { background: var(--line-strong); }
 .row .go { opacity: 0; transform: translateX(-4px); transition: opacity .2s, transform .2s; }
 .row:hover .go, .row:focus-within .go { opacity: 1; transform: none; }
 .delta { font: 500 12px var(--mono); white-space: nowrap; text-align: right; }
@@ -359,6 +366,7 @@ tbody tr:hover td { background: rgba(165, 123, 255, .05); }
 .spark i.miss { background: var(--line-strong); height: 3px !important; opacity: 1; }
 
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; }
+.toolbar .chips { margin-bottom: 0; flex: 1 1 auto; }
 .search {
   flex: 1; min-width: 200px; height: 48px; padding: 0 16px; border-radius: 14px; font: inherit; font-size: 16px;
   background: var(--surface-2); border: 1px solid var(--line-2); color: var(--text);
@@ -380,6 +388,8 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .dlg-head { position: relative; padding: 24px 24px 18px; border-bottom: 1px solid var(--line); }
 .dlg-head .eyebrow { color: var(--muted); }
 .dlg-head h2 { margin-top: 8px; font-size: 36px; padding-right: 40px; overflow-wrap: anywhere; }
+.dlg-sub { margin: 6px 0 0; color: var(--muted); }
+.dlg-sub .linkish { font-weight: 600; }
 .dlg-close {
   position: absolute; top: 16px; right: 16px; width: 44px; height: 44px; border-radius: 50%;
   border: 1px solid var(--line-2); background: var(--surface-2); cursor: pointer; font-size: 20px; line-height: 1;

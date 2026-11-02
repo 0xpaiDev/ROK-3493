@@ -52,7 +52,7 @@ Reuse these before inventing new ones (classes in `styles.css`).
 - **Top bar** `.topbar`: brand mark, `.tabs` with an underline on the active `.tab`, `.reset-pill` with `.pulse` and a live countdown to Monday 00:00 UTC.
 - **Hero + podium** `.hero`, `.podium`, `.step`, `.medal`: order 2nd · 1st · 3rd. Tied Fort Counts say "tie", never imply a gap.
 - **Find your Governor** `.search-box` / `.find`: matches Name History and Character ID; `/` focuses it.
-- **Ranking row** `.row` in `.rank-list`: rank in mono (metal colour for top 3), name + bar, Fort Count right-aligned. Ties get a `.tag` "Tie · Council order".
+- **Ranking row** `.row` in `.rank-list`: rank in mono (metal colour for top 3), name + bar, Fort Count right-aligned. Ties get a `.tag` "Tie · Council order". With "Main + Farm" on, a Farm is a `.row.farm` indented under its Main: no rank, quieter name, count and bar, and a `.tag.farm` "Farm". An unlinked Farm is its own unranked row tagged "Farm · unlinked".
 - **Card** `.card` + `.card-head`: eyebrow in mono, serif title, link on the right.
 - **Callout** `.note`: explains a data rule in place (Partial Week, Farms). Fairness rules live next to the numbers they affect.
 - **Tag** `.tag`: Draft, Partial Week, Migrated, needs ID. "needs ID" is always visible, never hidden.

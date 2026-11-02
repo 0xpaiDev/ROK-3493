@@ -23,7 +23,7 @@ async function rows(table, query) {
 
 export async function loadKingdom() {
   const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots] = await Promise.all([
-    rows("governor", "select=character_id,current_name,status"),
+    rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
     rows("fort_week", "select=starts_on,completeness&order=starts_on.asc"),
     rows("fort_entry", "select=week,character_id,name,fort_count&order=fort_count.desc,tie_order.asc,id.asc"),
@@ -97,6 +97,8 @@ export async function loadKingdom() {
     ghEvents,
     kvk: kvkRows,
     roster,
+    // Kind and Farm link for the Mains ranking: { id, name, kind, mainId }.
+    governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id })),
     nameHistory: names.map((n) => ({ id: n.character_id, name: n.name })),
   };
 }
