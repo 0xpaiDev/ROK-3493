@@ -232,21 +232,27 @@ test("the default Mains ranking leaves Farms out and ranks the Mains among thems
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["b", 2]]);
 });
 
-test("with Farms shown, a Main's Farms sit under it with their own Fort Counts, never added to the Main's", () => {
+test("with Farms shown, a Main's Fort Count adds its Farms' and the Mains are reranked by that sum", () => {
   const governors = [main("a"), farm("f1", "a"), farm("f2", "a"), main("b")];
   const rows = mainsRanking([entry("b", 40), entry("a", 30), entry("f1", 25), entry("f2", 5)], governors, { withFarms: true });
-  assert.deepEqual(rows.map((r) => [r.id, r.fortCount, r.farms.map((f) => [f.id, f.fortCount])]), [
-    ["b", 40, []],
-    ["a", 30, [["f1", 25], ["f2", 5]]],
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.fortCount, r.own, r.farms.map((f) => [f.id, f.fortCount])]), [
+    ["a", 1, 60, 30, [["f1", 25], ["f2", 5]]],
+    ["b", 2, 40, 40, []],
   ]);
 });
 
-test("a Main with 0 forts appears under the ranked Mains, unranked, when one of its Farms has forts", () => {
+test("Mains tied on the sum keep the Council's order", () => {
+  const governors = [main("a"), main("b"), farm("f", "b")];
+  const rows = mainsRanking([entry("b", 20), entry("a", 30), entry("f", 10)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.fortCount]), [["b", 1, 30], ["a", 1, 30]]);
+});
+
+test("a Main with 0 forts is ranked on its Farms' sum when one of its Farms has forts", () => {
   const governors = [main("a"), main("z"), farm("f", "z")];
   const rows = mainsRanking([entry("a", 30), entry("f", 12)], governors, { withFarms: true });
-  assert.deepEqual(rows.map((r) => [r.id, r.name, r.fortCount, r.rank, r.farms.map((f) => f.id)]), [
-    ["a", "Gov a", 30, 1, []],
-    ["z", "Gov z", 0, null, ["f"]],
+  assert.deepEqual(rows.map((r) => [r.id, r.name, r.fortCount, r.own, r.rank, r.farms.map((f) => f.id)]), [
+    ["a", "Gov a", 30, 30, 1, []],
+    ["z", "Gov z", 12, 0, 2, ["f"]],
   ]);
 });
 

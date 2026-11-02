@@ -78,12 +78,17 @@ import { loadKingdom } from "./store.js";
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
   D.ghEvents.forEach((ev) => (ev.label = `${fmtDay(ev.startsOn)}–${fmtDay(ev.endsOn)} ${ev.endsOn.slice(0, 4)}`));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
-  // Mains rank among Mains; a Farm's entry keeps its Fort Count and no rank.
+  // Each Governor's Fort history keeps their own Fort Count: a Main's Mains-only rank, a Farm's
+  // count with no rank. The summed "Main + Farm" counts live only in `grouped`.
+  const plain = weeks.map((w) => mainsRanking(w.entries, D.governors));
   const grouped = weeks.map((w) => mainsRanking(w.entries, D.governors, { withFarms: true }));
-  grouped.forEach((rows, i) => rows.forEach((r) => {
-    if (r.rank != null || r.unlinked) get(r.id, r.name).fort[i] = r;
-    r.farms.forEach((f) => (get(f.id, f.name).fort[i] = { ...f, rank: null }));
-  }));
+  weeks.forEach((_, i) => {
+    plain[i].forEach((r) => (get(r.id, r.name).fort[i] = r));
+    grouped[i].forEach((r) => {
+      if (r.unlinked) get(r.id, r.name).fort[i] = r;
+      r.farms.forEach((f) => (get(f.id, f.name).fort[i] = { ...f, rank: null }));
+    });
+  });
   const record = new Map(D.governors.map((x) => [x.id, x]));
   const farmTag = (g) => {
     const rec = g.id ? record.get(g.id) : null;
@@ -111,16 +116,18 @@ import { loadKingdom } from "./store.js";
   const byKey = (k) => governors.get(k);
 
   // One Weekly Ranking row per Main (and, with Farms, per unlinked Farm), each with its Farm rows.
-  const row = (i, e, rows) => {
+  // A row's arrow compares like with like: a summed Main against its sum the week before.
+  const row = (i, e, rows, summed = false) => {
     const g = get(e.id, e.name);
-    const prev = i > 0 ? g.fort[i - 1] : null;
+    const prev = i === 0 ? null
+      : summed && e.id != null ? grouped[i - 1].find((r) => r.id === e.id && r.rank != null)
+      : g.fort[i - 1];
     const tie = e.rank != null && rows.some((o) => o !== e && o.rank != null && o.fortCount === e.fortCount);
-    const moved = g.fort[i] != null; // a 0-fort Main shown for its Farms was not ranked this week
-    return { g, e, tie, delta: moved && prev ? e.fortCount - prev.fortCount : null, isNew: moved && i > 0 && !prev };
+    return { g, e, tie, delta: prev ? e.fortCount - prev.fortCount : null, isNew: i > 0 && !prev };
   };
   const weekRows = (i, withFarms = false) => {
-    const rows = withFarms ? grouped[i] : mainsRanking(weeks[i].entries, D.governors);
-    return rows.map((e) => ({ ...row(i, e, rows), farms: (e.farms ?? []).map((f) => row(i, f, [])) }));
+    const rows = withFarms ? grouped[i] : plain[i];
+    return rows.map((e) => ({ ...row(i, e, rows, withFarms && e.rank != null), farms: (e.farms ?? []).map((f) => row(i, f, [])) }));
   };
 
   // ---------- views ----------
@@ -148,7 +155,8 @@ import { loadKingdom } from "./store.js";
       const tie = r.tie ? `<span class="tag tie" title="Tied on ${r.e.fortCount} forts. The Council set this order.">Tie<span class="long"> · Council order</span></span>` : "";
       const tags = tie
         + (r.e.unlinked ? `<span class="tag farm" title="A Farm not yet linked to its Main">Farm · unlinked</span>` : "")
-        + (farm ? `<span class="tag farm" title="A Farm of the Main above. Its Fort Count is never added to the Main's.">Farm</span>` : "");
+        + (farm ? `<span class="tag farm" title="A Farm of the Main above. Its Fort Count is added to the Main's.">Farm</span>` : "");
+      const split = r.e.farms?.length ? ` title="${r.e.own} own + ${r.e.fortCount - r.e.own} from Farms"` : "";
       return `
       <li class="${cls}"${stagger ? ` style="--d:${700 + n * 70}ms"` : ""}>
         <span class="pos num">${farm ? "" : r.e.rank ?? "–"}</span>
@@ -156,7 +164,7 @@ import { loadKingdom } from "./store.js";
           <span class="row-name">${who(r.g)}${tags}</span>
           <span class="bar"><i style="width:${(r.e.fortCount / top) * 100}%;animation-delay:${900 + Math.min(n, 15) * 90}ms"></i></span>
         </span>
-        <b class="count num">${r.e.fortCount}</b>
+        <b class="count num"${split}>${r.e.fortCount}</b>
         ${deltas ? deltaHtml(r.delta, r.isNew) : ICON_GO}
       </li>`;
     };
@@ -260,7 +268,8 @@ import { loadKingdom } from "./store.js";
     const q = query.trim();
     if (!q || !weeks.length) return "";
     const i = weeks.length - 1, wn = isoWeek(weeks[i].start);
-    const hits = findInRanking(grouped[i].flatMap((r) => [...(r.rank != null || r.unlinked ? [r] : []), ...r.farms]), D.nameHistory, q);
+    // Mains as the Weekly Ranking shows them by default, plus every Farm with its own Fort Count.
+    const hits = findInRanking([...plain[i], ...grouped[i].flatMap((r) => [...(r.unlinked ? [r] : []), ...r.farms])], D.nameHistory, q);
     if (!hits.length) {
       return q.length < 2 ? "" : `<p class="find-none">No Governor in the Week ${wn} Weekly Ranking matches “${esc(q)}”. <a href="#fort">Search Fort Rankings →</a></p>`;
     }
@@ -294,7 +303,7 @@ import { loadKingdom } from "./store.js";
           <button data-farms="0" class="${state.withFarms ? "" : "on"}" aria-pressed="${!state.withFarms}">Mains</button>
           <button data-farms="1" class="${state.withFarms ? "on" : ""}" aria-pressed="${state.withFarms}">Main + Farm</button>
         </div>`;
-      const farmNote = `<div class="note">${ICON_INFO}<span>Farms sit under their Main with their own Fort Counts. A Farm's forts are never added to its Main's, and only Mains are ranked.</span></div>`;
+      const farmNote = `<div class="note">${ICON_INFO}<span>Each Main's Fort Count includes its Farms', and the Mains are ranked on that sum. Farms sit under their Main with their own Fort Counts. Unlinked Farms are not ranked.</span></div>`;
       return `<div class="wrap page">${head}
         <div class="toolbar"><div class="chips">${chips}</div>${toggle}</div>
         <section class="card ranking">
