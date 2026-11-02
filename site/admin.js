@@ -36,10 +36,11 @@ function showSignIn(message = "") {
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = form.email.value.trim().toLowerCase();
-    form.querySelector("button").disabled = true;
+    const button = form.querySelector("button");
+    button.disabled = true;
     const redirect = location.origin + location.pathname;
     const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirect } });
-    form.querySelector("button").disabled = false;
+    button.disabled = false;
     msg.textContent = error ? `Could not send the link: ${error.message}` : `Check ${email} for the sign-in link.`;
   });
 }
@@ -57,9 +58,9 @@ async function showAdmin(session) {
     return;
   }
   main.innerHTML = SECTIONS.map((s) => `
-    <section class="panel" id="${s.id}">
-      <div class="panel-head"><h2>${s.title}</h2></div>
-      <p class="empty">${s.note} Coming soon.</p>
+    <section class="panel" id="${esc(s.id)}">
+      <div class="panel-head"><h2>${esc(s.title)}</h2></div>
+      <p class="empty">${esc(s.note)} Coming soon.</p>
     </section>`).join("");
 }
 
@@ -69,6 +70,7 @@ signOut.addEventListener("click", async (e) => {
 });
 
 // Fires once on load (INITIAL_SESSION, after the magic-link hash is read) and on every sign-in or sign-out.
+// Deferred with setTimeout: awaiting a Supabase call inside this callback deadlocks the auth client.
 supabase.auth.onAuthStateChange((_event, session) => {
   setTimeout(() => (session ? showAdmin(session) : showSignIn()), 0);
 });
