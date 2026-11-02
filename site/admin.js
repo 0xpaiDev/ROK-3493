@@ -147,6 +147,7 @@ async function showFarmLinks(section, message = "") {
     const ownFarms = farms.filter((f) => f.mainId === farmId).length;
     if (ownFarms) return redraw(`${farm.name} is the Main of ${ownFarms} Farm(s). Make those Mains first.`);
     const { error } = await supabase.from("governor").update({ kind: "farm", main_character_id: mainId }).eq("character_id", farmId);
+    // 23514 = Postgres check_violation: a Governor with a Weekly Award must stay a Main.
     if (error?.code === "23514") return redraw(`${farm.name} holds a Weekly Award, so it stays a Main.`);
     if (error) return redraw(`Could not save ${farm.name}: ${error.message}`);
     redraw(mainId ? `${farm.name} is now a Farm of ${byId.get(mainId).name}.` : `${farm.name} is now a Farm with its Main unknown.`);
@@ -159,7 +160,7 @@ async function showFarmLinks(section, message = "") {
     if (b.dataset.confirm) return linkFarm(b.dataset.confirm, b.dataset.main);
     if (b.dataset.dismiss) {
       const { error } = await supabase.from("farm_link_dismissal").insert({ farm_character_id: b.dataset.dismiss, main_character_id: b.dataset.main });
-      return redraw(error ? `Could not dismiss: ${error.message}` : `Dismissed ${byId.get(b.dataset.dismiss).name} → ${byId.get(b.dataset.main).name}.`);
+      return redraw(error ? `Could not dismiss: ${error.message}` : `Dismissed ${byId.get(b.dataset.dismiss)?.name} → ${byId.get(b.dataset.main)?.name}.`);
     }
     const g = byId.get(b.dataset.unfarm);
     const { error } = await supabase.from("governor").update({ kind: "main", main_character_id: null }).eq("character_id", g.id);
