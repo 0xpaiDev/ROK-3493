@@ -1,10 +1,18 @@
 import { rankWeek, fortAverage } from "./kingdom.js";
+import { loadKingdom } from "./store.js";
 
-(() => {
-  const D = window.KD_DATA;
+(async () => {
   const C = window.KD_CONTENT || { news: [] };
   const app = document.getElementById("app");
   const dlg = document.getElementById("player");
+  let D;
+  try {
+    D = await loadKingdom();
+  } catch (err) {
+    console.error(err);
+    app.innerHTML = `<div class="panel empty">The Kingdom data could not be loaded. Try again in a minute.</div>`;
+    return;
+  }
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -48,6 +56,8 @@ import { rankWeek, fortAverage } from "./kingdom.js";
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
   const ranked = weeks.map((w) => rankWeek(w.entries));
   ranked.forEach((entries, i) => entries.forEach((e) => (get(e.id, e.name).fort[i] = e)));
+  // Name History only adds names to Governors already shown somewhere.
+  D.nameHistory.forEach((n) => players.has(n.id) && get(n.id, n.name));
 
   for (const p of players.values()) {
     // Most recent fort name wins, then roster, then whatever we saw first.
@@ -217,7 +227,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
       <div class="grid home-grid">
         <div class="grid">${D.ghEvents.map((ev) => `
           <section class="panel">
-            <div class="panel-head"><div><div class="eyebrow">20 Golden Heads</div><h2 style="margin-top:4px">${esc(ev.label)}</h2></div></div>
+            <div class="panel-head"><div><div class="eyebrow">${esc(ev.name)}</div><h2 style="margin-top:4px">${esc(ev.label)}</h2></div></div>
             <ol class="mini-list">${ev.entries.map((e) => {
               const p = e.id ? byKey(e.id) : get(null, e.name);
               return `<li><span class="i">${e.rank}</span>${who(p)}${e.alliance ? `<span class="tag">${esc(e.alliance)}</span>` : ""}<b class="num" style="min-width:48px;text-align:right">${e.gh} GH</b></li>`;
