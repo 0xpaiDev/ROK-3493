@@ -1,23 +1,21 @@
 # Void Legion · Kingdom 3493
 
-Static site for weekly fort rankings, 20GH events, KvK history and the roster.
+Static site for weekly fort rankings, GH Events, KvK history and the roster.
 
 Live at **https://0xpaidev.github.io/ROK-3493/**
 
-## Update the data
+## Where the data lives
 
-> Temporary: the Excel workflow below is being replaced by Supabase and a Council admin page
-> ([ADR 0001](docs/adr/0001-supabase-as-the-only-store.md)). It stays valid until that move lands.
+The Kingdom's data lives in Supabase ([ADR 0001](docs/adr/0001-supabase-as-the-only-store.md)).
+The site reads it in the browser with the public key in `site/store.js`; row-level security lets
+that key read and never write.
 
-1. Add the new week to the Excel "Fort Weekly Log" sheet as a new block to the right (same 6 columns).
-2. Regenerate the data file:
-
-   ```
-   py tools/build_data.py "path/to/3493 Data.xlsx"
-   ```
-
-   It prints warnings for duplicate players in a week and rows with no Character ID.
-3. Edit news and next week's rewards in `site/data/content.js` (set `draft: false` when final).
+- **Schema:** `supabase/migrations/`. A schema change is a new migration file, applied in the
+  Supabase SQL editor.
+- **Updating data:** the Council admin page is on its way (kingdom-admin tickets 04–10). Until it
+  lands, edit rows in the Supabase dashboard's Table Editor.
+- **News and next week's rewards** are still hand-edited in `site/data/content.js` (set
+  `draft: false` when final).
 
 ## Run locally
 
@@ -25,8 +23,14 @@ Live at **https://0xpaidev.github.io/ROK-3493/**
 py -m http.server 5173 --directory site
 ```
 
-Then open http://localhost:5173.
+Then open http://localhost:5173. The site reads the live Supabase project, even locally.
+
+## Test
+
+```
+npm test
+```
 
 ## Publish
 
-Every push to `main` publishes the `site` folder to GitHub Pages through `.github/workflows/pages.yml`. To publish an update: regenerate the data, commit, push.
+Every push to `main` publishes the `site` folder to GitHub Pages through `.github/workflows/pages.yml`. Data changes in Supabase show up on the next page load, with no publish needed.

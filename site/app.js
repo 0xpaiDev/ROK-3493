@@ -1,10 +1,18 @@
 import { rankWeek, fortAverage } from "./kingdom.js";
+import { loadKingdom } from "./store.js";
 
-(() => {
-  const D = window.KD_DATA;
+(async () => {
   const C = window.KD_CONTENT || { news: [] };
   const app = document.getElementById("app");
   const dlg = document.getElementById("player");
+  let D;
+  try {
+    D = await loadKingdom();
+  } catch (err) {
+    console.error(err);
+    app.innerHTML = `<div class="panel empty">The Kingdom data could not be loaded. Try again in a minute.</div>`;
+    return;
+  }
 
   // ---------- helpers ----------
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -45,9 +53,12 @@ import { rankWeek, fortAverage } from "./kingdom.js";
   };
   D.roster.forEach((r) => (get(r.id, r.name).roster = r));
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
+  D.ghEvents.forEach((ev) => (ev.label = `${fmtDay(ev.startsOn)}–${fmtDay(ev.endsOn)} ${ev.endsOn.slice(0, 4)}`));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
   const ranked = weeks.map((w) => rankWeek(w.entries));
   ranked.forEach((entries, i) => entries.forEach((e) => (get(e.id, e.name).fort[i] = e)));
+  // Name History only adds names to Governors already shown somewhere.
+  D.nameHistory.forEach((n) => players.has(n.id) && get(n.id, n.name));
 
   for (const p of players.values()) {
     // Most recent fort name wins, then roster, then whatever we saw first.
@@ -217,7 +228,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
       <div class="grid home-grid">
         <div class="grid">${D.ghEvents.map((ev) => `
           <section class="panel">
-            <div class="panel-head"><div><div class="eyebrow">20 Golden Heads</div><h2 style="margin-top:4px">${esc(ev.label)}</h2></div></div>
+            <div class="panel-head"><div><div class="eyebrow">${esc(ev.name)}</div><h2 style="margin-top:4px">${esc(ev.label)}</h2></div></div>
             <ol class="mini-list">${ev.entries.map((e) => {
               const p = e.id ? byKey(e.id) : get(null, e.name);
               return `<li><span class="i">${e.rank}</span>${who(p)}${e.alliance ? `<span class="tag">${esc(e.alliance)}</span>` : ""}<b class="num" style="min-width:48px;text-align:right">${e.gh} GH</b></li>`;
@@ -291,7 +302,7 @@ import { rankWeek, fortAverage } from "./kingdom.js";
         </div>
         ${p.played ? `<div><div class="eyebrow" style="margin-bottom:8px">Fort history</div>
           <ol class="mini-list">${p.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted">#${e.rank}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
-        ${p.gh.length ? `<div><div class="eyebrow" style="margin-bottom:8px">20GH events</div><ol class="mini-list">${p.gh.map((g) => `<li><span style="flex:1">${esc(g.label)}</span><span class="muted">#${g.rank}</span><b>${g.gh} GH</b></li>`).join("")}</ol></div>` : ""}
+        ${p.gh.length ? `<div><div class="eyebrow" style="margin-bottom:8px">GH Events</div><ol class="mini-list">${p.gh.map((g) => `<li><span style="flex:1">${esc(g.label)}</span><span class="muted">#${g.rank}</span><b>${g.gh} GH</b></li>`).join("")}</ol></div>` : ""}
         ${p.kvk ? `<div><div class="eyebrow" style="margin-bottom:8px">Last KvK</div><div class="kv"><div><small>Rank</small><b>#${p.kvk.rank}</b></div><div><small>Kill points</small><b>${big(p.kvk.killPoints)}</b></div><div><small>Status</small><b>${esc(p.kvk.status)}</b></div></div></div>` : ""}
       </div>`;
     dlg.showModal();

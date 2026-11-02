@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -34,4 +34,8 @@ test("a Fort Week with no completeness set counts as Complete", () => {
 test("a Governor never ranked has no Fort Average", () => {
   const weeks = [week("complete", entry("x", 50)), week("complete", entry("y", 40))];
   assert.equal(fortAverage(weeks, "g"), null);
+});
+
+test("a Fort Week starting Monday 26 Oct ends on Sunday 1 Nov", () => {
+  assert.equal(fortWeekEnd("2026-10-26"), "2026-11-01");
 });

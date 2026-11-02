@@ -20,3 +20,10 @@ export function fortAverage(weeks, characterId) {
     .filter((n) => n !== null);
   return { average: counts.reduce((a, b) => a + b, 0) / counts.length, weeksCounted: counts.length };
 }
+
+// A Fort Week runs from Monday's reset to the next one; its last day is the Sunday.
+export function fortWeekEnd(startsOn) {
+  const t = new Date(startsOn + "T00:00:00Z");
+  t.setUTCDate(t.getUTCDate() + 6);
+  return t.toISOString().slice(0, 10);
+}
