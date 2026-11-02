@@ -71,3 +71,71 @@ export function farmLinkSuggestions(governors, dismissed = []) {
   }
   return out;
 }
+
+// Top 200: the Character IDs of the 200 highest-power Governors in a snapshot's rows.
+export function top200(rows) {
+  return [...rows].sort((a, b) => (b.power ?? 0) - (a.power ?? 0)).slice(0, 200).map((r) => r.id);
+}
+
+// Apply a Roster Snapshot: what a new Lilith stats export changes. Takes the Governors (with
+// status), Name History, the previous snapshot's rows and the new snapshot. Returns the changes;
+// nothing is saved here.
+export function applyRosterSnapshot({ governors, nameHistory, previous, snapshot }) {
+  const present = new Set(snapshot.rows.map((r) => r.id));
+  const wasTop200 = new Set(top200(previous ?? []));
+  // The export covers its whole day, so the snapshot's moment is the midnight that ends it.
+  // Status precedence: the latest event wins, so a Council change made after that stands.
+  const at = new Date(snapshot.takenOn + "T00:00:00Z");
+  at.setUTCDate(at.getUTCDate() + 1);
+  const statusChanges = [];
+  for (const g of governors) {
+    if (g.statusSetBy === "council" && new Date(g.statusSetAt) >= at) continue;
+    // The export also leaves out inactive Governors, so absence means Inactive, never Migrated:
+    // only the Council marks a Governor Migrated.
+    if (g.status === "current" && wasTop200.has(g.id) && !present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "inactive" });
+    else if (g.status !== "current" && present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "current" });
+  }
+  const known = new Set(governors.map((g) => g.id));
+  const seen = new Set(nameHistory.map((n) => n.id + "|" + n.name));
+  const newGovernors = snapshot.rows.filter((r) => !known.has(r.id)).map((r) => ({ id: r.id, name: r.name }));
+  const newNames = snapshot.rows
+    .filter((r) => !seen.has(r.id + "|" + r.name))
+    .map((r) => ({ id: r.id, name: r.name, firstSeen: snapshot.takenOn }));
+  const byId = new Map(governors.map((g) => [g.id, g]));
+  const renames = snapshot.rows
+    .filter((r) => byId.has(r.id) && byId.get(r.id).name !== r.name)
+    .map((r) => ({ id: r.id, from: byId.get(r.id).name, to: r.name }));
+  return { statusChanges, statusSetAt: at.toISOString(), newGovernors, renames, newNames, top200: top200(snapshot.rows) };
+}
+
+// Lilith stats export: one sheet, header on row 1, every value text. The filename carries the date
+// (3493_YYYYMMDD_…). Takes the filename and the sheet's rows as arrays of cells; columns are found
+// by header name. Throws with a sentence the Council can act on.
+const EXPORT_COLUMNS = {
+  id: "Character ID", name: "Username", power: "Power", highestPower: "Highest Power",
+  killPoints: "Total Kill Points", resources: "Resources Gathered", allianceHelps: "Alliance Helps",
+};
+
+export function parseStatsExport(filename, cells) {
+  const date = filename.match(/^3493_(\d{4})(\d{2})(\d{2})_/);
+  if (!date) throw new Error(`"${filename}" is not named like a Lilith stats export (3493_YYYYMMDD_…).`);
+  const header = (cells[0] ?? []).map((h) => String(h ?? "").trim());
+  const col = {};
+  for (const [key, title] of Object.entries(EXPORT_COLUMNS)) {
+    col[key] = header.indexOf(title);
+    if (col[key] < 0) throw new Error(`The export has no "${title}" column on row 1.`);
+  }
+  const text = (row, key) => String(row[col[key]] ?? "").trim();
+  const num = (row, key) => {
+    const t = text(row, key).replace(/,/g, "");
+    if (t === "") return null;
+    if (!/^\d+$/.test(t)) throw new Error(`Row ${cells.indexOf(row) + 1}: ${EXPORT_COLUMNS[key]} "${text(row, key)}" is not a number.`);
+    return Number(t);
+  };
+  const rows = cells.slice(1).filter((r) => text(r, "id")).map((r) => ({
+    id: /^\d+$/.test(text(r, "id")) ? text(r, "id") : num(r, "id"), name: text(r, "name"),
+    power: num(r, "power"), highestPower: num(r, "highestPower"), killPoints: num(r, "killPoints"),
+    resources: num(r, "resources"), allianceHelps: num(r, "allianceHelps"),
+  }));
+  return { takenOn: `${date[1]}-${date[2]}-${date[3]}`, rows };
+}

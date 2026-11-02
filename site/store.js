@@ -1,6 +1,6 @@
 // Reads the Kingdom from Supabase with the public key. Read-only: no rules here, only reshaping
 // rows into the plain data the pages and the kingdom rules module take.
-import { fortWeekEnd } from "./kingdom.js";
+import { fortWeekEnd, top200 } from "./kingdom.js";
 
 export const SUPABASE_URL = "https://xjgswlqzdpmnhhnitucr.supabase.co";
 // Publishable (anon) key: safe to ship, row-level security only lets it read.
@@ -34,7 +34,7 @@ export async function loadKingdom() {
   ]);
   const latest = snapshots[0];
   const snapshotRows = latest
-    ? await rows("roster_snapshot_row", `select=*&snapshot_id=eq.${latest.id}&order=power.desc.nullslast`)
+    ? await rows("roster_snapshot_row", `select=character_id,power,highest_power,resources_gathered&snapshot_id=eq.${latest.id}&order=power.desc.nullslast`)
     : [];
   const governor = new Map(governors.map((g) => [g.character_id, g]));
   const cap = (s) => s[0].toUpperCase() + s.slice(1);
@@ -57,18 +57,27 @@ export async function loadKingdom() {
       .map((e) => ({ rank: e.place, id: e.character_id, name: e.name, alliance: e.alliance, gh: e.golden_heads })),
   }));
 
-  const roster = snapshotRows.map((r) => {
-    const g = governor.get(r.character_id);
-    return {
-      id: r.character_id,
-      name: g?.current_name,
-      status: g ? cap(g.status) : null,
-      power: r.power,
-      highestPower: r.highest_power,
-      killPoints: r.kill_points,
-      resources: r.resources_gathered,
-    };
-  });
+  // The latest Roster Snapshot, plus Inactive and Migrated Governors who are no longer in it. Kill Points and
+  // Alliance Helps are stored but not shown: the export reports 0 Kill Points for almost everyone.
+  const inTop200 = new Set(top200(snapshotRows.map((r) => ({ id: r.character_id, power: r.power }))));
+  const listed = new Set(snapshotRows.map((r) => r.character_id));
+  const roster = [
+    ...snapshotRows.map((r) => {
+      const g = governor.get(r.character_id);
+      return {
+        id: r.character_id,
+        name: g?.current_name,
+        status: g ? cap(g.status) : null,
+        top200: inTop200.has(r.character_id),
+        power: r.power,
+        highestPower: r.highest_power,
+        resources: r.resources_gathered,
+      };
+    }),
+    ...governors
+      .filter((g) => g.status !== "current" && !listed.has(g.character_id))
+      .map((g) => ({ id: g.character_id, name: g.current_name, status: cap(g.status), top200: false, power: null, highestPower: null, resources: null })),
+  ];
 
   const kvkRows = kvk.map((r) => ({
     status: r.status,
