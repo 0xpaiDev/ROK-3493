@@ -90,8 +90,10 @@ export function applyRosterSnapshot({ governors, nameHistory, previous, snapshot
   const statusChanges = [];
   for (const g of governors) {
     if (g.statusSetBy === "council" && new Date(g.statusSetAt) >= at) continue;
-    if (g.status === "current" && wasTop200.has(g.id) && !present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "migrated" });
-    else if (g.status === "migrated" && present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "current" });
+    // The export also leaves out inactive Governors, so absence means Inactive, never Migrated:
+    // only the Council marks a Governor Migrated.
+    if (g.status === "current" && wasTop200.has(g.id) && !present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "inactive" });
+    else if (g.status !== "current" && present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "current" });
   }
   const known = new Set(governors.map((g) => g.id));
   const seen = new Set(nameHistory.map((n) => n.id + "|" + n.name));

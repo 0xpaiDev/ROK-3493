@@ -26,8 +26,12 @@ A Governor linked as a secondary account of some Main. Its forts still count for
 _Avoid_: Alt, second account
 
 **Migrated**:
-A Governor no longer in the Kingdom, known because it is absent from the latest Roster Snapshot. Its history stays.
-_Avoid_: Left, removed, inactive
+A Governor no longer in the Kingdom. Only the Council marks a Governor Migrated: a Roster Snapshot can't tell leaving from going quiet. Its history stays.
+_Avoid_: Left, removed
+
+**Inactive**:
+A Governor from the previous Top 200 who is absent from the latest Roster Snapshot. The Lilith export leaves out inactive Governors and those who left alike, so absence alone never means Migrated. A Governor who reappears is Current again.
+_Avoid_: Migrated (for mere absence), dormant
 
 **King**:
 The person who leads the Kingdom and hands out Weekly Awards.

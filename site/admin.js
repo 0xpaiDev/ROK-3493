@@ -228,11 +228,11 @@ async function showRoster(section, email, message = "") {
   }
   const byId = new Map(state.governors.map((g) => [g.id, g]));
   const label = (g) => `${g.name} (${g.id})`;
-  const migrated = state.governors.filter((g) => g.status === "migrated").length;
+  const count = (status) => state.governors.filter((g) => g.status === status).length;
 
   const body = document.createElement("div");
   body.innerHTML = `
-    <div class="panel-head"><h2>Roster Snapshot</h2><span class="muted">Latest: ${state.last ? esc(state.last.taken_on) : "none"} · ${migrated} Migrated</span></div>
+    <div class="panel-head"><h2>Roster Snapshot</h2><span class="muted">Latest: ${state.last ? esc(state.last.taken_on) : "none"} · ${count("inactive")} Inactive · ${count("migrated")} Migrated</span></div>
     <p class="admin-msg" role="status">${esc(message)}</p>
 
     <h3>Upload the Lilith stats export</h3>
@@ -246,7 +246,7 @@ async function showRoster(section, email, message = "") {
     <form id="set-status" class="admin-form">
       <input name="gov" list="roster-governors" required placeholder="Governor name or Character ID" aria-label="Governor">
       <datalist id="roster-governors">${state.governors.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
-      <select name="status" aria-label="Status"><option value="current">Current</option><option value="migrated">Migrated</option></select>
+      <select name="status" aria-label="Status"><option value="current">Current</option><option value="inactive">Inactive</option><option value="migrated">Migrated</option></select>
       <button class="btn" type="submit">Save status</button>
     </form>`;
   section.replaceChildren(body);
@@ -294,19 +294,19 @@ async function showRoster(section, email, message = "") {
     const { error } = await supabase.from("governor")
       .update({ status, status_set_by: "council", status_set_at: new Date().toISOString() })
       .eq("character_id", g.id);
-    redraw(error ? `Could not save ${g.name}: ${error.message}` : `${g.name} is now ${status === "migrated" ? "Migrated" : "Current"}.`);
+    redraw(error ? `Could not save ${g.name}: ${error.message}` : `${g.name} is now ${status[0].toUpperCase() + status.slice(1)}.`);
   });
 }
 
 function showSnapshotPreview(el, snapshot, changes, byId, onSave) {
-  const toMigrated = changes.statusChanges.filter((c) => c.to === "migrated");
+  const toInactive = changes.statusChanges.filter((c) => c.to === "inactive");
   const toCurrent = changes.statusChanges.filter((c) => c.to === "current");
   const list = (title, items, line) => `<h4>${esc(title)} <span class="muted">${items.length}</span></h4>${items.length
     ? `<ul class="admin-list">${items.map((x) => `<li>${line(x)}</li>`).join("")}</ul>` : `<p class="empty">None.</p>`}`;
   const gov = (id, name) => `${esc(name)} <span class="pid">${esc(id)}</span>`;
   el.innerHTML = `
     <p>Export dated <b>${esc(snapshot.takenOn)}</b> with ${snapshot.rows.length} Governors. Nothing is saved until you press Save.</p>
-    ${list("Become Migrated (in the last Top 200, missing now)", toMigrated, (c) => gov(c.id, c.name))}
+    ${list("Become Inactive (in the last Top 200, missing now)", toInactive, (c) => gov(c.id, c.name))}
     ${list("Back to Current", toCurrent, (c) => gov(c.id, c.name))}
     ${list("New Governors", changes.newGovernors, (g) => gov(g.id, g.name))}
     ${list("Renamed", changes.renames, (r) => `${esc(r.from)} → ${esc(r.to)} <span class="pid">${esc(r.id)}</span>`)}
@@ -340,7 +340,7 @@ async function saveSnapshot(snapshot, changes, email) {
       check(res, "Roster Snapshot rows");
     }
   }
-  for (const to of ["migrated", "current"]) {
+  for (const to of ["inactive", "current"]) {
     const ids = changes.statusChanges.filter((c) => c.to === to).map((c) => c.id);
     if (ids.length) {
       check(await supabase.from("governor").update({ status: to, status_set_by: "snapshot", status_set_at: changes.statusSetAt }).in("character_id", ids), "Statuses");

@@ -57,7 +57,7 @@ export async function loadKingdom() {
       .map((e) => ({ rank: e.place, id: e.character_id, name: e.name, alliance: e.alliance, gh: e.golden_heads })),
   }));
 
-  // The latest Roster Snapshot, plus Migrated Governors who are no longer in it. Kill Points and
+  // The latest Roster Snapshot, plus Inactive and Migrated Governors who are no longer in it. Kill Points and
   // Alliance Helps are stored but not shown: the export reports 0 Kill Points for almost everyone.
   const inTop200 = new Set(top200(snapshotRows.map((r) => ({ id: r.character_id, power: r.power }))));
   const listed = new Set(snapshotRows.map((r) => r.character_id));
@@ -75,8 +75,8 @@ export async function loadKingdom() {
       };
     }),
     ...governors
-      .filter((g) => g.status === "migrated" && !listed.has(g.character_id))
-      .map((g) => ({ id: g.character_id, name: g.current_name, status: "Migrated", top200: false, power: null, highestPower: null, resources: null })),
+      .filter((g) => g.status !== "current" && !listed.has(g.character_id))
+      .map((g) => ({ id: g.character_id, name: g.current_name, status: cap(g.status), top200: false, power: null, highestPower: null, resources: null })),
   ];
 
   const kvkRows = kvk.map((r) => ({

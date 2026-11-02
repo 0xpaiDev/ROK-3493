@@ -120,9 +120,9 @@ h3 { font-size: 15px; font-weight: 600; }
   background: var(--accent-wash); color: var(--link);
 }
 .tag.draft { background: rgba(233, 196, 106, .14); color: var(--gold); }
-.tag.migrated { background: rgba(255, 255, 255, .06); color: var(--muted); }
-tr.is-migrated td { color: var(--muted); }
-tr.is-migrated .linkish, tr.is-migrated b { color: var(--muted); }
+.tag.migrated, .tag.away { background: rgba(255, 255, 255, .06); color: var(--muted); }
+tr.is-away td { color: var(--muted); }
+tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .tag.partial { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; background: none; border: 1px solid rgba(233, 196, 106, .4); color: var(--gold); }
 .tag.tie { text-transform: none; letter-spacing: 0; font-weight: 500; background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: help; }
 .linkish { background: none; border: 0; padding: 0; cursor: pointer; color: var(--text); font-weight: 600; text-align: left; max-width: 100%; }

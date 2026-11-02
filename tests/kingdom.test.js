@@ -104,17 +104,17 @@ const member = (id, status = "current", statusSetBy = "snapshot", statusSetAt = 
   ({ id, name: "Gov " + id, status, statusSetBy, statusSetAt });
 const nov1 = (...rows) => ({ takenOn: "2026-11-01", rows });
 
-test("a Top 200 Governor absent from the new Roster Snapshot becomes Migrated", () => {
+test("a Top 200 Governor absent from the new Roster Snapshot becomes Inactive, not Migrated", () => {
   const result = applyRosterSnapshot({
     governors: [member("1"), member("2")],
     nameHistory: [{ id: "1", name: "Gov 1" }, { id: "2", name: "Gov 2" }],
     previous: [row("1", 900), row("2", 800)],
     snapshot: nov1(row("1", 950)),
   });
-  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["2", "migrated"]]);
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["2", "inactive"]]);
 });
 
-test("an absent Governor who was outside the previous Top 200 is not marked Migrated", () => {
+test("an absent Governor who was outside the previous Top 200 is not marked Inactive", () => {
   const previous = Array.from({ length: 201 }, (_, i) => row(String(i + 1), 1000 - i)); // "201" ranks 201st
   const result = applyRosterSnapshot({
     governors: [member("200"), member("201")],
@@ -122,7 +122,17 @@ test("an absent Governor who was outside the previous Top 200 is not marked Migr
     previous,
     snapshot: nov1(...previous.filter((r) => r.id !== "200" && r.id !== "201")),
   });
-  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["200", "migrated"]]);
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["200", "inactive"]]);
+});
+
+test("an Inactive Governor who reappears in the new Roster Snapshot becomes Current", () => {
+  const result = applyRosterSnapshot({
+    governors: [member("1"), member("2", "inactive")],
+    nameHistory: [],
+    previous: [row("1", 900)],
+    snapshot: nov1(row("1", 900), row("2", 10)),
+  });
+  assert.deepEqual(result.statusChanges.map((c) => [c.id, c.to]), [["2", "current"]]);
 });
 
 test("a Migrated Governor who reappears in the new Roster Snapshot becomes Current", () => {

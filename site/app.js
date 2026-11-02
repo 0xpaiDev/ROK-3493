@@ -337,6 +337,7 @@ import { loadKingdom } from "./store.js";
     const sorters = { power: (g) => g.roster.power, highestPower: (g) => g.roster.highestPower, resources: (g) => g.roster.resources, fort: (g) => g.avg };
     const all = [...governors.values()].filter((g) => g.roster);
     const top = all.filter((g) => g.roster.top200);
+    const away = (g) => g.roster.status === "Inactive" || g.roster.status === "Migrated";
     // Top 200 by default; a search looks through everyone so nobody is unfindable.
     const list = (state.rosterAll || q ? all : top)
       .filter((g) => !q || g.id?.includes(q) || g.names.some((n) => n.toLowerCase().includes(q)))
@@ -344,7 +345,7 @@ import { loadKingdom } from "./store.js";
     const th = (k, label) => `<th class="r ${state.rosterSort === k ? "sorted" : ""}"><button data-rostersort="${k}">${label}</button></th>`;
     return `<div class="wrap page">
       <div class="section-head reveal"><div><div class="eyebrow">Kingdom 3493</div><h1>Roster</h1>
-        <p class="muted">The Top 200 by power from the latest Roster Snapshot; "All" adds the rest and Migrated Governors. Search by any name a Governor has used, or by Character ID.</p></div></div>
+        <p class="muted">The Top 200 by power from the latest Roster Snapshot; "All" adds the rest, and Inactive and Migrated Governors. Search by any name a Governor has used, or by Character ID.</p></div></div>
       <div class="toolbar"><div class="seg" role="group" aria-label="Which Governors">
           <button data-rosterall="0" class="${state.rosterAll ? "" : "on"}" aria-pressed="${!state.rosterAll}">Top 200</button>
           <button data-rosterall="1" class="${state.rosterAll ? "on" : ""}" aria-pressed="${state.rosterAll}">All ${all.length}</button>
@@ -352,9 +353,9 @@ import { loadKingdom } from "./store.js";
       <section class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Governor</th><th>Character ID</th>${th("power", "Power")}${th("highestPower", "Highest")}${th("resources", "Resources")}${th("fort", "Fort Average")}</tr></thead>
-          <tbody>${list.slice(0, state.rosterLimit).map((g, n) => `<tr class="${g.roster.status === "Migrated" ? "is-migrated" : ""}">
+          <tbody>${list.slice(0, state.rosterLimit).map((g, n) => `<tr class="${away(g) ? "is-away" : ""}">
             <td class="faint num mono">${n + 1}</td>
-            <td class="name-cell">${who(g)} ${g.roster.status === "Migrated" ? '<span class="tag migrated">Migrated</span>' : ""}</td>
+            <td class="name-cell">${who(g)} ${away(g) ? `<span class="tag away">${esc(g.roster.status)}</span>` : ""}</td>
             <td class="pid num">${esc(g.id)}</td>
             <td class="r num"><b>${big(g.roster.power)}</b></td>
             <td class="r num">${big(g.roster.highestPower)}</td>
