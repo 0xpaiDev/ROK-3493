@@ -95,9 +95,10 @@ import { loadKingdom } from "./store.js";
   D.nameHistory.forEach((n) => governors.has(n.id) && get(n.id, n.name));
 
   for (const g of governors.values()) {
-    // Most recent fort name wins, then roster, then whatever we saw first.
+    // The current name on record wins (Roster Snapshots keep it up to date). A pasted fort name is
+    // only a fallback, e.g. for a "needs ID" entry with no Governor on record.
     const lastFort = [...g.fort].reverse().find(Boolean);
-    g.name = lastFort?.name || g.roster?.name || g.names[0];
+    g.name = (g.id && record.get(g.id)?.name) || g.roster?.name || lastFort?.name || g.names[0];
     const counts = g.fort.filter(Boolean).map((e) => e.fortCount);
     g.played = counts.length;
     g.total = counts.reduce((a, b) => a + b, 0);
