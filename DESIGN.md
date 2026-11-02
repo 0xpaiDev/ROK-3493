@@ -20,9 +20,9 @@ Dark, calm, exact. One violet accent on near-black, with metals reserved for hon
 | Accent | `--accent`, `--accent-deep`, `--accent-wash` | active tab, primary button, focus ring, bars, selected tile |
 | Links | `--link`, `--link-hover` | links, eyebrows |
 | Metals | `--gold`, `--silver`, `--bronze` (+ `--on-metal` text) | **only** 1st/2nd/3rd placings and Weekly Awards |
-| Live | `--live` | the reset pulse and "Linked" / success |
-| Notes | `--note` on a gold wash | Partial Week and other "how the data works" callouts |
-| Review groups | `--inactive`, `--back`, `--new`, `--renamed` | Roster Snapshot groups (Become Inactive, Back to Current, New Governors, Renamed), as a dot plus count, never a filled card |
+| Live | `--live` on `--live-wash` (`--live-edge` for a ring) | the reset pulse and "Linked" / success |
+| Notes | `--note` on `--note-wash` | Partial Week and other "how the data works" callouts |
+| Review groups | `--inactive`, `--back`, `--new`, `--renamed` | Roster Snapshot groups (Become Inactive, Back to Current, New Governors, Renamed), as a dot plus count, never a filled card. `--back` is plain ink, not silver: metals stay with honours |
 | Elevation | `--shadow-float` | the sticky save bar and anything else that floats over content |
 | Deltas | `--up`, `--down` | week-on-week change |
 

@@ -194,7 +194,7 @@ async function showFarmLinks(section, message = "") {
   const linked = [...farmDecisions.values()].filter((s) => s.state === "linked").length;
   const dismissedNow = farmDecisions.size - linked;
   const progress = items.length ? (linked + dismissedNow) / items.length : 0;
-  setTaskStatus("farm-links", `${farms.length} Farms`, String(open.length));
+  setTaskStatus("farm-links", `${farms.length} Farms`, open.length ? String(open.length) : "");
 
   // The reason reads "<Main> + F1"; under its Main only the marker is news.
   const marker = (s) => {
@@ -222,7 +222,7 @@ async function showFarmLinks(section, message = "") {
           <span class="row-actions">${s.state
             ? `<span class="state ${s.state}">${s.state === "linked" ? "Linked" : "Dismissed"}</span>
                <button class="btn quiet sm" type="button" data-undo="${esc(key(s))}">Undo</button>`
-            : `<button class="btn primary sm" type="button" data-confirm="${esc(s.farmId)}" data-main="${esc(s.mainId)}">Confirm</button>
+            : `<button class="btn sm" type="button" data-confirm="${esc(s.farmId)}" data-main="${esc(s.mainId)}">Confirm</button>
                <button class="btn quiet sm" type="button" data-dismiss="${esc(s.farmId)}" data-main="${esc(s.mainId)}">Dismiss</button>`}
           </span>
         </li>`).join("")}
