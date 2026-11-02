@@ -1,5 +1,6 @@
 // Reads the Kingdom from Supabase with the public key. Read-only: no rules here, only reshaping
 // rows into the plain data the pages and the kingdom rules module take.
+import { fortWeekEnd } from "./kingdom.js";
 
 export const SUPABASE_URL = "https://xjgswlqzdpmnhhnitucr.supabase.co";
 // Publishable (anon) key: safe to ship, row-level security only lets it read.
@@ -19,14 +20,6 @@ async function rows(table, query) {
     if (page.length < PAGE) return out;
   }
 }
-
-const addDays = (iso, n) => {
-  const t = new Date(iso + "T00:00:00Z");
-  t.setUTCDate(t.getUTCDate() + n);
-  return t.toISOString().slice(0, 10);
-};
-const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const day = (iso) => `${+iso.slice(8, 10)} ${MON[+iso.slice(5, 7) - 1]}`;
 
 export async function loadKingdom() {
   const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots] = await Promise.all([
@@ -48,7 +41,7 @@ export async function loadKingdom() {
 
   const fortWeeks = weeks.map((w) => ({
     start: w.starts_on,
-    end: addDays(w.starts_on, 6),
+    end: fortWeekEnd(w.starts_on),
     completeness: w.completeness,
     entries: entries
       .filter((e) => e.week === w.starts_on)
@@ -57,7 +50,8 @@ export async function loadKingdom() {
 
   const ghEvents = events.map((ev) => ({
     name: ev.name,
-    label: `${day(ev.starts_on)}–${day(ev.ends_on)} ${ev.ends_on.slice(0, 4)}`,
+    startsOn: ev.starts_on,
+    endsOn: ev.ends_on,
     entries: ghEntries
       .filter((e) => e.event_id === ev.id)
       .map((e) => ({ rank: e.place, id: e.character_id, name: e.name, alliance: e.alliance, gh: e.golden_heads })),

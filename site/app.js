@@ -53,6 +53,7 @@ import { loadKingdom } from "./store.js";
   };
   D.roster.forEach((r) => (get(r.id, r.name).roster = r));
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
+  D.ghEvents.forEach((ev) => (ev.label = `${fmtDay(ev.startsOn)}–${fmtDay(ev.endsOn)} ${ev.endsOn.slice(0, 4)}`));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
   const ranked = weeks.map((w) => rankWeek(w.entries));
   ranked.forEach((entries, i) => entries.forEach((e) => (get(e.id, e.name).fort[i] = e)));
@@ -301,7 +302,7 @@ import { loadKingdom } from "./store.js";
         </div>
         ${p.played ? `<div><div class="eyebrow" style="margin-bottom:8px">Fort history</div>
           <ol class="mini-list">${p.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted">#${e.rank}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
-        ${p.gh.length ? `<div><div class="eyebrow" style="margin-bottom:8px">20GH events</div><ol class="mini-list">${p.gh.map((g) => `<li><span style="flex:1">${esc(g.label)}</span><span class="muted">#${g.rank}</span><b>${g.gh} GH</b></li>`).join("")}</ol></div>` : ""}
+        ${p.gh.length ? `<div><div class="eyebrow" style="margin-bottom:8px">GH Events</div><ol class="mini-list">${p.gh.map((g) => `<li><span style="flex:1">${esc(g.label)}</span><span class="muted">#${g.rank}</span><b>${g.gh} GH</b></li>`).join("")}</ol></div>` : ""}
         ${p.kvk ? `<div><div class="eyebrow" style="margin-bottom:8px">Last KvK</div><div class="kv"><div><small>Rank</small><b>#${p.kvk.rank}</b></div><div><small>Kill points</small><b>${big(p.kvk.killPoints)}</b></div><div><small>Status</small><b>${esc(p.kvk.status)}</b></div></div></div>` : ""}
       </div>`;
     dlg.showModal();

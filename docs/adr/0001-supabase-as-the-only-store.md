@@ -14,6 +14,6 @@ The Council needs to edit data from an admin page (Farm links, Fort Weeks, Weekl
 
 ## Consequences
 
-- The Excel workbook and its converter are retired after a one-time migration. The README still describes the converter as the way to update data until ticket 03 of `kingdom-admin` replaces that section.
+- The Excel workbook and its converter were retired after a one-time migration (ticket 03 of `kingdom-admin`).
 - Supabase's free tier pauses a project after about a week with no activity. Weekly logging keeps it awake; after a long break someone resumes it from the dashboard.
 - Moving off Supabase later means porting the schema, the row-level security rules and the magic-link login.
