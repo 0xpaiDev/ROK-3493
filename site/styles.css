@@ -152,8 +152,8 @@ h3 { font-size: 15px; font-weight: 700; }
   background: linear-gradient(180deg, color-mix(in srgb, var(--c) 30%, #241640), #1a1030);
   border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); border-bottom: 0;
 }
-.block .score { font: 800 30px var(--display); line-height: 1; }
-.step.first .block .score { font-size: 38px; }
+.block .fort-count { font: 800 30px var(--display); line-height: 1; }
+.step.first .block .fort-count { font-size: 38px; }
 .block small { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .1em; }
 .step.first .block { height: 150px; }
 .step.second .block { height: 112px; }
@@ -206,7 +206,7 @@ h3 { font-size: 15px; font-weight: 700; }
 .bar { height: 6px; margin-top: 6px; border-radius: 3px; background: rgba(255, 255, 255, .05); overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #5b2bb5, var(--violet-2)); }
 .rank-row.top .bar i { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 40%, #3a2160), var(--c)); }
-.rank-row .score { font-weight: 700; font-size: 16px; text-align: right; }
+.rank-row .fort-count { font-weight: 700; font-size: 16px; text-align: right; }
 .rank-row .delta { text-align: right; }
 
 .mini-list { list-style: none; margin: 0; padding: 0; }
@@ -278,7 +278,7 @@ dialog::backdrop { background: rgba(5, 2, 10, .7); backdrop-filter: blur(3px); }
   .podium { gap: 6px; }
   .step .who .linkish { font-size: 13px; }
   .step.first .who .linkish { font-size: 15px; }
-  .block .score { font-size: 22px; } .step.first .block .score { font-size: 28px; }
+  .block .fort-count { font-size: 22px; } .step.first .block .fort-count { font-size: 28px; }
   .medal { width: 40px; height: 40px; font-size: 16px; } .step.first .medal { width: 50px; height: 50px; }
   .rank-row { grid-template-columns: 30px minmax(0, 1fr) 52px 48px; gap: 8px; }
   .kv { grid-template-columns: repeat(2, 1fr); }

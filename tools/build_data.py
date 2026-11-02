@@ -4,8 +4,8 @@ Usage:  py tools/build_data.py "path/to/3493 Data.xlsx"
 
 Character ID is the key everywhere; names change, IDs don't.
 Fort weekly blocks sit side by side in the "Fort Weekly Log" sheet, one block
-per week (Week Start, Week End, Rank, Player, Fort Score, Character ID), so new
-weeks can keep being added to the right.
+per week (Week Start, Week End, Rank, Player, Fort Count, Character ID), so new
+weeks can keep being added to the right. Ranks are not stored: the site computes them.
 """
 import json
 import re
@@ -17,6 +17,8 @@ import openpyxl
 
 MONTHS = {m: i + 1 for i, m in enumerate(
     ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"])}
+# Saved Weekly Rankings known to be incomplete (weeks 43 and 44). Every other week is Complete.
+PARTIAL_WEEKS = {"2026-10-19", "2026-10-26"}
 OUT = Path(__file__).resolve().parent.parent / "site" / "data" / "data.js"
 
 
@@ -62,22 +64,22 @@ def read_fort(ws, warnings):
             start = start or parse_date(vals[0])
             end = end or parse_date(vals[1])
             pid = cid(vals[5])
-            entry = {"id": pid, "name": str(vals[3]).strip(), "score": int(vals[4])}
+            entry = {"id": pid, "name": str(vals[3]).strip(), "fortCount": int(vals[4])}
             if pid and pid in seen:
                 prev = seen[pid]
                 warnings.append(f"Week {start}: {entry['name']} ({pid}) listed more than once "
-                                f"({prev['score']} and {entry['score']}); kept the higher score")
-                prev["score"] = max(prev["score"], entry["score"])
+                                f"({prev['fortCount']} and {entry['fortCount']}); kept the higher Fort Count")
+                prev["fortCount"] = max(prev["fortCount"], entry["fortCount"])
                 continue
             if pid:
                 seen[pid] = entry
             rows.append(entry)
         if not rows:
             continue
-        rows.sort(key=lambda e: -e["score"])
-        for i, e in enumerate(rows):
-            e["rank"] = i + 1
-        weeks.append({"start": start, "end": end, "entries": rows})
+        rows.sort(key=lambda e: -e["fortCount"])  # stable: ties keep the sheet's order
+        weeks.append({"start": start, "end": end,
+                      "completeness": "partial" if start in PARTIAL_WEEKS else "complete",
+                      "entries": rows})
     weeks.sort(key=lambda w: w["start"])
     return weeks
 

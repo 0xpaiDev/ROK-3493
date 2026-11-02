@@ -5,288 +5,244 @@ window.KD_DATA = {
   {
    "start": "2026-10-19",
    "end": "2026-10-25",
+   "completeness": "partial",
    "entries": [
     {
      "id": "154551867",
      "name": "Dexter Eren",
-     "score": 263,
-     "rank": 1
+     "fortCount": 263
     },
     {
      "id": "176012522",
      "name": "ᴴᴸkrecislaw",
-     "score": 226,
-     "rank": 2
+     "fortCount": 226
     },
     {
      "id": "177745552",
      "name": "J4ku",
-     "score": 202,
-     "rank": 3
+     "fortCount": 202
     },
     {
      "id": "126010786",
      "name": "Seyo ㋡",
-     "score": 167,
-     "rank": 4
+     "fortCount": 167
     },
     {
      "id": "164080955",
      "name": "LordLorenzoniˢ",
-     "score": 164,
-     "rank": 5
+     "fortCount": 164
     },
     {
      "id": "175433241",
      "name": "DrStormblessed",
-     "score": 159,
-     "rank": 6
+     "fortCount": 159
     },
     {
      "id": "71205273",
      "name": "im out goodbye",
-     "score": 151,
-     "rank": 7
+     "fortCount": 151
     },
     {
      "id": "136642563",
      "name": "TasteMyFat",
-     "score": 149,
-     "rank": 8
+     "fortCount": 149
     },
     {
      "id": "88693430",
      "name": "Årtåigē",
-     "score": 147,
-     "rank": 9
+     "fortCount": 147
     },
     {
      "id": "149673994",
      "name": "FKK CATHAY",
-     "score": 147,
-     "rank": 10
+     "fortCount": 147
     },
     {
      "id": "205756346",
      "name": "龙哥哥",
-     "score": 138,
-     "rank": 11
+     "fortCount": 138
     },
     {
      "id": "1507031",
      "name": "YURIEL",
-     "score": 116,
-     "rank": 12
+     "fortCount": 116
     }
    ]
   },
   {
    "start": "2026-10-26",
    "end": "2026-11-01",
+   "completeness": "partial",
    "entries": [
     {
      "id": "176012522",
      "name": "vkreçislaw",
-     "score": 205,
-     "rank": 1
+     "fortCount": 205
     },
     {
      "id": "136642563",
      "name": "TasteMyFat",
-     "score": 137,
-     "rank": 2
+     "fortCount": 137
     },
     {
      "id": "99299244",
      "name": "vøDarkBlaCK",
-     "score": 137,
-     "rank": 3
+     "fortCount": 137
     },
     {
      "id": "205756346",
      "name": "vøHBK777",
-     "score": 134,
-     "rank": 4
+     "fortCount": 134
     },
     {
      "id": "210712263",
      "name": "cciell f4",
-     "score": 129,
-     "rank": 5
+     "fortCount": 129
     },
     {
      "id": "193098374",
      "name": "vø cciell",
-     "score": 129,
-     "rank": 6
+     "fortCount": 129
     },
     {
      "id": "236776240",
      "name": "Claude Sonnet",
-     "score": 123,
-     "rank": 7
+     "fortCount": 123
     },
     {
      "id": "149673994",
      "name": "FKK CATHAY",
-     "score": 123,
-     "rank": 8
+     "fortCount": 123
     },
     {
      "id": "151514913",
      "name": "FKK1",
-     "score": 122,
-     "rank": 9
+     "fortCount": 122
     },
     {
      "id": "153545198",
      "name": "FKK2",
-     "score": 121,
-     "rank": 10
+     "fortCount": 121
     },
     {
      "id": "71205273",
      "name": "Claude Opus",
-     "score": 120,
-     "rank": 11
+     "fortCount": 120
     },
     {
      "id": "177745552",
      "name": "vø J4KU",
-     "score": 110,
-     "rank": 12
+     "fortCount": 110
     },
     {
      "id": "214721707",
      "name": "vø JANITA",
-     "score": 103,
-     "rank": 13
+     "fortCount": 103
     },
     {
      "id": "1507031",
      "name": "vøYURIEL",
-     "score": 101,
-     "rank": 14
+     "fortCount": 101
     },
     {
      "id": "236680285",
      "name": "Marino farmm 2",
-     "score": 97,
-     "rank": 15
+     "fortCount": 97
     },
     {
      "id": "100765018",
      "name": "MarinoLoko farm",
-     "score": 97,
-     "rank": 16
+     "fortCount": 97
     },
     {
      "id": "99374677",
      "name": "El Marino Loko",
-     "score": 97,
-     "rank": 17
+     "fortCount": 97
     },
     {
      "id": "180043827",
      "name": "vøЛеший",
-     "score": 94,
-     "rank": 18
+     "fortCount": 94
     },
     {
      "id": "164080955",
      "name": "LordLorenzonis",
-     "score": 87,
-     "rank": 19
+     "fortCount": 87
     },
     {
      "id": "88693430",
      "name": "Årtāigē",
-     "score": 77,
-     "rank": 20
+     "fortCount": 77
     },
     {
      "id": "154551867",
      "name": "vø EREN",
-     "score": 77,
-     "rank": 21
+     "fortCount": 77
     },
     {
      "id": "177658319",
      "name": "kreçislaw F1",
-     "score": 76,
-     "rank": 22
+     "fortCount": 76
     },
     {
      "id": "175633283",
      "name": "vø EBK2013",
-     "score": 72,
-     "rank": 23
+     "fortCount": 72
     },
     {
      "id": "179508915",
      "name": "YEEEE",
-     "score": 70,
-     "rank": 24
+     "fortCount": 70
     },
     {
      "id": "188936880",
      "name": "CRY㉿",
-     "score": 69,
-     "rank": 25
+     "fortCount": 69
     },
     {
      "id": "179466017",
      "name": "kcan93",
-     "score": 67,
-     "rank": 26
+     "fortCount": 67
     },
     {
      "id": "125745217",
      "name": "Årt · AF",
-     "score": 65,
-     "rank": 27
+     "fortCount": 65
     },
     {
      "id": "88787836",
      "name": "Årt · BF",
-     "score": 49,
-     "rank": 28
+     "fortCount": 49
     },
     {
      "id": "179492974",
      "name": "TLG KRC vø",
-     "score": 48,
-     "rank": 29
+     "fortCount": 48
     },
     {
      "id": "184760438",
      "name": "OzamisFarm",
-     "score": 48,
-     "rank": 30
+     "fortCount": 48
     },
     {
      "id": "183921866",
      "name": "W叉 Ozamis叉",
-     "score": 48,
-     "rank": 31
+     "fortCount": 48
     },
     {
      "id": "189020883",
      "name": "Ozamis Frm",
-     "score": 47,
-     "rank": 32
+     "fortCount": 47
     },
     {
      "id": "81275271",
      "name": "vø HelloCake",
-     "score": 43,
-     "rank": 33
+     "fortCount": 43
     },
     {
      "id": "137527396",
      "name": "TasteMyFatFarm",
-     "score": 41,
-     "rank": 34
+     "fortCount": 41
     }
    ]
   }
@@ -5870,8 +5826,8 @@ window.KD_DATA = {
   }
  ],
  "warnings": [
-  "Week 2026-10-26: vøDarkBlaCK (99299244) listed more than once (137 and 134); kept the higher score",
-  "Week 2026-10-26: vøDarkBlaCK (99299244) listed more than once (137 and 117); kept the higher score",
+  "Week 2026-10-26: vøDarkBlaCK (99299244) listed more than once (137 and 134); kept the higher Fort Count",
+  "Week 2026-10-26: vøDarkBlaCK (99299244) listed more than once (137 and 117); kept the higher Fort Count",
   "GH event 30 Oct–1 Nov 2026: [V'1] ILLOM has no Character ID"
  ]
 };

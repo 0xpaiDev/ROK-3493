@@ -1,3 +1,5 @@
+import { rankWeek, fortAverage } from "./kingdom.js";
+
 (() => {
   const D = window.KD_DATA;
   const C = window.KD_CONTENT || { news: [] };
@@ -44,26 +46,28 @@
   D.roster.forEach((r) => (get(r.id, r.name).roster = r));
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
-  weeks.forEach((w, i) => w.entries.forEach((e) => (get(e.id, e.name).fort[i] = e)));
+  const ranked = weeks.map((w) => rankWeek(w.entries));
+  ranked.forEach((entries, i) => entries.forEach((e) => (get(e.id, e.name).fort[i] = e)));
 
   for (const p of players.values()) {
     // Most recent fort name wins, then roster, then whatever we saw first.
     const lastFort = [...p.fort].reverse().find(Boolean);
     p.name = lastFort?.name || p.roster?.name || p.names[0];
-    const scores = p.fort.filter(Boolean).map((e) => e.score);
-    p.played = scores.length;
-    p.total = scores.reduce((a, b) => a + b, 0);
-    p.avg = p.played ? p.total / p.played : 0;
-    p.best = p.played ? Math.max(...scores) : 0;
-    p.last = p.fort[weeks.length - 1]?.score ?? null;
+    const counts = p.fort.filter(Boolean).map((e) => e.fortCount);
+    p.played = counts.length;
+    p.total = counts.reduce((a, b) => a + b, 0);
+    // A Governor without a Character ID ("needs ID") gets no average: never match by name.
+    p.avg = (p.id && fortAverage(weeks, p.id)?.average) || 0;
+    p.best = p.played ? Math.max(...counts) : 0;
+    p.last = p.fort[weeks.length - 1]?.fortCount ?? null;
   }
   const fortPlayers = [...players.values()].filter((p) => p.played);
   const byKey = (k) => players.get(k);
 
-  const weekRows = (i) => weeks[i].entries.map((e) => {
+  const weekRows = (i) => ranked[i].map((e) => {
     const p = get(e.id, e.name);
     const prev = i > 0 ? p.fort[i - 1] : null;
-    return { p, e, delta: prev ? e.score - prev.score : null, isNew: i > 0 && !prev };
+    return { p, e, delta: prev ? e.fortCount - prev.fortCount : null, isNew: i > 0 && !prev };
   });
 
   // ---------- views ----------
@@ -71,29 +75,29 @@
 
   function podium(rows) {
     const [a, b, c] = rows;
-    const step = (r, cls, n) => r ? `
+    const step = (r, cls) => r ? `
       <div class="step ${cls}">
-        <div class="who"><div class="medal">${n}</div>${who(r.p)}<div class="pid">${esc(r.p.id || "")}</div></div>
-        <div class="block"><div class="score num">${r.e.score}</div><small>forts</small></div>
+        <div class="who"><div class="medal">${r.e.rank}</div>${who(r.p)}<div class="pid">${esc(r.p.id || "")}</div></div>
+        <div class="block"><div class="fort-count num">${r.e.fortCount}</div><small>forts</small></div>
       </div>` : `<div class="step ${cls}"></div>`;
-    return `<div class="podium">${step(b, "second", 2)}${step(a, "first", 1)}${step(c, "third", 3)}</div>`;
+    return `<div class="podium">${step(b, "second")}${step(a, "first")}${step(c, "third")}</div>`;
   }
 
   function rankList(rows, limit = Infinity) {
-    const top = rows[0]?.e.score || 1;
+    const top = rows[0]?.e.fortCount || 1;
     const cls = ["first", "second", "third"];
     return `<ol class="rank-list">${rows.slice(0, limit).map((r, i) => `
       <li class="rank-row ${i < 3 ? "top " + cls[i] : ""}">
         <span class="pos">${r.e.rank}</span>
-        <div class="name">${who(r.p)}<div class="bar"><i style="width:${(r.e.score / top) * 100}%"></i></div></div>
-        <span class="score num">${r.e.score}</span>
+        <div class="name">${who(r.p)}<div class="bar"><i style="width:${(r.e.fortCount / top) * 100}%"></i></div></div>
+        <span class="fort-count num">${r.e.fortCount}</span>
         ${deltaHtml(r.delta, r.isNew)}
       </li>`).join("")}</ol>`;
   }
 
   function home() {
     const i = weeks.length - 1, w = weeks[i], rows = weekRows(i);
-    const sum = (wk) => wk.entries.reduce((a, e) => a + e.score, 0);
+    const sum = (wk) => wk.entries.reduce((a, e) => a + e.fortCount, 0);
     const total = sum(w), prevTotal = i > 0 ? sum(weeks[i - 1]) : null;
     const hunters = w.entries.length, prevHunters = i > 0 ? weeks[i - 1].entries.length : null;
     const bestAvg = [...fortPlayers].sort((a, b) => b.avg - a.avg).slice(0, 5);
@@ -128,7 +132,7 @@
           </section>
           <div class="grid pair">
             <section class="panel">
-              <div class="panel-head"><h3>Best average</h3><span class="muted" style="font-size:12px">per week played</span></div>
+              <div class="panel-head"><h3>Best average</h3><span class="muted" style="font-size:12px">since first ranked week</span></div>
               <ol class="mini-list">${bestAvg.map((p, n) => `<li><span class="i">${n + 1}</span>${who(p)}<b class="num">${one(p.avg)}</b></li>`).join("")}</ol>
             </section>
             <section class="panel">
@@ -166,7 +170,7 @@
     const head = `
       <div class="section-head">
         <div><div class="eyebrow">Fort grind</div><h1>Fort Rankings</h1>
-          <p class="muted">${state.fortView === "weekly" ? "Weekly results. Arrows compare each player to their own previous week." : "Performance across every logged week. Averages only count weeks a player was ranked."}</p></div>
+          <p class="muted">${state.fortView === "weekly" ? "Weekly results. Arrows compare each player to their own previous week." : "Performance across every logged week. Averages start at each Governor's first ranked week: a missed Complete Week counts as 0, a Partial Week counts only when ranked."}</p></div>
         <div class="seg" role="tablist">
           <button data-fortview="weekly" class="${state.fortView === "weekly" ? "on" : ""}">Weekly</button>
           <button data-fortview="avg" class="${state.fortView === "avg" ? "on" : ""}">Averages</button>
@@ -179,14 +183,14 @@
       return head + `
         <div class="chips" style="margin-bottom:16px">${chips}</div>
         <section class="panel">
-          <div class="panel-head"><h2>Week ${isoWeek(w.start)} · ${fmtRange(w)}</h2><span class="muted">${w.entries.length} ranked</span></div>
+          <div class="panel-head"><h2>Week ${isoWeek(w.start)} · ${fmtRange(w)}${w.completeness === "partial" ? ' <span class="tag draft" title="This saved ranking is incomplete">Partial</span>' : ""}</h2><span class="muted">${w.entries.length} ranked</span></div>
           ${rankList(weekRows(i))}
         </section>`;
     }
 
     const sorters = { avg: (p) => p.avg, best: (p) => p.best, total: (p) => p.total, played: (p) => p.played * 1e6 + p.avg, last: (p) => p.last ?? -1 };
     const list = [...fortPlayers].sort((a, b) => sorters[state.avgSort](b) - sorters[state.avgSort](a));
-    const maxScore = Math.max(...fortPlayers.map((p) => p.best));
+    const maxCount = Math.max(...fortPlayers.map((p) => p.best));
     const th = (k, label) => `<th class="r ${state.avgSort === k ? "sorted" : ""}"><button data-avgsort="${k}">${label}</button></th>`;
     return head + `
       <section class="panel">
@@ -200,7 +204,7 @@
             <td class="r num">${p.total}</td>
             <td class="r num">${p.played}/${weeks.length}</td>
             <td class="r num">${p.last ?? '<span class="muted">–</span>'}</td>
-            <td><span class="spark" title="${p.fort.map((e, k) => `Wk ${isoWeek(weeks[k].start)}: ${e ? e.score : "–"}`).join(" · ")}">${p.fort.map((e) => e ? `<i style="height:${Math.max(3, (e.score / maxScore) * 22)}px"></i>` : `<i class="miss"></i>`).join("")}</span></td>
+            <td><span class="spark" title="${p.fort.map((e, k) => `Wk ${isoWeek(weeks[k].start)}: ${e ? e.fortCount : "–"}`).join(" · ")}">${p.fort.map((e) => e ? `<i style="height:${Math.max(3, (e.fortCount / maxCount) * 22)}px"></i>` : `<i class="miss"></i>`).join("")}</span></td>
           </tr>`).join("")}</tbody>
         </table></div>
       </section>`;
@@ -286,7 +290,7 @@
           ${r ? `<div><small>Power</small><b class="num">${big(r.power)}</b></div><div><small>Highest power</small><b class="num">${big(r.highestPower)}</b></div><div><small>Resources</small><b class="num">${big(r.resources)}</b></div>` : ""}
         </div>
         ${p.played ? `<div><div class="eyebrow" style="margin-bottom:8px">Fort history</div>
-          <ol class="mini-list">${p.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted">#${e.rank}</span><b class="num" style="min-width:40px;text-align:right">${e.score}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
+          <ol class="mini-list">${p.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted">#${e.rank}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
         ${p.gh.length ? `<div><div class="eyebrow" style="margin-bottom:8px">20GH events</div><ol class="mini-list">${p.gh.map((g) => `<li><span style="flex:1">${esc(g.label)}</span><span class="muted">#${g.rank}</span><b>${g.gh} GH</b></li>`).join("")}</ol></div>` : ""}
         ${p.kvk ? `<div><div class="eyebrow" style="margin-bottom:8px">Last KvK</div><div class="kv"><div><small>Rank</small><b>#${p.kvk.rank}</b></div><div><small>Kill points</small><b>${big(p.kvk.killPoints)}</b></div><div><small>Status</small><b>${esc(p.kvk.status)}</b></div></div></div>` : ""}
       </div>`;
