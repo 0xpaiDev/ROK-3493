@@ -4,25 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#08060E">
   <title>Council · Void Legion 3493</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="./">
-      <span class="brand-mark" aria-hidden="true">V</span>
-      <span class="brand-text"><b>Void Legion</b><small>Council</small></span>
-    </a>
-    <nav class="tabs" aria-label="Account">
-      <span id="who" class="admin-who"></span>
-      <a href="#" id="sign-out" hidden>Sign out</a>
-    </nav>
+    <div class="wrap topbar-in">
+      <a class="brand" href="./">
+        <svg class="brand-mark" width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15.5" fill="none" stroke="#A57BFF" stroke-opacity=".55"/><circle cx="17" cy="17" r="10.5" fill="none" stroke="#A57BFF" stroke-opacity=".3"/><path d="M10.5 11 L17 24 L23.5 11" fill="none" stroke="#EEEAF6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="brand-text"><b>Void Legion</b><small>Council</small></span>
+      </a>
+      <nav class="tabs admin-tabs" aria-label="Account">
+        <span id="who" class="admin-who"></span>
+        <a class="tab" href="#" id="sign-out" hidden>Sign out</a>
+      </nav>
+    </div>
   </header>
 
-  <main id="admin"><div class="panel empty">Checking sign-in…</div></main>
+  <main id="admin" class="wrap page stack"><div class="panel empty">Checking sign-in…</div></main>
 
   <script type="module" src="admin.js"></script>
 </body>
