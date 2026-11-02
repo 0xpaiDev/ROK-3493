@@ -85,6 +85,11 @@ import { loadKingdom } from "./store.js";
     r.farms.forEach((f) => (get(f.id, f.name).fort[i] = { ...f, rank: null }));
   }));
   const record = new Map(D.governors.map((x) => [x.id, x]));
+  const farmTag = (g) => {
+    const rec = g.id ? record.get(g.id) : null;
+    if (rec?.kind !== "farm") return "";
+    return rec.mainId ? `<span class="tag farm" title="Farm of ${esc(record.get(rec.mainId)?.name)}">Farm</span>` : `<span class="tag farm">Farm · unlinked</span>`;
+  };
   const farmsOf = (id) => D.governors.filter((x) => x.kind === "farm" && x.mainId === id);
   // Name History only adds names to Governors already shown somewhere.
   D.nameHistory.forEach((n) => governors.has(n.id) && get(n.id, n.name));
@@ -312,7 +317,7 @@ import { loadKingdom } from "./store.js";
           <thead><tr><th>#</th><th>Governor</th>${th("avg", "Fort Average")}${th("best", "Best")}${th("total", "Total")}${th("played", "Weeks")}${th("last", "Last week")}<th>Trend</th></tr></thead>
           <tbody>${list.map((g, n) => `<tr>
             <td class="faint num mono">${n + 1}</td>
-            <td class="name-cell">${who(g)}</td>
+            <td class="name-cell">${who(g)} ${farmTag(g)}</td>
             <td class="r num">${g.avg != null ? `<b>${one(g.avg)}</b>` : '<span class="muted" title="needs ID">–</span>'}</td>
             <td class="r num">${g.best}</td>
             <td class="r num">${g.total}</td>
