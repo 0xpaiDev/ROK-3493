@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Void Legion · 3493</title>
+  <meta name="description" content="Kingdom 3493 Void Legion: weekly fort rankings, events and roster.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#home">
+      <span class="brand-mark" aria-hidden="true">V</span>
+      <span class="brand-text"><b>Void Legion</b><small>Kingdom 3493</small></span>
+    </a>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#home" data-tab="home">Home</a>
+      <a href="#fort" data-tab="fort">Fort Rankings</a>
+      <a href="#events" data-tab="events">Events</a>
+      <a href="#roster" data-tab="roster">Roster</a>
+    </nav>
+  </header>
+
+  <main id="app"></main>
+
+  <dialog id="player" aria-labelledby="player-name"></dialog>
+
+  <footer class="foot">
+    <span>Void Legion · Kingdom 3493 · Enter the void.</span>
+    <span id="generated"></span>
+  </footer>
+
+  <script src="data/data.js"></script>
+  <script src="data/content.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
