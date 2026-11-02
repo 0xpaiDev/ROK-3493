@@ -13,19 +13,21 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="wrap topbar-in">
+    <div class="wrap admin-wide topbar-in">
       <a class="brand" href="./">
         <svg class="brand-mark" width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><circle cx="17" cy="17" r="15.5" fill="none" stroke="#A57BFF" stroke-opacity=".55"/><circle cx="17" cy="17" r="10.5" fill="none" stroke="#A57BFF" stroke-opacity=".3"/><path d="M10.5 11 L17 24 L23.5 11" fill="none" stroke="#EEEAF6" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         <span class="brand-text"><b>Void Legion</b><small>Council</small></span>
       </a>
-      <nav class="tabs admin-tabs" aria-label="Account">
-        <span id="who" class="admin-who"></span>
-        <a class="tab" href="#" id="sign-out" hidden>Sign out</a>
-      </nav>
+      <div class="admin-bar">
+        <a href="./" target="_blank" rel="noopener">Public site
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"/></svg><span class="sr-only"> (opens in a new tab)</span></a>
+        <span id="who" class="admin-who ell"></span>
+        <button class="btn quiet sm" type="button" id="sign-out" hidden>Sign out</button>
+      </div>
     </div>
   </header>
 
-  <main id="admin" class="wrap page stack"><div class="panel empty">Checking sign-in…</div></main>
+  <main id="admin" class="wrap admin-wide page admin"><div class="panel empty admin-signin">Checking sign-in…</div></main>
 
   <script type="module" src="admin.js"></script>
 </body>
