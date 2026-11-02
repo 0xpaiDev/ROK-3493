@@ -27,3 +27,24 @@ export function fortWeekEnd(startsOn) {
   t.setUTCDate(t.getUTCDate() + 6);
   return t.toISOString().slice(0, 10);
 }
+
+// The Fort Week a moment falls in: its Monday start and the reset that closes it, the
+// Monday 00:00 UTC after fortWeekEnd().
+export function fortWeekAt(now) {
+  const t = new Date(now);
+  t.setUTCHours(0, 0, 0, 0);
+  t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+  const start = t.toISOString().slice(0, 10);
+  const resetsAt = new Date(fortWeekEnd(start) + "T00:00:00Z");
+  resetsAt.setUTCDate(resetsAt.getUTCDate() + 1);
+  return { start, end: fortWeekEnd(start), resetsAt };
+}
+
+// "Find your Governor": the ranked entries whose Governor has ever gone by a name containing
+// the query (Name History, by Character ID), or whose Character ID contains it. Case-insensitive.
+export function findInRanking(ranked, nameHistory, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const names = (id) => nameHistory.filter((n) => n.id === id).map((n) => n.name);
+  return ranked.filter((e) => e.id?.includes(q) || [e.name, ...names(e.id)].some((n) => n.toLowerCase().includes(q)));
+}

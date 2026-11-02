@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -38,4 +38,24 @@ test("a Governor never ranked has no Fort Average", () => {
 
 test("a Fort Week starting Monday 26 Oct ends on Sunday 1 Nov", () => {
   assert.equal(fortWeekEnd("2026-10-26"), "2026-11-01");
+});
+
+test("on Monday 2 Nov at 10:00 UTC the Fort Week resets on Monday 9 Nov at 00:00 UTC", () => {
+  const week = fortWeekAt(new Date("2026-11-02T10:00:00Z"));
+  assert.deepEqual([week.start, week.resetsAt.toISOString()], ["2026-11-02", "2026-11-09T00:00:00.000Z"]);
+});
+
+const ranking = [
+  { id: "176012522", name: "vkreçislaw", fortCount: 205, rank: 1 },
+  { id: "136642563", name: "TasteMyFat", fortCount: 137, rank: 2 },
+  { id: null, name: "ILLOM", fortCount: 118, rank: 3 },
+];
+
+test("Find your Governor matches a former name from Name History, case-insensitively", () => {
+  const history = [{ id: "136642563", name: "OldTaste" }, { id: "136642563", name: "TasteMyFat" }];
+  assert.deepEqual(findInRanking(ranking, history, "oldtaste").map((e) => [e.rank, e.fortCount]), [[2, 137]]);
+});
+
+test("Find your Governor matches a Character ID", () => {
+  assert.deepEqual(findInRanking(ranking, [], "176012522").map((e) => e.name), ["vkreçislaw"]);
 });

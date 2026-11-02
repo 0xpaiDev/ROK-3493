@@ -36,7 +36,7 @@ window.KD_CONTENT = {
       date: "2026-10-28",
       tag: "Recruitment",
       title: "Void Legion is recruiting",
-      body: "Active and committed players welcome. Reach out to leadership in game."
+      body: "Active and committed Governors welcome. Reach out to the Council in game."
     }
   ]
 };
