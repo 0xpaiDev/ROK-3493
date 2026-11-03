@@ -40,6 +40,11 @@ export function fortWeekAt(now) {
   return { start, end: fortWeekEnd(start), resetsAt };
 }
 
+// Whether a date (YYYY-MM-DD) is a Monday, the day a Fort Week starts.
+export function isFortWeekStart(day) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) && fortWeekAt(day + "T12:00:00Z").start === day;
+}
+
 // "Find your Governor": the ranked entries whose Governor has ever gone by a name containing
 // the query (Name History, by Character ID), or whose Character ID contains it. Case-insensitive.
 export function findInRanking(ranked, nameHistory, query) {
@@ -96,10 +101,10 @@ export function applyRosterSnapshot({ governors, nameHistory, previous, snapshot
     else if (g.status !== "current" && present.has(g.id)) statusChanges.push({ id: g.id, name: g.name, to: "current" });
   }
   const known = new Set(governors.map((g) => g.id));
-  const seen = new Set(nameHistory.map((n) => n.id + "|" + n.name));
+  const seen = seenPairs(nameHistory);
   const newGovernors = snapshot.rows.filter((r) => !known.has(r.id)).map((r) => ({ id: r.id, name: r.name }));
   const newNames = snapshot.rows
-    .filter((r) => !seen.has(r.id + "|" + r.name))
+    .filter((r) => !isSeen(seen, r))
     .map((r) => ({ id: r.id, name: r.name, firstSeen: snapshot.takenOn }));
   const byId = new Map(governors.map((g) => [g.id, g]));
   const renames = snapshot.rows
@@ -169,6 +174,16 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   return [...rankWeek(sums), ...unlinked].sort((x, y) => y.fortCount - x.fortCount);
 }
 
+// Each Character ID + name pair already in Name History, to tell which names are new.
+const seenPairs = (nameHistory) => new Set(nameHistory.map((n) => n.id + "|" + n.name));
+const isSeen = (seen, r) => seen.has(r.id + "|" + r.name);
+
+// The names a pasted Fort Week is matched against: Name History { character_id, name } plus each
+// Governor's current name { id, name }, which counts as seen before a Roster Snapshot adds it.
+export function namesToMatch(governors, nameHistory) {
+  return [...nameHistory.map((n) => ({ id: n.character_id, name: n.name })), ...governors];
+}
+
 // Name matching for a pasted Fort Week. Takes rows { name, fortCount } and Name History { id, name }.
 // Returns each row with the Character ID its name has been seen under, or id null ("needs ID").
 // A name seen under more than one Character ID is never guessed between, and a name pasted twice
@@ -213,6 +228,6 @@ export function moveInTie(rows, index, step) {
 // Names a saved Fort Week adds to Name History: a pasted name on a row with a Character ID that the
 // Governor was not yet seen under (the Council picked it). firstSeen is the Fort Week's Monday.
 export function newFortNames(rows, nameHistory, week) {
-  const seen = new Set(nameHistory.map((n) => n.id + "|" + n.name));
-  return rows.filter((r) => r.id != null && !seen.has(r.id + "|" + r.name)).map((r) => ({ id: r.id, name: r.name, firstSeen: week }));
+  const seen = seenPairs(nameHistory);
+  return rows.filter((r) => r.id != null && !isSeen(seen, r)).map((r) => ({ id: r.id, name: r.name, firstSeen: week }));
 }

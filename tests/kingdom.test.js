@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -313,4 +313,17 @@ test("a name the Council picked a Governor for joins Name History; known names a
   const rows = [{ name: "Odd Name", fortCount: 9, id: "111" }, { name: "Known", fortCount: 8, id: "222" }, { name: "X", fortCount: 3, id: null }];
   const history = [{ id: "111", name: "Real" }, { id: "222", name: "Known" }];
   assert.deepEqual(newFortNames(rows, history, "2026-11-02"), [{ id: "111", name: "Odd Name", firstSeen: "2026-11-02" }]);
+});
+
+test("a Fort Week starts on a Monday; any other day or a malformed date is refused", () => {
+  assert.equal(isFortWeekStart("2026-11-02"), true);
+  assert.equal(isFortWeekStart("2026-11-03"), false);
+  assert.equal(isFortWeekStart("2026-11-2"), false);
+  assert.equal(isFortWeekStart(""), false);
+});
+
+test("a Governor's current name matches a pasted row before any Roster Snapshot adds it to Name History", () => {
+  const seen = namesToMatch([{ id: "222", name: "Fresh" }], [{ character_id: "111", name: "OldName" }]);
+  const out = matchNames([{ name: "Fresh", fortCount: 7 }, { name: "OldName", fortCount: 5 }], seen);
+  assert.deepEqual(out.map((r) => r.id), ["222", "111"]);
 });

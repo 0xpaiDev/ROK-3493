@@ -37,6 +37,8 @@
   --live-wash: rgba(126, 224, 168, .12);
   --live-edge: rgba(126, 224, 168, .3);
   --note-wash: rgba(233, 196, 106, .1);
+  /* Wash behind the gold Draft and needs ID tags */
+  --tag-wash: rgba(233, 196, 106, .14);
   /* Radii */
   --radius-sm: 12px;
   --radius-md: 14px;
@@ -139,7 +141,7 @@ h3 { font-size: 15px; font-weight: 600; }
   font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; line-height: 1.6;
   background: var(--accent-wash); color: var(--link);
 }
-.tag.draft, .tag.needs-id { background: rgba(233, 196, 106, .14); color: var(--gold); }
+.tag.draft, .tag.needs-id { background: var(--tag-wash); color: var(--gold); }
 .tag.migrated, .tag.away { background: rgba(255, 255, 255, .06); color: var(--muted); }
 tr.is-away td { color: var(--muted); }
 tr.is-away .linkish, tr.is-away b { color: var(--muted); }

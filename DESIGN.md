@@ -22,9 +22,10 @@ Dark, calm, exact. One violet accent on near-black, with metals reserved for hon
 | Metals | `--gold`, `--silver`, `--bronze` (+ `--on-metal` text) | **only** 1st/2nd/3rd placings and Weekly Awards |
 | Live | `--live` on `--live-wash` (`--live-edge` for a ring) | the reset pulse and "Linked" / success |
 | Notes | `--note` on `--note-wash` | Partial Week and other "how the data works" callouts |
+| Gold tags | `--gold` on `--tag-wash` | the Draft and needs ID tags, the only gold outside placings and Weekly Awards |
 | Review groups | `--inactive`, `--back`, `--new`, `--renamed` | Roster Snapshot groups (Become Inactive, Back to Current, New Governors, Renamed), as a dot plus count, never a filled card. `--back` is plain ink, not silver: metals stay with honours |
 | Elevation | `--shadow-float` | the sticky save bar and anything else that floats over content |
-| Deltas | `--up`, `--down` | week-on-week change |
+| Deltas | `--up`, `--down` | week-on-week change; `--down` also edges a paste review row that blocks Save |
 
 Rules: one accent per view. Colours that must be told apart also differ in lightness. Text passes 4.5:1 on its background, including 11–12 px labels; `--faint` on `--bg` is the floor, so never go dimmer for text.
 
