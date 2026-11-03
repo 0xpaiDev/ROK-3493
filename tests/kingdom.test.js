@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -266,4 +266,64 @@ test("a needs-ID entry never collects the unlinked Farms", () => {
   const governors = [main("a"), farm("u")];
   const rows = mainsRanking([entry("a", 30), { id: null, name: "Nameless", fortCount: 25 }, entry("u", 20)], governors, { withFarms: true });
   assert.deepEqual(rows.map((r) => [r.id, r.farms.map((f) => f.id)]), [["a", []], [null, []], ["u", []]]);
+});
+
+// Name matching for a pasted Fort Week.
+const pasted = (name, fortCount) => ({ name, fortCount });
+
+test("a renamed Governor is matched through Name History", () => {
+  const history = [{ id: "111", name: "OldName" }, { id: "111", name: "NewName" }];
+  assert.deepEqual(matchNames([pasted("OldName", 12)], history), [{ name: "OldName", fortCount: 12, id: "111" }]);
+});
+
+test('an unknown name is left as "needs ID"', () => {
+  assert.equal(matchNames([pasted("Stranger", 5)], [{ id: "111", name: "Known" }])[0].id, null);
+});
+
+test('a name seen under two Character IDs is left as "needs ID", never guessed', () => {
+  const history = [{ id: "111", name: "Twin" }, { id: "222", name: "Twin" }];
+  assert.equal(matchNames([pasted("Twin", 9)], history)[0].id, null);
+});
+
+test('rows with the same pasted name stay separate rows, each "needs ID"', () => {
+  const out = matchNames([pasted("Echo", 30), pasted("Echo", 20)], [{ id: "111", name: "Echo" }]);
+  assert.deepEqual(out, [{ name: "Echo", fortCount: 30, id: null }, { name: "Echo", fortCount: 20, id: null }]);
+});
+
+test("each pasted line gives a name and its Fort Count", () => {
+  assert.deepEqual(parseFortRows("vøDarkBlaCK 42\nFKK 10\t1,204\n\n"), [pasted("vøDarkBlaCK", 42), pasted("FKK 10", 1204)]);
+});
+
+test("a pasted line without a Fort Count is refused with its line number", () => {
+  assert.throws(() => parseFortRows("Alpha 12\nBravo\n"), { message: 'Line 2 has no Fort Count at the end: "Bravo".' });
+});
+
+test("a Governor appearing twice in one Fort Week is caught; needs-ID rows are not", () => {
+  const rows = [{ name: "A", fortCount: 9, id: "111" }, { name: "A2", fortCount: 4, id: "111" }, { name: "X", fortCount: 3, id: null }, { name: "X", fortCount: 2, id: null }];
+  assert.deepEqual(governorsTwice(rows), ["111"]);
+});
+
+test("the Council moves a Governor within its tie, and never past a different Fort Count", () => {
+  const rows = [entry("a", 20), entry("b", 10), entry("c", 10)];
+  assert.deepEqual(moveInTie(rows, 2, -1).map((e) => e.id), ["a", "c", "b"]);
+  assert.deepEqual(moveInTie(rows, 1, -1).map((e) => e.id), ["a", "b", "c"]);
+});
+
+test("a name the Council picked a Governor for joins Name History; known names and needs-ID rows do not", () => {
+  const rows = [{ name: "Odd Name", fortCount: 9, id: "111" }, { name: "Known", fortCount: 8, id: "222" }, { name: "X", fortCount: 3, id: null }];
+  const history = [{ id: "111", name: "Real" }, { id: "222", name: "Known" }];
+  assert.deepEqual(newFortNames(rows, history, "2026-11-02"), [{ id: "111", name: "Odd Name", firstSeen: "2026-11-02" }]);
+});
+
+test("a Fort Week starts on a Monday; any other day or a malformed date is refused", () => {
+  assert.equal(isFortWeekStart("2026-11-02"), true);
+  assert.equal(isFortWeekStart("2026-11-03"), false);
+  assert.equal(isFortWeekStart("2026-11-2"), false);
+  assert.equal(isFortWeekStart(""), false);
+});
+
+test("a Governor's current name matches a pasted row before any Roster Snapshot adds it to Name History", () => {
+  const seen = namesToMatch([{ id: "222", name: "Fresh" }], [{ character_id: "111", name: "OldName" }]);
+  const out = matchNames([{ name: "Fresh", fortCount: 7 }, { name: "OldName", fortCount: 5 }], seen);
+  assert.deepEqual(out.map((r) => r.id), ["222", "111"]);
 });

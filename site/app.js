@@ -67,8 +67,10 @@ import { loadKingdom } from "./store.js";
   // ---------- Governors keyed by Character ID ----------
   const weeks = D.fortWeeks;
   const governors = new Map();
-  const get = (id, name) => {
-    const key = id || "name:" + name;
+  // A Fort Week row with no Character ID ("needs ID") is keyed by its own row, so two such rows
+  // with the same name stay two Governors: names never merge Governors.
+  const get = (id, name, entry = null) => {
+    const key = id || (entry != null ? "entry:" + entry : "name:" + name);
     if (!governors.has(key)) governors.set(key, { key, id, names: [], fort: Array(weeks.length).fill(null), gh: [], kvk: null, roster: null });
     const g = governors.get(key);
     if (name && !g.names.includes(name)) g.names.push(name);
@@ -83,9 +85,9 @@ import { loadKingdom } from "./store.js";
   const plain = weeks.map((w) => mainsRanking(w.entries, D.governors));
   const grouped = weeks.map((w) => mainsRanking(w.entries, D.governors, { withFarms: true }));
   weeks.forEach((_, i) => {
-    plain[i].forEach((r) => (get(r.id, r.name).fort[i] = r));
+    plain[i].forEach((r) => (get(r.id, r.name, r.entry).fort[i] = r));
     grouped[i].forEach((r) => {
-      if (r.unlinked) get(r.id, r.name).fort[i] = r;
+      if (r.unlinked) get(r.id, r.name, r.entry).fort[i] = r;
       r.farms.forEach((f) => (get(f.id, f.name).fort[i] = { ...f, rank: null }));
     });
   });
@@ -118,7 +120,7 @@ import { loadKingdom } from "./store.js";
   // One Weekly Ranking row per Main (and, with Farms, per unlinked Farm), each with its Farm rows.
   // A row's arrow compares like with like: a summed Main against its sum the week before.
   const row = (i, e, rows, summed = false) => {
-    const g = get(e.id, e.name);
+    const g = get(e.id, e.name, e.entry);
     const prev = i === 0 ? null
       : summed && e.id != null ? grouped[i - 1].find((r) => r.id === e.id && r.rank != null)
       : g.fort[i - 1];
@@ -158,6 +160,7 @@ import { loadKingdom } from "./store.js";
       const cls = ["row", place, part && "part", deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
       const tie = r.tie ? `<span class="tag tie" title="Tied on ${r.e.fortCount} forts. The Council set this order.">Tie<span class="long"> · Council order</span></span>` : "";
       const tags = tie
+        + (!part && r.g.id == null ? `<span class="tag needs-id" title="No Character ID on record yet. The Council will pick the Governor.">needs ID</span>` : "")
         + (r.e.unlinked ? `<span class="tag farm" title="A Farm not yet linked to its Main">Farm · unlinked</span>` : "")
         + (part ? (r.self
           ? `<span class="tag farm" title="The Main's own Fort Count, part of the total above">Main</span>`
@@ -280,7 +283,7 @@ import { loadKingdom } from "./store.js";
       return q.length < 2 ? "" : `<p class="find-none">No Governor in the Week ${wn} Weekly Ranking matches “${esc(q)}”. <a href="#fort">Search Fort Rankings →</a></p>`;
     }
     return hits.slice(0, 3).map((e) => {
-      const g = get(e.id, e.name);
+      const g = get(e.id, e.name, e.entry);
       return `<button class="find-hit" data-gov="${esc(g.key)}">
         <span class="r num">${e.rank != null ? "#" + e.rank : "Farm"}</span>
         <span class="who"><b class="ell">${esc(g.name)}</b><small>${g.id ? "Character ID " + esc(g.id) : "needs ID"}</small></span>

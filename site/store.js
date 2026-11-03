@@ -26,7 +26,7 @@ export async function loadKingdom() {
     rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
     rows("fort_week", "select=starts_on,completeness&order=starts_on.asc"),
-    rows("fort_entry", "select=week,character_id,name,fort_count&order=fort_count.desc,tie_order.asc,id.asc"),
+    rows("fort_entry", "select=id,week,character_id,name,fort_count&order=fort_count.desc,tie_order.asc,id.asc"),
     rows("gh_event", "select=id,name,starts_on,ends_on&order=starts_on.asc,id.asc"),
     rows("gh_entry", "select=event_id,place,character_id,name,alliance,golden_heads&order=place.asc"),
     rows("kvk_entry", "select=*&order=rank.asc"),
@@ -45,7 +45,7 @@ export async function loadKingdom() {
     completeness: w.completeness,
     entries: entries
       .filter((e) => e.week === w.starts_on)
-      .map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count })),
+      .map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, entry: e.id })),
   }));
 
   const ghEvents = events.map((ev) => ({
