@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, rankWeek, parseFortRows, matchNames, governorsTwice, moveInTie } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -19,9 +19,7 @@ const typedId = (typed) => typed.match(/\((\d+)\)$/)?.[1] ?? (/^\d+$/.test(typed
 const TASKS = [
   { id: "roster", label: "Roster Snapshot" },
   { id: "farm-links", label: "Farm links" },
-  { id: "fort-week", label: "Fort Week", meta: "Paste rows, Weekly Awards", soon: {
-    title: "Log a Fort Week", body: "Paste a Fort Week's rows and record its Weekly Awards.",
-    steps: [["Paste the rows", "Name and Fort Count, from the in-game ranking"], ["Match names", 'Unmatched names stay "needs ID"; ties take Council order'], ["Record Weekly Awards", "Mains only"]] } },
+  { id: "fort-week", label: "Fort Week" },
   { id: "gh-event", label: "GH Event", meta: "Top 10, Golden Heads", soon: {
     title: "Log a GH Event", body: "Log a GH Event's top 10 with Golden Heads.",
     steps: [["Name and dates", "One result per GH Event"], ["Enter the top 10", "Matched like a Fort Week"], ["Check Golden Heads", "Prefilled 20/10/5/4×7, editable"]] } },
@@ -84,6 +82,7 @@ async function showAdmin(session) {
     </div>`;
   showTask();
   showFarmLinks(document.getElementById("task-farm-links"));
+  showFortWeek(document.getElementById("task-fort-week"));
   showRoster(document.getElementById("task-roster"), session.user.email);
 }
 
@@ -359,6 +358,214 @@ async function showFarmLinks(section, message = "") {
     const err = await linkFarm(farm.id, mainId);
     redraw(err ?? (mainId ? `${farm.name} is now a Farm of ${nameOf(mainId)}.` : `${farm.name} is now a Farm with its Main unknown.`));
   });
+}
+
+// ---------- Fort Week (ticket 08) ----------
+// The rules module parses the paste, matches names and orders ties; this section reads, shows and writes.
+
+async function loadFortWeekState() {
+  const [governors, names, weeks, entries] = await Promise.all([
+    allRows("governor", "character_id,current_name"),
+    allRows("governor_name", "character_id,name"),
+    allRows("fort_week", "starts_on,completeness"),
+    allRows("fort_entry", "week"),
+  ]);
+  const saved = new Map();
+  for (const e of entries) saved.set(e.week, (saved.get(e.week) ?? 0) + 1);
+  return {
+    governors: governors.map((g) => ({ id: g.character_id, name: g.current_name })),
+    // A Governor's current name counts as seen, even before a Roster Snapshot adds it to Name History.
+    nameHistory: [...names, ...governors.map((g) => ({ character_id: g.character_id, name: g.current_name }))]
+      .map((n) => ({ id: n.character_id, name: n.name })),
+    weeks: new Map(weeks.map((w) => [w.starts_on, { completeness: w.completeness, rows: saved.get(w.starts_on) ?? 0 }])),
+  };
+}
+
+const ARROW = (d) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
+
+async function showFortWeek(section, message = "") {
+  let state;
+  try {
+    state = await loadFortWeekState();
+  } catch (e) {
+    section.innerHTML = `<div class="eyebrow">Fort Week</div><p class="admin-msg" role="status">Could not load the Fort Weeks: ${esc(e.message)}</p>`;
+    setTaskStatus("fort-week", "Could not load");
+    return;
+  }
+  const byId = new Map(state.governors.map((g) => [g.id, g]));
+  const label = (g) => `${g.name} (${g.id})`;
+  const latest = [...state.weeks.keys()].sort().at(-1);
+
+  // The Fort Week that closed last is the usual one to log.
+  let week = fortWeekAt(Date.now() - 7 * 864e5).start;
+  let completeness = "complete";
+  let text = "";
+  let rows = null; // matched rows in ranking order; null until "Match names"
+  let msgText = message;
+
+  function draw() {
+    const isMonday = /^\d{4}-\d{2}-\d{2}$/.test(week) && fortWeekAt(week + "T12:00:00Z").start === week;
+    const saved = state.weeks.get(week);
+    const range = isMonday ? `${dayMonth(week)} – ${dayMonth(fortWeekEnd(week))}` : week;
+    setTaskStatus("fort-week", rows ? "Rows ready to save" : latest ? `Latest ${dayMonth(latest)}` : "No week yet", rows ? "Review" : "", rows ? "review" : "");
+
+    const ranked = rows ? rankWeek(rows) : [];
+    const needs = rows ? rows.filter((r) => r.id == null).length : 0;
+    const twice = rows ? governorsTwice(rows) : [];
+    const tiedAt = (i, step) => rows[i + step]?.fortCount === rows[i].fortCount;
+    const blocker = !isMonday ? `${week || "The date"} is not a Monday. A Fort Week starts on Monday.`
+      : twice.length ? `${twice.map((id) => byId.get(id)?.name ?? id).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
+      : "";
+
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <div class="reveal">
+        <div class="eyebrow">Fort Week</div>
+        <h1 class="task-title">${rows && isMonday ? `Review the week of ${esc(dayMonth(week))}` : "Log a Fort Week"}</h1>
+        <p class="task-lede">Paste the Weekly Ranking, one Governor per line: name, then Fort Count. Names are matched against Name History; a name that can't be matched stays "needs ID" until you pick its Governor. Nothing changes until you press Save.</p>
+      </div>
+      <p class="admin-msg" role="status">${esc(msgText)}</p>
+
+      <section class="card admin-card">
+        <h2>Paste the rows</h2>
+        <form id="fw-paste" class="fields">
+          <label class="field">Fort Week starting
+            <input type="date" name="week" value="${esc(week)}" min="2024-01-01" step="7" required>
+          </label>
+          <label class="field">Week is
+            <select name="completeness">
+              <option value="complete"${completeness === "complete" ? " selected" : ""}>Complete</option>
+              <option value="partial"${completeness === "partial" ? " selected" : ""}>Partial</option>
+            </select>
+          </label>
+          <label class="field fw-text">Rows
+            <textarea name="rows" rows="8" required spellcheck="false" placeholder="vøDarkBlaCK 42&#10;FKK 10 38">${esc(text)}</textarea>
+          </label>
+          <button class="btn${rows ? "" : " primary"}" type="submit">Match names</button>
+        </form>
+        <p class="match">${!isMonday ? "Pick the Monday the Fort Week starts on."
+          : saved ? `Week of ${esc(range)} is already saved with <b>${saved.rows}</b> rows (${esc(saved.completeness)}). Saving replaces them.`
+          : `Week of ${esc(range)} is not logged yet. A Complete Week counts a missing Governor as 0; mark it Partial if the ranking is incomplete.`}</p>
+      </section>
+
+      ${rows ? `
+      <section class="card admin-card" aria-label="Rows to save">
+        <h2>Rows <span class="faint num">${rows.length}</span></h2>
+        <p class="muted"><span class="num">${rows.length - needs}</span> matched · <span class="num">${needs}</span> needs ID. Pick a Governor to resolve a row, or clear it to leave the row "needs ID". The arrows set the order of tied Governors.</p>
+        <datalist id="fw-governors">${state.governors.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
+        <ol class="fw-rows">${rows.map((r, i) => {
+          const tied = tiedAt(i, -1) || tiedAt(i, 1);
+          const g = r.id != null ? byId.get(r.id) : null;
+          return `
+          <li class="fw-row${twice.includes(r.id) ? " clash" : ""}">
+            <span class="pos num">${ranked[i].rank}</span>
+            <span class="who">
+              <span class="name"><span class="ell" title="${esc(r.name)}">${esc(r.name)}</span>${tied ? `<span class="tag tie" title="Tied on ${r.fortCount} forts. Your order is the public order.">Tie</span>` : ""}</span>
+              ${r.id != null ? `<span class="pid">${esc(r.id)}</span>` : `<span><span class="tag needs-id">needs ID</span></span>`}
+            </span>
+            <b class="count num">${r.fortCount}</b>
+            <label class="field fw-gov"><span class="sr-only">Governor for row ${i + 1}, ${esc(r.name)}</span>
+              <input list="fw-governors" data-row="${i}" value="${g ? esc(label(g)) : ""}" placeholder="Pick a Governor" autocomplete="off">
+            </label>
+            <span class="row-actions">${tied ? `
+              <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="-1" aria-label="Move ${esc(r.name)} up"${tiedAt(i, -1) ? "" : " disabled"}>${ARROW("M12 19V5M6 11l6-6 6 6")}</button>
+              <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="1" aria-label="Move ${esc(r.name)} down"${tiedAt(i, 1) ? "" : " disabled"}>${ARROW("M12 5v14M6 13l6 6 6-6")}</button>` : ""}</span>
+          </li>`;
+        }).join("")}
+        </ol>
+      </section>
+
+      <div class="save-bar" role="region" aria-label="Unsaved Fort Week">
+        <span class="pulse unsaved" aria-hidden="true"></span>
+        <span class="sum">${blocker
+          ? `<b>Fix before saving.</b> <span>${esc(blocker)}</span>`
+          : `<b>Not saved yet.</b> <span>${rows.length} rows for ${esc(range)}, ${completeness === "partial" ? "Partial" : "Complete"} · ${needs} needs ID${saved ? ` · replaces the ${saved.rows} saved rows` : ""}.</span>`}</span>
+        <button class="btn quiet" type="button" data-discard>Discard</button>
+        <button class="btn primary" type="button" data-save${blocker ? " disabled" : ""}>${saved ? "Replace" : "Save"} Fort Week</button>
+      </div>` : ""}`;
+    section.replaceChildren(body);
+    wire(body);
+  }
+
+  function wire(body) {
+    const form = body.querySelector("#fw-paste");
+    const msg = body.querySelector(".admin-msg");
+    form.week.addEventListener("change", () => { week = form.week.value; draw(); });
+    form.completeness.addEventListener("change", () => { completeness = form.completeness.value; draw(); });
+    form.rows.addEventListener("input", () => { text = form.rows.value; });
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      text = form.rows.value;
+      try {
+        rows = rankWeek(matchNames(parseFortRows(text), state.nameHistory)).map(({ rank, ...r }) => r);
+        msgText = rows.length ? "" : "No rows to match.";
+        if (!rows.length) rows = null;
+      } catch (err) {
+        msgText = `Could not read the rows: ${err.message}`;
+      }
+      draw();
+    });
+
+    // A Governor picked from the list resolves the row; an empty box leaves it "needs ID".
+    body.querySelectorAll("input[data-row]").forEach((input) => input.addEventListener("change", () => {
+      const i = Number(input.dataset.row);
+      const typed = input.value.trim();
+      const g = byId.get(typedId(typed));
+      rows = rows.map((r, k) => (k === i ? { ...r, id: g ? g.id : null } : r));
+      msgText = typed && !g ? `"${typed}" is not on the list, so row ${i + 1} stays "needs ID". Pick the Governor from the list.` : "";
+      draw();
+    }));
+
+    body.querySelectorAll("button[data-move]").forEach((b) => b.addEventListener("click", () => {
+      const i = Number(b.dataset.move), step = Number(b.dataset.step);
+      rows = moveInTie(rows, i, step);
+      msgText = "";
+      draw();
+      // Keep focus on the row that moved, so it can keep moving from the keyboard.
+      const next = section.querySelector(`button[data-move="${i + step}"][data-step="${step}"]`);
+      (next && !next.disabled ? next : section.querySelector(`button[data-move="${i + step}"][data-step="${-step}"]`))?.focus();
+    }));
+
+    body.querySelector("[data-discard]")?.addEventListener("click", () => {
+      rows = null;
+      msgText = "Discarded the rows. Nothing was saved.";
+      draw();
+    });
+
+    body.querySelector("[data-save]")?.addEventListener("click", async () => {
+      body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
+      msg.textContent = "Saving…";
+      try {
+        await saveFortWeek(week, completeness, rows, state.weeks.get(week));
+        const needs = rows.filter((r) => r.id == null).length;
+        showFortWeek(section, `Saved the week of ${dayMonth(week)}: ${rows.length} rows${needs ? `, ${needs} still "needs ID"` : ""}. It is on the public site now.`);
+      } catch (err) {
+        body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
+        msg.textContent = `Could not save: ${err.message}`;
+      }
+    });
+  }
+
+  draw();
+}
+
+// Writes the week, then swaps its rows for the new ones. If the new rows fail, the saved rows and
+// completeness go back (or a week that was new is removed), so no half week is left behind.
+async function saveFortWeek(week, completeness, rows, saved) {
+  const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${error.message}`); };
+  check(await supabase.from("fort_week").upsert({ starts_on: week, completeness }, { onConflict: "starts_on" }), "Fort Week");
+  const old = await supabase.from("fort_entry").select("character_id,name,fort_count,tie_order").eq("week", week);
+  check(old, "Saved rows");
+  if (old.data.length) check(await supabase.from("fort_entry").delete().eq("week", week), "Saved rows");
+  const res = await supabase.from("fort_entry").insert(rows.map((r, i) => ({
+    week, character_id: r.id, name: r.name, fort_count: r.fortCount, tie_order: i,
+  })));
+  if (res.error) {
+    if (old.data.length) await supabase.from("fort_entry").insert(old.data.map((e) => ({ ...e, week })));
+    if (saved) await supabase.from("fort_week").update({ completeness: saved.completeness }).eq("starts_on", week);
+    else await supabase.from("fort_week").delete().eq("starts_on", week);
+    check(res, "Fort Week rows");
+  }
 }
 
 // ---------- Roster Snapshot (ticket 05) ----------
@@ -645,7 +852,13 @@ signOut.addEventListener("click", async () => {
 });
 
 // Fires once on load (INITIAL_SESSION, after the magic-link hash is read) and on every sign-in or sign-out.
+// It also re-announces the same session (SIGNED_IN when the tab becomes visible again, TOKEN_REFRESHED), so
+// the page redraws only when who is signed in changes; a redraw would drop unsaved work.
 // Deferred with setTimeout: awaiting a Supabase call inside this callback deadlocks the auth client.
+let drawnFor; // the signed-in email the page is drawn for; null when signed out
 supabase.auth.onAuthStateChange((_event, session) => {
+  const email = session?.user.email ?? null;
+  if (email === drawnFor) return;
+  drawnFor = email;
   setTimeout(() => (session ? showAdmin(session) : showSignIn()), 0);
 });

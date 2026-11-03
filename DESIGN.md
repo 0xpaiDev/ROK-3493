@@ -55,7 +55,7 @@ Reuse these before inventing new ones (classes in `styles.css`).
 - **Ranking row** `.row` in `.rank-list`: rank in mono (metal colour for top 3), name + bar, Fort Count right-aligned. Ties get a `.tag` "Tie · Council order". With "Main + Farm" on, a Main with Farms shows a total (count with a mono "total" label under it), ranked on that total. The parts that add up to it sit under it as `.row.part` rows: indented, no rank, quieter name, count and bar. The Main's own Fort Count comes first, tagged "Main", then each Farm's, tagged "Farm". An unlinked Farm is its own unranked row tagged "Farm · unlinked".
 - **Card** `.card` + `.card-head`: eyebrow in mono, serif title, link on the right.
 - **Callout** `.note`: explains a data rule in place (Partial Week, Farms). Fairness rules live next to the numbers they affect.
-- **Tag** `.tag`: Draft, Partial Week, Migrated, needs ID, Farm (`.tag.farm`, also "Farm · unlinked", in the ranking and Fort Averages). "needs ID" is always visible, never hidden.
+- **Tag** `.tag`: Draft, Partial Week, Migrated, needs ID (`.tag.needs-id`, in Draft's gold), Farm (`.tag.farm`, also "Farm · unlinked", in the ranking and Fort Averages). "needs ID" is always visible, never hidden: in the ranking rows, the podium and the admin page.
 - **Buttons** `.btn`: primary = `--accent` fill with dark text (one per view); secondary = outlined; quiet = text only. Minimum height 36 px; anything tapped on a phone is 44 px.
 - **Segmented control / chips** `.seg`, `.chip`: filters and view toggles (Mains / Main + Farm).
 
@@ -67,6 +67,7 @@ Council admin patterns:
 - **Change lists**: renames read `old (struck through) → new · ID`. An empty group is one line, not a blank box.
 - **Sticky save bar**: appears while anything is unsaved and summarises what Save will do; Discard is quiet and Save is primary. Nothing writes before Save.
 - **Confirm / Dismiss rows**: the decision becomes a "Linked" / "Dismissed" label with Undo. Group by Main and offer "Confirm all N".
+- **Paste review rows** `.fw-row`: rank, the name as pasted, Fort Count, a Governor picker (datalist of "Name (Character ID)"), then the Character ID or a "needs ID" tag. Tied rows get up/down arrows that move them only within the tie. A row that blocks saving gets a `--down` edge on the left.
 - **Not built yet**: show the planned steps dashed with "Coming soon", never a tall empty card.
 
 ## Motion

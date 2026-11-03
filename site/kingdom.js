@@ -168,3 +168,44 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
     .map((e) => ({ ...e, rank: null, unlinked: true, farms: [] }));
   return [...rankWeek(sums), ...unlinked].sort((x, y) => y.fortCount - x.fortCount);
 }
+
+// Name matching for a pasted Fort Week. Takes rows { name, fortCount } and Name History { id, name }.
+// Returns each row with the Character ID its name has been seen under, or id null ("needs ID").
+// A name seen under more than one Character ID is never guessed between, and a name pasted twice
+// leaves every row with it "needs ID": the rows stay apart until the Council picks each Governor.
+export function matchNames(rows, nameHistory) {
+  const idsOf = (name) => new Set(nameHistory.filter((n) => n.name === name).map((n) => n.id));
+  const pastedTwice = (name) => rows.filter((r) => r.name === name).length > 1;
+  return rows.map((r) => {
+    const ids = idsOf(r.name);
+    return { ...r, id: ids.size === 1 && !pastedTwice(r.name) ? [...ids][0] : null };
+  });
+}
+
+// Pasted Fort Week rows: one Governor per line, the name then its Fort Count as the last number
+// on the line (spaces or a tab between, thousands commas allowed). Blank lines are skipped.
+export function parseFortRows(text) {
+  return text.split(/\r?\n/).flatMap((line, i) => {
+    if (!line.trim()) return [];
+    const m = line.trim().match(/^(.*\S)\s+([\d,]+)$/);
+    if (!m) throw new Error(`Line ${i + 1} has no Fort Count at the end: "${line.trim()}".`);
+    return [{ name: m[1], fortCount: Number(m[2].replace(/,/g, "")) }];
+  });
+}
+
+// The Character IDs on more than one row of a Fort Week. A week holds each Governor once, so these
+// block saving. "needs ID" rows have no Character ID yet and never count as the same Governor.
+export function governorsTwice(rows) {
+  const ids = rows.map((r) => r.id).filter((id) => id != null);
+  return [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+}
+
+// Tie order: rows in ranking order; the row at index moves one place up (step -1) or down (+1),
+// only past a row with the same Fort Count. The resulting order is the Council's tie order.
+export function moveInTie(rows, index, step) {
+  const other = index + step;
+  if (rows[other]?.fortCount !== rows[index].fortCount) return rows;
+  const out = [...rows];
+  [out[index], out[other]] = [out[other], out[index]];
+  return out;
+}
