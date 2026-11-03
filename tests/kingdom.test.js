@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -307,4 +307,10 @@ test("the Council moves a Governor within its tie, and never past a different Fo
   const rows = [entry("a", 20), entry("b", 10), entry("c", 10)];
   assert.deepEqual(moveInTie(rows, 2, -1).map((e) => e.id), ["a", "c", "b"]);
   assert.deepEqual(moveInTie(rows, 1, -1).map((e) => e.id), ["a", "b", "c"]);
+});
+
+test("a name the Council picked a Governor for joins Name History; known names and needs-ID rows do not", () => {
+  const rows = [{ name: "Odd Name", fortCount: 9, id: "111" }, { name: "Known", fortCount: 8, id: "222" }, { name: "X", fortCount: 3, id: null }];
+  const history = [{ id: "111", name: "Real" }, { id: "222", name: "Known" }];
+  assert.deepEqual(newFortNames(rows, history, "2026-11-02"), [{ id: "111", name: "Odd Name", firstSeen: "2026-11-02" }]);
 });

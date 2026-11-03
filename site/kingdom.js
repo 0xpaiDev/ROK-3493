@@ -209,3 +209,10 @@ export function moveInTie(rows, index, step) {
   [out[index], out[other]] = [out[other], out[index]];
   return out;
 }
+
+// Names a saved Fort Week adds to Name History: a pasted name on a row with a Character ID that the
+// Governor was not yet seen under (the Council picked it). firstSeen is the Fort Week's Monday.
+export function newFortNames(rows, nameHistory, week) {
+  const seen = new Set(nameHistory.map((n) => n.id + "|" + n.name));
+  return rows.filter((r) => r.id != null && !seen.has(r.id + "|" + r.name)).map((r) => ({ id: r.id, name: r.name, firstSeen: week }));
+}

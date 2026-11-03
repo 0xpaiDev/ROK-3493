@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, rankWeek, parseFortRows, matchNames, governorsTwice, moveInTie } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, rankWeek, parseFortRows, matchNames, governorsTwice, moveInTie, newFortNames } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -536,7 +536,7 @@ async function showFortWeek(section, message = "") {
       body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
       msg.textContent = "Saving…";
       try {
-        await saveFortWeek(week, completeness, rows, state.weeks.get(week));
+        await saveFortWeek(week, completeness, rows, state.weeks.get(week), newFortNames(rows, state.nameHistory, week));
         const needs = rows.filter((r) => r.id == null).length;
         showFortWeek(section, `Saved the week of ${dayMonth(week)}: ${rows.length} rows${needs ? `, ${needs} still "needs ID"` : ""}. It is on the public site now.`);
       } catch (err) {
@@ -550,8 +550,9 @@ async function showFortWeek(section, message = "") {
 }
 
 // Writes the week, then swaps its rows for the new ones. If the new rows fail, the saved rows and
-// completeness go back (or a week that was new is removed), so no half week is left behind.
-async function saveFortWeek(week, completeness, rows, saved) {
+// completeness go back (or a week that was new is removed), so no half week is left behind. Names the
+// Council picked a Governor for join Name History last, once the week is saved.
+async function saveFortWeek(week, completeness, rows, saved, newNames) {
   const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${error.message}`); };
   check(await supabase.from("fort_week").upsert({ starts_on: week, completeness }, { onConflict: "starts_on" }), "Fort Week");
   const old = await supabase.from("fort_entry").select("character_id,name,fort_count,tie_order").eq("week", week);
@@ -565,6 +566,11 @@ async function saveFortWeek(week, completeness, rows, saved) {
     if (saved) await supabase.from("fort_week").update({ completeness: saved.completeness }).eq("starts_on", week);
     else await supabase.from("fort_week").delete().eq("starts_on", week);
     check(res, "Fort Week rows");
+  }
+  if (newNames.length) {
+    check(await supabase.from("governor_name").upsert(
+      newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
+      { onConflict: "character_id,name", ignoreDuplicates: true }), "Name History");
   }
 }
 
