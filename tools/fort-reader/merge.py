@@ -1,8 +1,9 @@
 """Join the rows read from each screenshot into one Weekly Ranking, and check it.
 
 Every screenshot shows a slice of the ranking and slices overlap, so rows are joined by rank.
-Nothing here guesses: a rank read two different ways, a gap, or a Fort Count that rises is
-reported, and the Council decides.
+Nothing here guesses: a Fort Count read two ways, a gap, or a Fort Count that rises is reported,
+and the Council decides. A name read two ways with one Fort Count is kept, flagged needs_id, so
+the database never matches it by either spelling: names in odd scripts read differently per screen.
 """
 
 
@@ -15,7 +16,9 @@ def merge_frames(frames):
             seen = by_rank.get(r["rank"])
             if seen is None:
                 by_rank[r["rank"]] = dict(r, frame=i)
-            elif (seen["name"], seen["forts"]) != (r["name"], r["forts"]):
+            elif seen["forts"] == r["forts"] and seen["name"] != r["name"]:
+                seen["needs_id"] = True
+            elif seen["forts"] != r["forts"]:
                 problems.append(
                     f'Rank {r["rank"]} read as "{seen["name"]} {seen["forts"]}" in screenshot '
                     f'{seen["frame"]} but "{r["name"]} {r["forts"]}" in screenshot {i}.'

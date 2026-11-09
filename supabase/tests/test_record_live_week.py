@@ -17,7 +17,8 @@ from pathlib import Path
 import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
-MIGRATION = ROOT / "supabase" / "migrations" / "20261109120000_live_week_reading.sql"
+# Every Live Week migration, in order: each test applies them all inside its transaction.
+MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("20261109*.sql"))
 CASES = json.loads((ROOT / "tests" / "name-matching-cases.json").read_text(encoding="utf-8"))["cases"]
 
 
@@ -43,7 +44,8 @@ class LiveWeekReading(unittest.TestCase):
 
     def setUp(self):
         self.conn.rollback()
-        self.conn.execute(MIGRATION.read_text(encoding="utf-8"))
+        for m in MIGRATIONS:
+            self.conn.execute(m.read_text(encoding="utf-8"))
         self.live = self.one("select date_trunc('week', now() at time zone 'utc')::date")
         self.reader = self.user("reader-test@example.invalid")
         self.conn.execute("insert into fort_reader (email) values ('reader-test@example.invalid')")
@@ -79,7 +81,8 @@ class LiveWeekReading(unittest.TestCase):
     def record(self, rows, week=None, claims=None):
         """Calls record_live_week as the reader (or claims), with rows in in-game order."""
         self.as_user(claims or self.reader)
-        entries = [{"rank": i + 1, "name": r["name"], "fort_count": r["fortCount"]} for i, r in enumerate(rows)]
+        entries = [{"rank": i + 1, "name": r["name"], "fort_count": r["fortCount"], **({"needs_id": True} if r.get("needsId") else {})}
+                   for i, r in enumerate(rows)]
         # On an error the caller rolls back to a savepoint, which also undoes the role.
         result = self.one("select record_live_week(%s::date, %s::jsonb)", (week or self.live, json.dumps(entries)))
         self.as_owner()
@@ -166,6 +169,12 @@ class LiveWeekReading(unittest.TestCase):
         self.conn.execute("insert into governor_name (character_id, name) values ('990000013', 'Case Odd')")
         self.record([{"name": "Case Odd", "fortCount": 8}])
         self.assertEqual(self.public_week(), [("990000013", "Case Odd", 8)])
+
+    def test_a_row_the_reader_read_two_ways_stays_needs_id_even_when_its_name_matches(self):
+        # A misreading can spell another Governor's name exactly; a flagged row is never matched.
+        self.governors([{"id": "990000014", "name": "Case CRY"}])
+        self.record([{"name": "Case CRY", "fortCount": 2, "needsId": True}, {"name": "Case CRY Other", "fortCount": 1}])
+        self.assertEqual(self.public_week(), [(None, "Case CRY", 2), (None, "Case CRY Other", 1)])
 
     def test_a_reading_stamps_the_live_weeks_as_of_time(self):
         self.record([{"name": "Case Anyone", "fortCount": 3}])

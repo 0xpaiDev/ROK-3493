@@ -39,10 +39,12 @@ def _post(path, body, token=None):
 
 
 def send_live_week(rows):
-    """rows: the merged reading, each {rank, name, forts}. Returns {rows, matched, needs_id}."""
+    """rows: the merged reading, each {rank, name, forts, needs_id?}. Returns {rows, matched, needs_id}.
+    A row flagged needs_id (its name read two ways) is sent flagged, so it is never matched by spelling."""
     email, password = os.environ.get("FORT_READER_EMAIL"), os.environ.get("FORT_READER_PASSWORD")
     if not email or not password:
         raise SystemExit("Add FORT_READER_EMAIL and FORT_READER_PASSWORD (the reader's Supabase sign-in) to .env.")
     token = _post("/auth/v1/token?grant_type=password", {"email": email, "password": password})["access_token"]
-    entries = [{"rank": r["rank"], "name": r["name"], "fort_count": r["forts"]} for r in rows]
+    entries = [{"rank": r["rank"], "name": r["name"], "fort_count": r["forts"],
+                **({"needs_id": True} if r.get("needs_id") else {})} for r in rows]
     return _post("/rest/v1/rpc/record_live_week", {"week": live_week(), "entries": entries}, token)

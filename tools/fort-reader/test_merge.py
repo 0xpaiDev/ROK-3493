@@ -16,10 +16,15 @@ class MergeFrames(unittest.TestCase):
         self.assertEqual([r["rank"] for r in rows], [1, 2, 3, 4])
         self.assertEqual(problems, [])
 
-    def test_a_rank_read_two_ways_is_reported_not_picked(self):
-        _, problems = merge_frames([[row(1, "A", 10), row(2, "ᵛøYURIEL", 9)], [row(2, "vøYURlEL", 9)]])
+    def test_a_fort_count_read_two_ways_is_reported_not_picked(self):
+        _, problems = merge_frames([[row(1, "A", 10), row(2, "ᵛøYURIEL", 9)], [row(2, "ᵛøYURIEL", 8)]])
         self.assertEqual(len(problems), 1)
         self.assertIn("Rank 2", problems[0])
+
+    def test_a_name_read_two_ways_with_one_fort_count_is_kept_as_needs_id(self):
+        rows, problems = merge_frames([[row(1, "A", 10), row(2, "CRɣ㋳", 2)], [row(2, "CRУ", 2)]])
+        self.assertEqual(problems, [])
+        self.assertEqual([(r["rank"], r["forts"], r.get("needs_id", False)) for r in rows], [(1, 10, False), (2, 2, True)])
 
     def test_a_skipped_screen_shows_as_missing_ranks(self):
         _, problems = merge_frames([[row(1, "A", 10), row(2, "B", 9)], [row(5, "E", 6)]])

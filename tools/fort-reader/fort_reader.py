@@ -138,6 +138,10 @@ def main():
 
     print(f"\n{len(rows)} Governors read. Copied to the clipboard and saved to {run_dir / 'paste.txt'}.\n")
     print(text)
+    unsure = [r for r in rows if r.get("needs_id")]
+    if unsure:
+        print("Read two ways, so sent as \"needs ID\" for the Council to resolve: "
+              + ", ".join(f'rank {r["rank"]} ({r["name"]})' for r in unsure) + ".")
     if problems:
         print("Check these before saving the Fort Week:")
         for p in problems:

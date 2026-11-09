@@ -30,7 +30,7 @@ Screenshots and `paste.txt` are kept under `runs/`. To re-read a run without the
 
 ## What it checks
 
-Rows from overlapping screens are joined by rank. The run lists problems instead of guessing: ranks with gaps, a rank read two different ways, a Fort Count that rises down the list, or your pinned row disagreeing with the list. Names are copied as read; the admin page matches them against Name History and flags the rest "needs ID".
+Rows from overlapping screens are joined by rank. The run lists problems instead of guessing: ranks with gaps, a Fort Count read two different ways, a Fort Count that rises down the list, or your pinned row disagreeing with the list. A name read two ways with one Fort Count (names in odd scripts, such as `CƦУ㋾`, read differently per screen) is not a problem: the row is kept and sent flagged, so the database leaves it "needs ID" and never matches it by either spelling. Names are copied as read; the admin page matches them against Name History and flags the rest "needs ID".
 
 Swiping the game from a script is automation, which Lilith's terms forbid. Run it on an account you can afford to lose.
 
