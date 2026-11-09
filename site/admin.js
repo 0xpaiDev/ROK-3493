@@ -414,12 +414,16 @@ async function showFortWeek(section, message = "") {
   let msgText = message;
   // The loaded reading, only for the week it was loaded for: a page open across the reset has none for the new week.
   const liveRows = () => (week === state.liveWeek && state.liveRows.length ? state.liveRows.map((r) => ({ ...r })) : null);
+  // A week this page treats as the Live Week: the one its reading was loaded for, or the one now in progress.
+  // Either way the paste is refused; when the two differ the Monday reset passed while the page was open.
+  const liveHere = (w) => isFortWeekStart(w) && (w === state.liveWeek || isLiveWeek(w, Date.now()));
+  const resetPassed = () => !isLiveWeek(state.liveWeek, Date.now());
 
   function draw() {
     const isMonday = isFortWeekStart(week);
     // The reader keeps the Live Week current; a paste would be overwritten by its next reading. Its
     // "needs ID" rows are still resolved here: a pick goes into Name History only, so the next reading matches it.
-    const live = isMonday && isLiveWeek(week, Date.now());
+    const live = liveHere(week);
     const liveReason = `The week of ${dayMonth(week)} is the Live Week: the reader keeps it current until the Monday reset, and its next reading would overwrite a paste. Paste it once the week closes, if the final reading failed.`;
     const saved = state.weeks.get(week);
     const range = isMonday ? `${dayMonth(week)} – ${dayMonth(fortWeekEnd(week))}` : week;
@@ -431,9 +435,11 @@ async function showFortWeek(section, message = "") {
     const picks = live && rows ? newFortNames(rows.filter((r) => !r.read), state.nameHistory, week) : [];
     // A pick only helps if the reader's next reading would match it: same rule as record_live_week.
     const next = live && rows ? liveReadingIds(rows, [...state.nameHistory, ...picks]) : [];
-    const slips = live && rows ? rows.filter((r, i) => r.id != null && next[i] !== r.id) : [];
+    // Only the Council's own picks: a row the reading matched is the next reading's business.
+    const slips = live && rows ? rows.filter((r, i) => !r.read && r.id != null && next[i] !== r.id) : [];
     const tiedAt = (i, step) => rows[i + step]?.fortCount === rows[i].fortCount;
     const blocker = !isMonday ? `${week || "The date"} is not a Monday. A Fort Week starts on Monday.`
+      : live && resetPassed() ? `The Monday reset has passed since this page loaded, so its reading is out of date. Reload the page.`
       : twice.length ? `${twice.map((id) => byId.get(id)?.name ?? id).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
       : slips.length ? `${slips.map((r) => r.name).join(", ")} would still be "needs ID" at the next reading: ${slips.length === 1 ? "its name is" : "their names are"} on two rows or already ${slips.length === 1 ? "belongs" : "belong"} to another Governor. Clear the pick and resolve it in the paste once the week closes.`
       : live && !picks.length ? `Pick a Governor for a "needs ID" row first.`
@@ -506,7 +512,7 @@ async function showFortWeek(section, message = "") {
       <div class="save-bar" role="region" aria-label="Unsaved Fort Week">
         <span class="pulse unsaved" aria-hidden="true"></span>
         <span class="sum">${blocker
-          ? `<b>${live && !picks.length && !twice.length && !slips.length ? "Nothing to save yet." : "Fix before saving."}</b> <span>${esc(blocker)}</span>`
+          ? `<b>${live && !resetPassed() && !picks.length && !twice.length && !slips.length ? "Nothing to save yet." : "Fix before saving."}</b> <span>${esc(blocker)}</span>`
           : live ? `<b>Not saved yet.</b> <span>${picks.length} ${picks.length === 1 ? "name goes" : "names go"} into Name History. The Live Week's rows change at the reader's next reading.</span>`
           : `<b>Not saved yet.</b> <span>${rows.length} rows for ${esc(range)}, ${completeness === "partial" ? "Partial" : "Complete"} · ${needs} needs ID${saved ? ` · replaces the ${saved.rows} saved rows` : ""}.</span>`}</span>
         <button class="btn quiet" type="button" data-discard>${live ? "Clear picks" : "Discard"}</button>
@@ -520,10 +526,10 @@ async function showFortWeek(section, message = "") {
     const form = body.querySelector("#fw-paste");
     const msg = body.querySelector(".admin-msg");
     form.week.addEventListener("change", () => {
-      const wasLive = isLiveWeek(week, Date.now());
+      const wasLive = liveHere(week);
       week = form.week.value;
       // The Live Week shows the reader's rows; leaving it drops them, so they are never pasted as a week.
-      if (isLiveWeek(week, Date.now())) rows = liveRows();
+      if (liveHere(week)) rows = liveRows();
       else if (wasLive) rows = null;
       draw();
     });
@@ -563,7 +569,7 @@ async function showFortWeek(section, message = "") {
     }));
 
     body.querySelector("[data-discard]")?.addEventListener("click", () => {
-      const live = isLiveWeek(week, Date.now());
+      const live = liveHere(week);
       rows = live ? liveRows() : null;
       msgText = live ? "Cleared the picks. Nothing was saved." : "Discarded the rows. Nothing was saved.";
       draw();
@@ -572,7 +578,12 @@ async function showFortWeek(section, message = "") {
     body.querySelector("[data-save]")?.addEventListener("click", async () => {
       body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
       msg.textContent = "Saving…";
-      if (isLiveWeek(week, Date.now())) {
+      if (liveHere(week)) {
+        // Never save a Live Week reading as a pasted week, nor picks from a reading the reset has replaced.
+        if (resetPassed()) {
+          msg.textContent = "The Monday reset has passed since this page loaded. Reload the page; nothing was saved.";
+          return;
+        }
         const picks = newFortNames(rows.filter((r) => !r.read), state.nameHistory, week);
         try {
           check(await saveNames(picks), "Name History");
