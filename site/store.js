@@ -25,7 +25,7 @@ export async function loadKingdom() {
   const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots] = await Promise.all([
     rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
-    rows("fort_week", "select=starts_on,completeness&order=starts_on.asc"),
+    rows("fort_week", "select=starts_on,completeness,read_at&order=starts_on.asc"),
     rows("fort_entry", "select=id,week,character_id,name,fort_count&order=fort_count.desc,tie_order.asc,id.asc"),
     rows("gh_event", "select=id,name,starts_on,ends_on&order=starts_on.asc,id.asc"),
     rows("gh_entry", "select=event_id,place,character_id,name,alliance,golden_heads&order=place.asc"),
@@ -43,6 +43,7 @@ export async function loadKingdom() {
     start: w.starts_on,
     end: fortWeekEnd(w.starts_on),
     completeness: w.completeness,
+    readAt: w.read_at, // when the reader last read it; null for a pasted week
     entries: entries
       .filter((e) => e.week === w.starts_on)
       .map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, entry: e.id })),
@@ -90,7 +91,7 @@ export async function loadKingdom() {
     resources: r.resources_gathered,
   }));
 
-  const dates = [...fortWeeks.map((w) => w.end), ...events.map((e) => e.ends_on), latest?.taken_on].filter(Boolean).sort();
+  const dates = [...fortWeeks.map((w) => w.readAt?.slice(0, 10) ?? w.end), ...events.map((e) => e.ends_on), latest?.taken_on].filter(Boolean).sort();
   return {
     generated: dates.at(-1) ?? new Date().toISOString().slice(0, 10),
     fortWeeks,

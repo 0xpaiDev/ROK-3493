@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch } from "../site/kingdom.js";
+import { readFileSync } from "node:fs";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -326,4 +327,39 @@ test("a Governor's current name matches a pasted row before any Roster Snapshot 
   const seen = namesToMatch([{ id: "222", name: "Fresh" }], [{ character_id: "111", name: "OldName" }]);
   const out = matchNames([{ name: "Fresh", fortCount: 7 }, { name: "OldName", fortCount: 5 }], seen);
   assert.deepEqual(out.map((r) => r.id), ["222", "111"]);
+});
+
+// The Live Week: the Fort Week the moment falls in, until the Monday reset closes it.
+test("on Sunday 15 Nov at 23:59 UTC the week of 9 Nov is the Live Week and the week of 2 Nov is closed", () => {
+  const now = new Date("2026-11-15T23:59:00Z");
+  assert.deepEqual([isLiveWeek("2026-11-09", now), isLiveWeek("2026-11-02", now)], [true, false]);
+});
+
+test("Fort Average leaves the Live Week out until the Monday reset closes it", () => {
+  const weeks = [{ start: "2026-11-02", entries: [entry("g", 10)] }, { start: "2026-11-09", entries: [entry("g", 2)] }];
+  assert.deepEqual(fortAverage(weeks, "g", new Date("2026-11-10T12:00:00Z")), { average: 10, weeksCounted: 1 });
+});
+
+// The shared name-matching cases: the same file runs against record_live_week in Postgres.
+const shared = JSON.parse(readFileSync(new URL("./name-matching-cases.json", import.meta.url), "utf8"));
+for (const c of shared.cases) {
+  test(`shared matching case: ${c.case}`, () => {
+    const seen = namesToMatch(c.governors, c.nameHistory.map((n) => ({ character_id: n.id, name: n.name })));
+    if (!c.liveOnly) assert.deepEqual(matchNames(c.rows, seen).map((r) => r.id), c.ids);
+    assert.deepEqual(liveReadingIds(c.rows, seen), c.ids);
+  });
+}
+
+// What the Live Week's rows would be at the reader's next reading: the admin blocks a pick that would not stick.
+test("a Council pick sticks at the next reading only for a name one row holds and no other Governor has", () => {
+  const seen = [{ id: "1", name: "Known" }, { id: "2", name: "Shared" }, { id: "3", name: "Shared" }];
+  const pick = (name, id) => [...seen, { id, name }];
+  // An unknown name picked for Governor 9: the next reading matches it.
+  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5 }], pick("Odd", "9")), ["9"]);
+  // A name two Governors already hold: picking one of them changes nothing.
+  assert.deepEqual(liveReadingIds([{ name: "Shared", fortCount: 5 }], seen), [null]);
+  // A name on two rows: picks for both still leave both "needs ID".
+  assert.deepEqual(liveReadingIds([{ name: "Twin", fortCount: 5 }, { name: "Twin", fortCount: 4 }], [...pick("Twin", "8"), { id: "9", name: "Twin" }]), [null, null]);
+  // A row read two ways: a pick for its spelling never matches it.
+  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, needsId: true }], pick("Odd", "9")), [null]);
 });

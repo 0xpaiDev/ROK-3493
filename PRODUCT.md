@@ -36,14 +36,15 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 ## Capabilities and Constraints
 
 - Plain HTML/CSS/JS in `site/`, no build step; published to GitHub Pages on every push to `main`.
-- All data lives in Supabase (ADR 0001). The public reads with the anon key; only Council emails can write. Only `site/data/content.js` (news, next week's rewards) is hand-edited.
+- All data lives in Supabase (ADR 0001). The public reads with the anon key; only Council emails can write, plus the reader's own sign-in, which can only replace the Live Week (ADR 0002). Only `site/data/content.js` (news, next week's rewards) is hand-edited.
 - Public sections: Home, Fort Rankings, Events, Roster, plus a Governor popup. Council section: `admin.html`.
 - Vocabulary is fixed by `GLOSSARY.md`: Governor, Character ID, Main, Farm, Migrated, Fort Week, Fort Count, Weekly Ranking, Complete / Partial Week, Fort Average, Weekly Award, GH Event, Roster Snapshot, Top 200. UI never says "Fort Score", "player" or "alt".
 - Governor names are user-controlled and carry exotic Unicode: they must be escaped and must render without breaking layout.
 - Unmatched names stay flagged "needs ID" until the Council resolves them by hand.
 - Migrated Governors stay visible (greyed, tagged) rather than deleted. The roster defaults to the Top 200.
 - Kill Points and Alliance Helps are stored but not shown (the export reports 0 Kill Points).
-- Out of scope for now: screenshot-reading bot, power history charts, admin entry for KvK results, structured award types.
+- A reader reads the in-game ranking and keeps the Live Week current on Fort Rankings, marked with the time of its last reading; Fort Average leaves the Live Week out until the Monday reset closes it (ADR 0002).
+- Out of scope for now: power history charts, admin entry for KvK results, structured award types.
 
 ## Brand Commitments
 

@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, findInRanking } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, findInRanking, isLiveWeek } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 
 (async () => {
@@ -66,6 +66,8 @@ import { loadKingdom } from "./store.js";
 
   // ---------- Governors keyed by Character ID ----------
   const weeks = D.fortWeeks;
+  const now = Date.now();
+  const isLive = (w) => isLiveWeek(w.start, now);
   const governors = new Map();
   // A Fort Week row with no Character ID ("needs ID") is keyed by its own row, so two such rows
   // with the same name stay two Governors: names never merge Governors.
@@ -110,7 +112,7 @@ import { loadKingdom } from "./store.js";
     g.played = counts.length;
     g.total = counts.reduce((a, b) => a + b, 0);
     // A Governor without a Character ID ("needs ID") gets no average: never match by name.
-    g.avg = g.id ? fortAverage(weeks, g.id)?.average ?? null : null;
+    g.avg = g.id ? fortAverage(weeks, g.id, now)?.average ?? null : null;
     g.best = g.played ? Math.max(...counts) : 0;
     g.last = g.fort[weeks.length - 1]?.fortCount ?? null;
   }
@@ -139,10 +141,10 @@ import { loadKingdom } from "./store.js";
   // ---------- views ----------
   const state = { fortView: "weekly", withFarms: false, fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
 
-  function podium(rows) {
+  function podium(rows, { live = false } = {}) {
     const step = (r, place) => {
       if (!r) return `<div class="step ${PLACE[place]}"></div>`;
-      const note = r.tie ? "forts · tie" : place === 0 ? "forts · Champion" : "forts";
+      const note = r.tie ? "forts · tie" : place === 0 ? (live ? "forts · leading" : "forts · Champion") : "forts";
       return `
         <div class="step ${PLACE[place]}">
           <div class="medal" aria-label="Rank ${r.e.rank}">${r.e.rank}</div>
@@ -180,6 +182,14 @@ import { loadKingdom } from "./store.js";
     return `<ol class="rank-list">${rows.slice(0, limit).map((r, n) => li(r, n) + r.parts.map((p) => li(p, n, { part: true })).join("")).join("")}</ol>`;
   }
 
+  // The Live Week's tag: "Live, as of 14:05 UTC", with the day added once the reading is a day old.
+  const liveTag = (w) => {
+    if (!w.readAt) return `<span class="tag live">Live</span>`;
+    const t = new Date(w.readAt);
+    const day = t.toISOString().slice(0, 10) === new Date(now).toISOString().slice(0, 10) ? "" : `${DAY[t.getUTCDay()]} `;
+    return `<span class="tag live" title="Read from the in-game ranking at ${esc(t.toISOString().slice(0, 16).replace("T", " "))} UTC">Live, as of ${day}${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} UTC</span>`;
+  };
+  const liveNote = `<div class="note">${ICON_INFO}<span>Live Week: read from the in-game ranking once a day until the Monday reset closes it. Fort Counts still rise, so arrows are hidden and Fort Average leaves this week out until then.</span></div>`;
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
 
   function home() {
@@ -189,12 +199,13 @@ import { loadKingdom } from "./store.js";
     const total = w.entries.reduce((a, e) => a + e.fortCount, 0);
     const count = w.entries.length;
     const partial = w.completeness === "partial";
+    const live = isLive(w);
     const leaders = rows.filter((r) => r.e.rank === 1);
     const lead = leaders[0];
     const headline = !lead ? `Week ${wn} is waiting for its first fort.`
       : leaders.length > 1
         ? `${leaders.map((r) => esc(r.g.name)).join(" and ")} tie for the week with <em>${lead.e.fortCount} forts.</em>`
-        : `${esc(lead.g.name)} takes the week with <em>${lead.e.fortCount} forts.</em>`;
+        : `${esc(lead.g.name)} ${live ? "leads" : "takes"} the week with <em>${lead.e.fortCount} forts.</em>`;
     const reset = now.resetsAt;
     const R = C.rewards;
 
@@ -211,6 +222,7 @@ import { loadKingdom } from "./store.js";
             <div class="week-meta reveal" style="--d:60ms">
               <span class="eyebrow">Fort Week ${wn}</span><span aria-hidden="true">·</span><span>${fmtRange(w)}</span>
               ${partial ? `<span class="tag partial" title="This saved Weekly Ranking is known to be incomplete">Partial Week</span>` : ""}
+              ${live ? liveTag(w) : ""}
             </div>
             <h1 class="reveal" style="--d:140ms">${headline}</h1>
             <p class="hero-sub reveal" style="--d:220ms">${count} Governors ranked in Week ${wn}. Find yourself in the Weekly Ranking${nowN === wn ? "" : `, then go take Week ${nowN}`}.</p>
@@ -228,7 +240,7 @@ import { loadKingdom } from "./store.js";
             ${lead ? `<div class="podium-actions reveal" style="--d:400ms"><button class="btn" data-share>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg>
               Share the Week ${wn} podium</button></div>` : ""}
-            ${podium(rows)}
+            ${podium(rows, { live })}
           </div>
         </div>
       </section>
@@ -249,6 +261,7 @@ import { loadKingdom } from "./store.js";
             <a href="#fort">All ${rows.length} Mains →</a>
           </div>
           ${partial ? partialNote : ""}
+          ${live ? liveNote : ""}
           ${rankList(rows, { limit: 10, stagger: true })}
         </div>
 
@@ -305,9 +318,10 @@ import { loadKingdom } from "./store.js";
 
     if (state.fortView === "weekly") {
       const i = state.fortWeek, w = weeks[i];
-      const chips = weeks.map((wk, n) => `<button class="chip ${n === i ? "on" : ""}" data-week="${n}" aria-pressed="${n === i}"><b>Week ${isoWeek(wk.start)}</b><small>${fmtRange(wk)}</small></button>`).reverse().join("");
+      const chips = weeks.map((wk, n) => `<button class="chip ${n === i ? "on" : ""}" data-week="${n}" aria-pressed="${n === i}"><b>Week ${isoWeek(wk.start)}</b><small>${isLive(wk) ? "Live" : fmtRange(wk)}</small></button>`).reverse().join("");
       const rows = weekRows(i, state.withFarms);
       const mains = rows.filter((r) => r.e.rank != null).length;
+      const live = isLive(w);
       const toggle = `<div class="seg" role="group" aria-label="Which Governors">
           <button data-farms="0" class="${state.withFarms ? "" : "on"}" aria-pressed="${!state.withFarms}">Mains</button>
           <button data-farms="1" class="${state.withFarms ? "on" : ""}" aria-pressed="${state.withFarms}">Main + Farm</button>
@@ -317,12 +331,13 @@ import { loadKingdom } from "./store.js";
         <div class="toolbar"><div class="chips">${chips}</div>${toggle}</div>
         <section class="card ranking">
           <div class="card-head">
-            <div><div class="eyebrow">Weekly Ranking</div><h2>Week ${isoWeek(w.start)} · ${fmtRange(w)}</h2></div>
+            <div><div class="eyebrow">Weekly Ranking</div><h2>Week ${isoWeek(w.start)} · ${fmtRange(w)}</h2>${live ? `<div class="live-line">${liveTag(w)}</div>` : ""}</div>
             <span class="muted">${mains} Mains ranked</span>
           </div>
           ${w.completeness === "partial" ? partialNote : ""}
+          ${live ? liveNote : ""}
           ${state.withFarms ? farmNote : ""}
-          ${rankList(rows, { deltas: true })}
+          ${rankList(rows, { deltas: !live })}
         </section></div>`;
     }
 

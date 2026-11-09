@@ -3,3 +3,5 @@ __pycache__/
 .env
 .env.*
 .impeccable/
+tools/fort-reader/.venv/
+tools/fort-reader/runs/

@@ -9,8 +9,9 @@ export function rankWeek(entries) {
 // Fort Average for one Governor, or null if never ranked. Weeks are in date order.
 // The window starts at the Governor's first ranked Fort Week. A Complete Week they are
 // missing from counts as 0; a Partial Week counts only when they are ranked in it.
-// A week with no completeness set is Complete.
-export function fortAverage(weeks, characterId) {
+// A week with no completeness set is Complete. The Live Week at `now` is left out until it closes.
+export function fortAverage(weeks, characterId, now = Date.now()) {
+  weeks = weeks.filter((w) => !isLiveWeek(w.start, now));
   const entryPerWeek = weeks.map((w) => w.entries.find((e) => e.id === characterId));
   const first = entryPerWeek.findIndex(Boolean);
   if (first < 0) return null;
@@ -43,6 +44,12 @@ export function fortWeekAt(now) {
 // Whether a date (YYYY-MM-DD) is a Monday, the day a Fort Week starts.
 export function isFortWeekStart(day) {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) && fortWeekAt(day + "T12:00:00Z").start === day;
+}
+
+// The Live Week: the Fort Week a moment falls in, whose Weekly Ranking the reader still refreshes.
+// It closes at the Monday reset. Comes from the date, never from a stored flag.
+export function isLiveWeek(startsOn, now) {
+  return fortWeekAt(now).start === startsOn;
 }
 
 // "Find your Governor": the ranked entries whose Governor has ever gone by a name containing
@@ -195,6 +202,14 @@ export function matchNames(rows, nameHistory) {
     const ids = idsOf(r.name);
     return { ...r, id: ids.size === 1 && !pastedTwice(r.name) ? [...ids][0] : null };
   });
+}
+
+// The Character IDs record_live_week gives a reading's rows (supabase/migrations, the newest Live Week one):
+// matchNames, except a row the reader read two ways (needsId) is never matched by spelling, and two rows
+// whose names lead to one Governor both stay "needs ID". Rows { name, fortCount, needsId? } in reading order.
+export function liveReadingIds(rows, nameHistory) {
+  const ids = matchNames(rows, nameHistory).map((r, i) => (rows[i].needsId ? null : r.id));
+  return ids.map((id) => (id != null && ids.filter((other) => other === id).length > 1 ? null : id));
 }
 
 // Pasted Fort Week rows: one Governor per line, the name then its Fort Count as the last number

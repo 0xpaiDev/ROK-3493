@@ -4,7 +4,7 @@ status: accepted
 
 # Supabase is the only store; the front end stays static
 
-The Council needs to edit data from an admin page (Farm links, Fort Weeks, Weekly Awards, GH Events, Roster Snapshots). A static site on GitHub Pages can't save anything, so we moved the data from the Excel workbook to Supabase in this iteration rather than later. The front end stays static on GitHub Pages and talks to Supabase directly; row-level security, not server code of our own, decides who may write.
+The Council needs to edit data from an admin page (Farm links, Fort Weeks, Weekly Awards, GH Events, Roster Snapshots). A static site on GitHub Pages can't save anything, so we moved the data from the Excel workbook to Supabase in this iteration rather than later. The front end stays static on GitHub Pages and talks to Supabase directly; row-level security, not server code of our own, decides who may write. One exception, added by ADR 0002: the reader writes the Live Week through a single database function.
 
 ## Considered options
 
