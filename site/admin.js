@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -407,6 +407,9 @@ async function showFortWeek(section, message = "") {
 
   function draw() {
     const isMonday = isFortWeekStart(week);
+    // The reader keeps the Live Week current; a paste would be overwritten by its next reading.
+    const live = isMonday && isLiveWeek(week, Date.now());
+    const liveReason = `The week of ${dayMonth(week)} is the Live Week: the reader keeps it current until the Monday reset, and its next reading would overwrite a paste. Paste it once the week closes, if the final reading failed.`;
     const saved = state.weeks.get(week);
     const range = isMonday ? `${dayMonth(week)} – ${dayMonth(fortWeekEnd(week))}` : week;
     setTaskStatus("fort-week", rows ? "Rows ready to save" : latest ? `Latest ${dayMonth(latest)}` : "No week yet", rows ? "Review" : "", rows ? "review" : "");
@@ -416,6 +419,7 @@ async function showFortWeek(section, message = "") {
     const twice = rows ? governorsTwice(rows) : [];
     const tiedAt = (i, step) => rows[i + step]?.fortCount === rows[i].fortCount;
     const blocker = !isMonday ? `${week || "The date"} is not a Monday. A Fort Week starts on Monday.`
+      : live ? liveReason
       : twice.length ? `${twice.map((id) => byId.get(id)?.name ?? id).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
       : "";
 
@@ -446,6 +450,7 @@ async function showFortWeek(section, message = "") {
           <button class="btn${rows ? "" : " primary"}" type="submit">Match names</button>
         </form>
         <p class="match">${!isMonday ? "Pick the Monday the Fort Week starts on."
+          : live ? `<b>Refused.</b> ${esc(liveReason)}`
           : saved ? `Week of ${esc(range)} is already saved with <b>${saved.rows}</b> rows (${esc(saved.completeness)}). Saving replaces them.`
           : `Week of ${esc(range)} is not logged yet. A Complete Week counts a missing Governor as 0; mark it Partial if the ranking is incomplete.`}</p>
       </section>

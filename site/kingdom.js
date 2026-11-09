@@ -9,8 +9,9 @@ export function rankWeek(entries) {
 // Fort Average for one Governor, or null if never ranked. Weeks are in date order.
 // The window starts at the Governor's first ranked Fort Week. A Complete Week they are
 // missing from counts as 0; a Partial Week counts only when they are ranked in it.
-// A week with no completeness set is Complete.
-export function fortAverage(weeks, characterId) {
+// A week with no completeness set is Complete. The Live Week at `now` is left out until it closes.
+export function fortAverage(weeks, characterId, now = Date.now()) {
+  weeks = weeks.filter((w) => !isLiveWeek(w.start, now));
   const entryPerWeek = weeks.map((w) => w.entries.find((e) => e.id === characterId));
   const first = entryPerWeek.findIndex(Boolean);
   if (first < 0) return null;
@@ -43,6 +44,12 @@ export function fortWeekAt(now) {
 // Whether a date (YYYY-MM-DD) is a Monday, the day a Fort Week starts.
 export function isFortWeekStart(day) {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) && fortWeekAt(day + "T12:00:00Z").start === day;
+}
+
+// The Live Week: the Fort Week a moment falls in, whose Weekly Ranking the reader still refreshes.
+// It closes at the Monday reset. Comes from the date, never from a stored flag.
+export function isLiveWeek(startsOn, now) {
+  return fortWeekAt(now).start === startsOn;
 }
 
 // "Find your Governor": the ranked entries whose Governor has ever gone by a name containing

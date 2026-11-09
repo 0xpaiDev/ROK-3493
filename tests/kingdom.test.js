@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch } from "../site/kingdom.js";
+import { readFileSync } from "node:fs";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -327,3 +328,23 @@ test("a Governor's current name matches a pasted row before any Roster Snapshot 
   const out = matchNames([{ name: "Fresh", fortCount: 7 }, { name: "OldName", fortCount: 5 }], seen);
   assert.deepEqual(out.map((r) => r.id), ["222", "111"]);
 });
+
+// The Live Week: the Fort Week the moment falls in, until the Monday reset closes it.
+test("on Sunday 15 Nov at 23:59 UTC the week of 9 Nov is the Live Week and the week of 2 Nov is closed", () => {
+  const now = new Date("2026-11-15T23:59:00Z");
+  assert.deepEqual([isLiveWeek("2026-11-09", now), isLiveWeek("2026-11-02", now)], [true, false]);
+});
+
+test("Fort Average leaves the Live Week out until the Monday reset closes it", () => {
+  const weeks = [{ start: "2026-11-02", entries: [entry("g", 10)] }, { start: "2026-11-09", entries: [entry("g", 2)] }];
+  assert.deepEqual(fortAverage(weeks, "g", new Date("2026-11-10T12:00:00Z")), { average: 10, weeksCounted: 1 });
+});
+
+// The shared name-matching cases: the same file runs against record_live_week in Postgres.
+const shared = JSON.parse(readFileSync(new URL("./name-matching-cases.json", import.meta.url), "utf8"));
+for (const c of shared.cases) {
+  test(`shared matching case: ${c.case}`, () => {
+    const seen = namesToMatch(c.governors, c.nameHistory.map((n) => ({ character_id: n.id, name: n.name })));
+    assert.deepEqual(matchNames(c.rows, seen).map((r) => r.id), c.ids);
+  });
+}

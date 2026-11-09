@@ -66,6 +66,14 @@ _Avoid_: Fort score, fort kills, points
 The ordered list of Governors by Fort Count for one Fort Week, copied from the in-game ranking page.
 _Avoid_: Leaderboard, log
 
+**Live Week**:
+The current Fort Week, whose Weekly Ranking the reader refreshes until the Monday reset closes it.
+_Avoid_: Current week, open week
+
+**Reader Account**:
+The dedicated Governor the reader plays as. It is never a Main or a Farm and never appears in a Weekly Ranking.
+_Avoid_: Bot account
+
 **Complete Week**:
 A Fort Week whose Weekly Ranking lists every Governor that joined at least one fort; a Governor missing from it had a Fort Count of 0.
 

@@ -20,7 +20,7 @@ Dark, calm, exact. One violet accent on near-black, with metals reserved for hon
 | Accent | `--accent`, `--accent-deep`, `--accent-wash` | active tab, primary button, focus ring, bars, selected tile |
 | Links | `--link`, `--link-hover` | links, eyebrows |
 | Metals | `--gold`, `--silver`, `--bronze` (+ `--on-metal` text) | **only** 1st/2nd/3rd placings and Weekly Awards |
-| Live | `--live` on `--live-wash` (`--live-edge` for a ring) | the reset pulse and "Linked" / success |
+| Live | `--live` on `--live-wash` (`--live-edge` for a ring) | the reset pulse, the Live Week tag and "Linked" / success |
 | Notes | `--note` on `--note-wash` | Partial Week and other "how the data works" callouts |
 | Gold tags | `--gold` on `--tag-wash` | the Draft and needs ID tags, the only gold outside placings and Weekly Awards |
 | Review groups | `--inactive`, `--back`, `--new`, `--renamed` | Roster Snapshot groups (Become Inactive, Back to Current, New Governors, Renamed), as a dot plus count, never a filled card. `--back` is plain ink, not silver: metals stay with honours |
@@ -55,8 +55,8 @@ Reuse these before inventing new ones (classes in `styles.css`).
 - **Find your Governor** `.search-box` / `.find`: matches Name History and Character ID; `/` focuses it.
 - **Ranking row** `.row` in `.rank-list`: rank in mono (metal colour for top 3), name + bar, Fort Count right-aligned. Ties get a `.tag` "Tie · Council order". With "Main + Farm" on, a Main with Farms shows a total (count with a mono "total" label under it), ranked on that total. The parts that add up to it sit under it as `.row.part` rows: indented, no rank, quieter name, count and bar. The Main's own Fort Count comes first, tagged "Main", then each Farm's, tagged "Farm". An unlinked Farm is its own unranked row tagged "Farm · unlinked".
 - **Card** `.card` + `.card-head`: eyebrow in mono, serif title, link on the right.
-- **Callout** `.note`: explains a data rule in place (Partial Week, Farms). Fairness rules live next to the numbers they affect.
-- **Tag** `.tag`: Draft, Partial Week, Migrated, needs ID (`.tag.needs-id`, in Draft's gold), Farm (`.tag.farm`, also "Farm · unlinked", in the ranking and Fort Averages). "needs ID" is always visible, never hidden: in the ranking rows, the podium and the admin page.
+- **Callout** `.note`: explains a data rule in place (Partial Week, Live Week, Farms). Fairness rules live next to the numbers they affect.
+- **Tag** `.tag`: Draft, Partial Week, Live (`.tag.live`, "Live, as of 14:05 UTC", on the Live Week's ranking and hero), Migrated, needs ID (`.tag.needs-id`, in Draft's gold), Farm (`.tag.farm`, also "Farm · unlinked", in the ranking and Fort Averages). "needs ID" is always visible, never hidden: in the ranking rows, the podium and the admin page.
 - **Buttons** `.btn`: primary = `--accent` fill with dark text (one per view); secondary = outlined; quiet = text only. Minimum height 36 px; anything tapped on a phone is 44 px.
 - **Segmented control / chips** `.seg`, `.chip`: filters and view toggles (Mains / Main + Farm).
 
