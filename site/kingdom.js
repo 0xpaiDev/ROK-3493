@@ -204,6 +204,14 @@ export function matchNames(rows, nameHistory) {
   });
 }
 
+// The Character IDs record_live_week gives a reading's rows (supabase/migrations, the newest Live Week one):
+// matchNames, except a row the reader read two ways (needsId) is never matched by spelling, and two rows
+// whose names lead to one Governor both stay "needs ID". Rows { name, fortCount, needsId? } in reading order.
+export function liveReadingIds(rows, nameHistory) {
+  const ids = matchNames(rows, nameHistory).map((r, i) => (rows[i].needsId ? null : r.id));
+  return ids.map((id) => (id != null && ids.filter((other) => other === id).length > 1 ? null : id));
+}
+
 // Pasted Fort Week rows: one Governor per line, the name then its Fort Count as the last number
 // on the line (spaces or a tab between, thousands commas allowed). Blank lines are skipped.
 export function parseFortRows(text) {

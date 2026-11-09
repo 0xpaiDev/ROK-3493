@@ -1,6 +1,10 @@
 -- Fort reader ticket 01: the reader sends when it took the screenshots, and record_live_week takes the
 -- week and the "as of" time from that, not from when the reading arrives. Old screenshots, a run that
--- crosses the Monday reset, and a reading older than the saved one are refused. Safe to run twice.
+-- crosses the Monday reset, and a reading older than the saved one are refused. A row the reader read two
+-- ways stays marked, so the admin page can say a pick cannot match it. Safe to run twice.
+
+-- A row the reader read two ways (needs_id in the reading): never matched by spelling. False for a pasted week.
+alter table fort_entry add column if not exists read_two_ways boolean not null default false;
 
 drop function if exists public.record_live_week(date, jsonb);
 
@@ -66,10 +70,10 @@ begin
     from reading r
   )
   -- Two rows whose names lead to one Governor: neither gets it, so a week never holds a Governor twice.
-  insert into fort_entry (week, character_id, name, fort_count, tie_order)
+  insert into fort_entry (week, character_id, name, fort_count, tie_order, read_two_ways)
   select reading_week,
          case when count(*) over (partition by character_id) = 1 then character_id end,
-         name, fort_count, tie_order
+         name, fort_count, tie_order, unsure
   from matched;
 
   select count(*), count(character_id) into saved, resolved

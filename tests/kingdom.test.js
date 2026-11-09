@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -345,6 +345,21 @@ const shared = JSON.parse(readFileSync(new URL("./name-matching-cases.json", imp
 for (const c of shared.cases) {
   test(`shared matching case: ${c.case}`, () => {
     const seen = namesToMatch(c.governors, c.nameHistory.map((n) => ({ character_id: n.id, name: n.name })));
-    assert.deepEqual(matchNames(c.rows, seen).map((r) => r.id), c.ids);
+    if (!c.liveOnly) assert.deepEqual(matchNames(c.rows, seen).map((r) => r.id), c.ids);
+    assert.deepEqual(liveReadingIds(c.rows, seen), c.ids);
   });
 }
+
+// What the Live Week's rows would be at the reader's next reading: the admin blocks a pick that would not stick.
+test("a Council pick sticks at the next reading only for a name one row holds and no other Governor has", () => {
+  const seen = [{ id: "1", name: "Known" }, { id: "2", name: "Shared" }, { id: "3", name: "Shared" }];
+  const pick = (name, id) => [...seen, { id, name }];
+  // An unknown name picked for Governor 9: the next reading matches it.
+  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5 }], pick("Odd", "9")), ["9"]);
+  // A name two Governors already hold: picking one of them changes nothing.
+  assert.deepEqual(liveReadingIds([{ name: "Shared", fortCount: 5 }], seen), [null]);
+  // A name on two rows: picks for both still leave both "needs ID".
+  assert.deepEqual(liveReadingIds([{ name: "Twin", fortCount: 5 }, { name: "Twin", fortCount: 4 }], [...pick("Twin", "8"), { id: "9", name: "Twin" }]), [null, null]);
+  // A row read two ways: a pick for its spelling never matches it.
+  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, needsId: true }], pick("Odd", "9")), [null]);
+});

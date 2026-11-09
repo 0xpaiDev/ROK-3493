@@ -1,47 +1,203 @@
 {
-  "about": "The exact name-matching rule, stated once. tests/kingdom.test.js runs these against matchNames and supabase/tests/test_record_live_week.py runs them against record_live_week. Governors are { id, name } with name as the current name; nameHistory is { id, name }; ids is the Character ID each row gets, in row order, or null for \"needs ID\". Names and IDs are made up so they never meet real Governors.",
+  "about": "The exact name-matching rule, stated once. tests/kingdom.test.js runs these against matchNames and supabase/tests/test_record_live_week.py runs them against record_live_week. Governors are { id, name } with name as the current name; nameHistory is { id, name }; ids is the Character ID each row gets, in row order, or null for \"needs ID\". Names and IDs are made up so they never meet real Governors. A case with \"liveOnly\": true holds only for the reader's Live Week rule (record_live_week and liveReadingIds), not for a pasted week, where the Council picks instead.",
   "cases": [
     {
       "case": "a renamed Governor is matched through Name History",
-      "governors": [{ "id": "990000001", "name": "Case NewName" }],
-      "nameHistory": [{ "id": "990000001", "name": "Case OldName" }],
-      "rows": [{ "name": "Case OldName", "fortCount": 12 }],
-      "ids": ["990000001"]
+      "governors": [
+        {
+          "id": "990000001",
+          "name": "Case NewName"
+        }
+      ],
+      "nameHistory": [
+        {
+          "id": "990000001",
+          "name": "Case OldName"
+        }
+      ],
+      "rows": [
+        {
+          "name": "Case OldName",
+          "fortCount": 12
+        }
+      ],
+      "ids": [
+        "990000001"
+      ]
     },
     {
       "case": "a Governor's current name matches before any Roster Snapshot adds it to Name History",
-      "governors": [{ "id": "990000002", "name": "Case Fresh" }],
+      "governors": [
+        {
+          "id": "990000002",
+          "name": "Case Fresh"
+        }
+      ],
       "nameHistory": [],
-      "rows": [{ "name": "Case Fresh", "fortCount": 7 }],
-      "ids": ["990000002"]
+      "rows": [
+        {
+          "name": "Case Fresh",
+          "fortCount": 7
+        }
+      ],
+      "ids": [
+        "990000002"
+      ]
     },
     {
       "case": "an unknown name is left \"needs ID\"",
-      "governors": [{ "id": "990000003", "name": "Case Known" }],
+      "governors": [
+        {
+          "id": "990000003",
+          "name": "Case Known"
+        }
+      ],
       "nameHistory": [],
-      "rows": [{ "name": "Case Stranger", "fortCount": 5 }],
-      "ids": [null]
+      "rows": [
+        {
+          "name": "Case Stranger",
+          "fortCount": 5
+        }
+      ],
+      "ids": [
+        null
+      ]
     },
     {
       "case": "a name seen under two Character IDs is left \"needs ID\", never guessed",
-      "governors": [{ "id": "990000004", "name": "Case Left" }, { "id": "990000005", "name": "Case Right" }],
-      "nameHistory": [{ "id": "990000004", "name": "Case Twin" }, { "id": "990000005", "name": "Case Twin" }],
-      "rows": [{ "name": "Case Twin", "fortCount": 9 }],
-      "ids": [null]
+      "governors": [
+        {
+          "id": "990000004",
+          "name": "Case Left"
+        },
+        {
+          "id": "990000005",
+          "name": "Case Right"
+        }
+      ],
+      "nameHistory": [
+        {
+          "id": "990000004",
+          "name": "Case Twin"
+        },
+        {
+          "id": "990000005",
+          "name": "Case Twin"
+        }
+      ],
+      "rows": [
+        {
+          "name": "Case Twin",
+          "fortCount": 9
+        }
+      ],
+      "ids": [
+        null
+      ]
     },
     {
       "case": "rows with the same name stay two rows, each \"needs ID\"",
-      "governors": [{ "id": "990000006", "name": "Case Echo" }],
+      "governors": [
+        {
+          "id": "990000006",
+          "name": "Case Echo"
+        }
+      ],
       "nameHistory": [],
-      "rows": [{ "name": "Case Echo", "fortCount": 30 }, { "name": "Case Echo", "fortCount": 20 }],
-      "ids": [null, null]
+      "rows": [
+        {
+          "name": "Case Echo",
+          "fortCount": 30
+        },
+        {
+          "name": "Case Echo",
+          "fortCount": 20
+        }
+      ],
+      "ids": [
+        null,
+        null
+      ]
     },
     {
       "case": "names match exactly: case and look-alike letters are never folded",
-      "governors": [{ "id": "990000007", "name": "Case ᵛøYURIEL" }],
+      "governors": [
+        {
+          "id": "990000007",
+          "name": "Case ᵛøYURIEL"
+        }
+      ],
       "nameHistory": [],
-      "rows": [{ "name": "Case vøYURIEL", "fortCount": 8 }, { "name": "case ᵛøYURIEL", "fortCount": 6 }, { "name": "Case ᵛøYURIEL", "fortCount": 4 }],
-      "ids": [null, null, "990000007"]
+      "rows": [
+        {
+          "name": "Case vøYURIEL",
+          "fortCount": 8
+        },
+        {
+          "name": "case ᵛøYURIEL",
+          "fortCount": 6
+        },
+        {
+          "name": "Case ᵛøYURIEL",
+          "fortCount": 4
+        }
+      ],
+      "ids": [
+        null,
+        null,
+        "990000007"
+      ]
+    },
+    {
+      "case": "a row the reader read two ways stays \"needs ID\" even when its name matches",
+      "liveOnly": true,
+      "governors": [
+        {
+          "id": "990000020",
+          "name": "Case Misread"
+        }
+      ],
+      "nameHistory": [],
+      "rows": [
+        {
+          "name": "Case Misread",
+          "fortCount": 4,
+          "needsId": true
+        }
+      ],
+      "ids": [
+        null
+      ]
+    },
+    {
+      "case": "two rows whose names lead to one Governor both stay \"needs ID\"",
+      "liveOnly": true,
+      "governors": [
+        {
+          "id": "990000021",
+          "name": "Case Now"
+        }
+      ],
+      "nameHistory": [
+        {
+          "id": "990000021",
+          "name": "Case Then"
+        }
+      ],
+      "rows": [
+        {
+          "name": "Case Now",
+          "fortCount": 9
+        },
+        {
+          "name": "Case Then",
+          "fortCount": 4
+        }
+      ],
+      "ids": [
+        null,
+        null
+      ]
     }
   ]
 }

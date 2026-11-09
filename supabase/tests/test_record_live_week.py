@@ -194,6 +194,8 @@ class LiveWeekReading(unittest.TestCase):
         self.governors([{"id": "990000014", "name": "Case CRY"}])
         self.record([{"name": "Case CRY", "fortCount": 2, "needsId": True}, {"name": "Case CRY Other", "fortCount": 1}])
         self.assertEqual(self.public_week(), [(None, "Case CRY", 2), (None, "Case CRY Other", 1)])
+        self.assertEqual(self.conn.execute("select name, read_two_ways from fort_entry where week = %s order by tie_order", (self.live,)).fetchall(),
+                         [("Case CRY", True), ("Case CRY Other", False)])
 
     def test_a_reading_is_as_of_its_screenshots_not_of_when_it_arrives(self):
         taken = self.one("select greatest(now() - interval '20 minutes', %s::timestamp at time zone 'utc')", (self.live,))

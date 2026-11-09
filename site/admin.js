@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, liveReadingIds } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -373,7 +373,7 @@ async function loadFortWeekState() {
     allRows("governor_name", "character_id,name"),
     allRows("fort_week", "starts_on,completeness"),
     allRows("fort_entry", "week"),
-    supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", liveWeek)
+    supabase.from("fort_entry").select("character_id,name,fort_count,read_two_ways").eq("week", liveWeek)
       .order("fort_count", { ascending: false }).order("tie_order").order("id"),
   ]);
   check(live, "Live Week rows");
@@ -384,8 +384,10 @@ async function loadFortWeekState() {
     governors: people,
     nameHistory: namesToMatch(people, names),
     weeks: new Map(weeks.map((w) => [w.starts_on, { completeness: w.completeness, rows: saved.get(w.starts_on) ?? 0 }])),
-    // The reader's latest reading, for resolving its "needs ID" rows. `read` marks a row the reading matched.
-    liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null })),
+    // The reader's latest reading of the Live Week, for resolving its "needs ID" rows. `read` marks a row the
+    // reading matched; `needsId` a row it read two ways, which no pick can match.
+    liveWeek,
+    liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null, needsId: e.read_two_ways })),
   };
 }
 
@@ -410,7 +412,8 @@ async function showFortWeek(section, message = "") {
   let text = "";
   let rows = null; // matched rows in ranking order; null until "Match names"
   let msgText = message;
-  const liveRows = () => (state.liveRows.length ? state.liveRows.map((r) => ({ ...r })) : null);
+  // The loaded reading, only for the week it was loaded for: a page open across the reset has none for the new week.
+  const liveRows = () => (week === state.liveWeek && state.liveRows.length ? state.liveRows.map((r) => ({ ...r })) : null);
 
   function draw() {
     const isMonday = isFortWeekStart(week);
@@ -426,9 +429,13 @@ async function showFortWeek(section, message = "") {
     const needs = rows ? rows.filter((r) => r.id == null).length : 0;
     const twice = rows ? governorsTwice(rows) : [];
     const picks = live && rows ? newFortNames(rows.filter((r) => !r.read), state.nameHistory, week) : [];
+    // A pick only helps if the reader's next reading would match it: same rule as record_live_week.
+    const next = live && rows ? liveReadingIds(rows, [...state.nameHistory, ...picks]) : [];
+    const slips = live && rows ? rows.filter((r, i) => r.id != null && next[i] !== r.id) : [];
     const tiedAt = (i, step) => rows[i + step]?.fortCount === rows[i].fortCount;
     const blocker = !isMonday ? `${week || "The date"} is not a Monday. A Fort Week starts on Monday.`
       : twice.length ? `${twice.map((id) => byId.get(id)?.name ?? id).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
+      : slips.length ? `${slips.map((r) => r.name).join(", ")} would still be "needs ID" at the next reading: ${slips.length === 1 ? "its name is" : "their names are"} on two rows or already ${slips.length === 1 ? "belongs" : "belong"} to another Governor. Clear the pick and resolve it in the paste once the week closes.`
       : live && !picks.length ? `Pick a Governor for a "needs ID" row first.`
       : "";
 
@@ -461,7 +468,7 @@ async function showFortWeek(section, message = "") {
           <button class="btn${rows ? "" : " primary"}" type="submit">Match names</button>`}
         </form>
         <p class="match">${!isMonday ? "Pick the Monday the Fort Week starts on."
-          : live ? `<b>Paste refused.</b> ${esc(liveReason)}${rows ? "" : " The reader has not sent a reading for it yet."}`
+          : live ? `<b>Paste refused.</b> ${esc(liveReason)}${rows ? "" : " There is no reading of it on this page: the reader has not sent one yet, or the page was opened before the Monday reset (reload it)."}`
           : saved ? `Week of ${esc(range)} is already saved with <b>${saved.rows}</b> rows (${esc(saved.completeness)}). Saving replaces them.`
           : `Week of ${esc(range)} is not logged yet. A Complete Week counts a missing Governor as 0; mark it Partial if the ranking is incomplete.`}</p>
       </section>
@@ -476,7 +483,7 @@ async function showFortWeek(section, message = "") {
         <ol class="fw-rows">${rows.map((r, i) => {
           const tied = !live && (tiedAt(i, -1) || tiedAt(i, 1));
           const g = r.id != null ? byId.get(r.id) : null;
-          const pickable = !(live && r.read); // a row the reading matched stays as read
+          const pickable = !(live && (r.read || r.needsId)); // a row the reading matched stays as read
           return `
           <li class="fw-row${twice.includes(r.id) ? " clash" : ""}">
             <span class="pos num">${ranked[i].rank}</span>
@@ -487,7 +494,7 @@ async function showFortWeek(section, message = "") {
             <b class="count num">${r.fortCount}</b>
             ${pickable ? `<label class="field fw-gov"><span class="sr-only">Governor for row ${i + 1}, ${esc(r.name)}</span>
               <input list="fw-governors" data-row="${i}" value="${g ? esc(label(g)) : ""}" placeholder="Pick a Governor" autocomplete="off">
-            </label>` : `<span class="fw-gov"></span>`}
+            </label>` : live && r.needsId ? `<span class="fw-gov muted">Read two ways, so no pick can match it. Resolve it in the paste once the week closes.</span>` : `<span class="fw-gov"></span>`}
             <span class="row-actions">${tied ? `
               <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="-1" aria-label="Move ${esc(r.name)} up"${tiedAt(i, -1) ? "" : " disabled"}>${ARROW("M12 19V5M6 11l6-6 6 6")}</button>
               <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="1" aria-label="Move ${esc(r.name)} down"${tiedAt(i, 1) ? "" : " disabled"}>${ARROW("M12 5v14M6 13l6 6 6-6")}</button>` : ""}</span>
@@ -499,7 +506,7 @@ async function showFortWeek(section, message = "") {
       <div class="save-bar" role="region" aria-label="Unsaved Fort Week">
         <span class="pulse unsaved" aria-hidden="true"></span>
         <span class="sum">${blocker
-          ? `<b>${live && !picks.length && !twice.length ? "Nothing to save yet." : "Fix before saving."}</b> <span>${esc(blocker)}</span>`
+          ? `<b>${live && !picks.length && !twice.length && !slips.length ? "Nothing to save yet." : "Fix before saving."}</b> <span>${esc(blocker)}</span>`
           : live ? `<b>Not saved yet.</b> <span>${picks.length} ${picks.length === 1 ? "name goes" : "names go"} into Name History. The Live Week's rows change at the reader's next reading.</span>`
           : `<b>Not saved yet.</b> <span>${rows.length} rows for ${esc(range)}, ${completeness === "partial" ? "Partial" : "Complete"} · ${needs} needs ID${saved ? ` · replaces the ${saved.rows} saved rows` : ""}.</span>`}</span>
         <button class="btn quiet" type="button" data-discard>${live ? "Clear picks" : "Discard"}</button>
