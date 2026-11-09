@@ -47,6 +47,9 @@ class LiveWeekReading(unittest.TestCase):
         for m in MIGRATIONS:
             self.conn.execute(m.read_text(encoding="utf-8"))
         self.live = self.one("select date_trunc('week', now() at time zone 'utc')::date")
+        # Start from an empty Live Week: the real reading in it is put back by the rollback.
+        self.conn.execute("delete from fort_entry where week = %s", (self.live,))
+        self.conn.execute("update fort_week set read_at = null where starts_on = %s", (self.live,))
         self.reader = self.user("reader-test@example.invalid")
         self.conn.execute("insert into fort_reader (email) values ('reader-test@example.invalid')")
 
@@ -78,13 +81,13 @@ class LiveWeekReading(unittest.TestCase):
         for n in name_history:
             self.conn.execute("insert into governor_name (character_id, name) values (%s, %s)", (n["id"], n["name"]))
 
-    def record(self, rows, week=None, claims=None):
-        """Calls record_live_week as the reader (or claims), with rows in in-game order."""
+    def record(self, rows, read_at=None, claims=None):
+        """Calls record_live_week as the reader (or claims), with rows in in-game order, read at read_at (default now)."""
         self.as_user(claims or self.reader)
         entries = [{"rank": i + 1, "name": r["name"], "fort_count": r["fortCount"], **({"needs_id": True} if r.get("needsId") else {})}
                    for i, r in enumerate(rows)]
         # On an error the caller rolls back to a savepoint, which also undoes the role.
-        result = self.one("select record_live_week(%s::date, %s::jsonb)", (week or self.live, json.dumps(entries)))
+        result = self.one("select record_live_week(coalesce(%s::timestamptz, now()), %s::jsonb)", (read_at, json.dumps(entries)))
         self.as_owner()
         return result
 
@@ -128,25 +131,41 @@ class LiveWeekReading(unittest.TestCase):
                     with self.assertRaises(psycopg.errors.InsufficientPrivilege):
                         if claims is None:
                             self.conn.execute("set local role anon")
-                            self.conn.execute("select record_live_week(%s::date, '[]'::jsonb)", (self.live,))
+                            self.conn.execute("select record_live_week(now(), '[]'::jsonb)")
                         else:
                             self.record(rows, claims=claims)
                 finally:
                     self.conn.execute("rollback to savepoint call")
         self.assertEqual(self.public_week(), [])
 
-    def test_a_week_other_than_the_live_week_is_refused(self):
-        for label, days in {"last week": -7, "next week": 7}.items():
-            week = self.one("select %s::date + %s", (self.live, days))
+    def refused(self, read_at, message):
+        """Asserts a reading taken at read_at is refused with message and changes no week."""
+        week = self.one("select date_trunc('week', %s::timestamptz at time zone 'utc')::date", (read_at,))
+        before = (self.public_week(week), self.public_week())
+        self.conn.execute("savepoint call")
+        try:
+            with self.assertRaisesRegex(psycopg.errors.InvalidParameterValue, message):
+                self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=read_at)
+        finally:
+            self.conn.execute("rollback to savepoint call")
+        self.assertEqual((self.public_week(week), self.public_week()), before)
+
+    def test_screenshots_from_a_closed_week_are_refused(self):
+        # An old run read again with --from, or a run that crossed the Monday reset.
+        for label, read_at in {
+            "last week": self.one("select now() - interval '7 days'"),
+            "a second before the reset": self.one("select %s::timestamp at time zone 'utc' - interval '1 second'", (self.live,)),
+        }.items():
             with self.subTest(label):
-                before = self.public_week(week)
-                self.conn.execute("savepoint call")
-                try:
-                    with self.assertRaisesRegex(psycopg.errors.InvalidParameterValue, "not the Live Week"):
-                        self.record([{"name": "Case Anyone", "fortCount": 3}], week=week)
-                finally:
-                    self.conn.execute("rollback to savepoint call")
-                self.assertEqual(self.public_week(week), before)
+                self.refused(read_at, "not the Live Week")
+
+    def test_a_reading_stamped_in_the_future_is_refused(self):
+        self.refused(self.one("select now() + interval '1 hour'"), "in the future")
+
+    def test_a_reading_older_than_the_saved_one_is_refused(self):
+        self.record([{"name": "Case Later", "fortCount": 5}])
+        self.refused(self.one("select greatest(now() - interval '1 minute', %s::timestamp at time zone 'utc')", (self.live,)), "later reading")
+        self.assertEqual(self.public_week(), [(None, "Case Later", 5)])
 
 
     def test_a_reading_leaves_name_history_and_governors_untouched(self):
@@ -176,11 +195,11 @@ class LiveWeekReading(unittest.TestCase):
         self.record([{"name": "Case CRY", "fortCount": 2, "needsId": True}, {"name": "Case CRY Other", "fortCount": 1}])
         self.assertEqual(self.public_week(), [(None, "Case CRY", 2), (None, "Case CRY Other", 1)])
 
-    def test_a_reading_stamps_the_live_weeks_as_of_time(self):
-        self.record([{"name": "Case Anyone", "fortCount": 3}])
+    def test_a_reading_is_as_of_its_screenshots_not_of_when_it_arrives(self):
+        taken = self.one("select greatest(now() - interval '20 minutes', %s::timestamp at time zone 'utc')", (self.live,))
+        self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=taken)
         self.conn.execute("set local role anon")
-        read_at, now = self.conn.execute("select read_at, now() from fort_week where starts_on = %s", (self.live,)).fetchone()
-        self.assertEqual(read_at, now)
+        self.assertEqual(self.one("select read_at from fort_week where starts_on = %s", (self.live,)), taken)
 
 if __name__ == "__main__":
     unittest.main()

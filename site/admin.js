@@ -367,12 +367,16 @@ const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${erro
 // The rules module parses the paste, matches names and orders ties; this section reads, shows and writes.
 
 async function loadFortWeekState() {
-  const [governors, names, weeks, entries] = await Promise.all([
+  const liveWeek = fortWeekAt(Date.now()).start;
+  const [governors, names, weeks, entries, live] = await Promise.all([
     allRows("governor", "character_id,current_name"),
     allRows("governor_name", "character_id,name"),
     allRows("fort_week", "starts_on,completeness"),
     allRows("fort_entry", "week"),
+    supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", liveWeek)
+      .order("fort_count", { ascending: false }).order("tie_order").order("id"),
   ]);
+  check(live, "Live Week rows");
   const saved = new Map();
   for (const e of entries) saved.set(e.week, (saved.get(e.week) ?? 0) + 1);
   const people = governors.map((g) => ({ id: g.character_id, name: g.current_name }));
@@ -380,6 +384,8 @@ async function loadFortWeekState() {
     governors: people,
     nameHistory: namesToMatch(people, names),
     weeks: new Map(weeks.map((w) => [w.starts_on, { completeness: w.completeness, rows: saved.get(w.starts_on) ?? 0 }])),
+    // The reader's latest reading, for resolving its "needs ID" rows. `read` marks a row the reading matched.
+    liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null })),
   };
 }
 
@@ -404,40 +410,45 @@ async function showFortWeek(section, message = "") {
   let text = "";
   let rows = null; // matched rows in ranking order; null until "Match names"
   let msgText = message;
+  const liveRows = () => (state.liveRows.length ? state.liveRows.map((r) => ({ ...r })) : null);
 
   function draw() {
     const isMonday = isFortWeekStart(week);
-    // The reader keeps the Live Week current; a paste would be overwritten by its next reading.
+    // The reader keeps the Live Week current; a paste would be overwritten by its next reading. Its
+    // "needs ID" rows are still resolved here: a pick goes into Name History only, so the next reading matches it.
     const live = isMonday && isLiveWeek(week, Date.now());
     const liveReason = `The week of ${dayMonth(week)} is the Live Week: the reader keeps it current until the Monday reset, and its next reading would overwrite a paste. Paste it once the week closes, if the final reading failed.`;
     const saved = state.weeks.get(week);
     const range = isMonday ? `${dayMonth(week)} – ${dayMonth(fortWeekEnd(week))}` : week;
-    setTaskStatus("fort-week", rows ? "Rows ready to save" : latest ? `Latest ${dayMonth(latest)}` : "No week yet", rows ? "Review" : "", rows ? "review" : "");
+    setTaskStatus("fort-week", rows && !live ? "Rows ready to save" : latest ? `Latest ${dayMonth(latest)}` : "No week yet", rows && !live ? "Review" : "", rows && !live ? "review" : "");
 
     const ranked = rows ? rankWeek(rows) : [];
     const needs = rows ? rows.filter((r) => r.id == null).length : 0;
     const twice = rows ? governorsTwice(rows) : [];
+    const picks = live && rows ? newFortNames(rows.filter((r) => !r.read), state.nameHistory, week) : [];
     const tiedAt = (i, step) => rows[i + step]?.fortCount === rows[i].fortCount;
     const blocker = !isMonday ? `${week || "The date"} is not a Monday. A Fort Week starts on Monday.`
-      : live ? liveReason
       : twice.length ? `${twice.map((id) => byId.get(id)?.name ?? id).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
+      : live && !picks.length ? `Pick a Governor for a "needs ID" row first.`
       : "";
 
     const body = document.createElement("div");
     body.innerHTML = `
       <div class="reveal">
         <div class="eyebrow">Fort Week</div>
-        <h1 class="task-title">${rows && isMonday ? `Review the week of ${esc(dayMonth(week))}` : "Log a Fort Week"}</h1>
-        <p class="task-lede">Paste the Weekly Ranking, one Governor per line: name, then Fort Count. Names are matched against Name History; a name that can't be matched stays "needs ID" until you pick its Governor. Nothing changes until you press Save.</p>
+        <h1 class="task-title">${live ? `Resolve the Live Week of ${esc(dayMonth(week))}` : rows && isMonday ? `Review the week of ${esc(dayMonth(week))}` : "Log a Fort Week"}</h1>
+        <p class="task-lede">${live
+          ? `The reader keeps this week's ranking current. Pick the Governor for each "needs ID" row it could not match; nothing changes until you press Save.`
+          : `Paste the Weekly Ranking, one Governor per line: name, then Fort Count. Names are matched against Name History; a name that can't be matched stays "needs ID" until you pick its Governor. Nothing changes until you press Save.`}</p>
       </div>
       <p class="admin-msg" role="status">${esc(msgText)}</p>
 
       <section class="card admin-card">
-        <h2>Paste the rows</h2>
+        <h2>${live ? "Pick the week" : "Paste the rows"}</h2>
         <form id="fw-paste" class="fields">
           <label class="field">Fort Week starting
             <input type="date" name="week" value="${esc(week)}" min="2024-01-01" step="7" required>
-          </label>
+          </label>${live ? "" : `
           <label class="field">Week is
             <select name="completeness">
               <option value="complete"${completeness === "complete" ? " selected" : ""}>Complete</option>
@@ -447,10 +458,10 @@ async function showFortWeek(section, message = "") {
           <label class="field fw-text">Rows
             <textarea name="rows" rows="8" required spellcheck="false" placeholder="vøDarkBlaCK 42&#10;FKK 10 38">${esc(text)}</textarea>
           </label>
-          <button class="btn${rows ? "" : " primary"}" type="submit">Match names</button>
+          <button class="btn${rows ? "" : " primary"}" type="submit">Match names</button>`}
         </form>
         <p class="match">${!isMonday ? "Pick the Monday the Fort Week starts on."
-          : live ? `<b>Refused.</b> ${esc(liveReason)}`
+          : live ? `<b>Paste refused.</b> ${esc(liveReason)}${rows ? "" : " The reader has not sent a reading for it yet."}`
           : saved ? `Week of ${esc(range)} is already saved with <b>${saved.rows}</b> rows (${esc(saved.completeness)}). Saving replaces them.`
           : `Week of ${esc(range)} is not logged yet. A Complete Week counts a missing Governor as 0; mark it Partial if the ranking is incomplete.`}</p>
       </section>
@@ -458,11 +469,14 @@ async function showFortWeek(section, message = "") {
       ${rows ? `
       <section class="card admin-card" aria-label="Rows to save">
         <h2>Rows <span class="faint num">${rows.length}</span></h2>
-        <p class="muted"><span class="num">${rows.length - needs}</span> matched · <span class="num">${needs}</span> needs ID. Pick a Governor to resolve a row, or clear it to leave the row "needs ID". The arrows set the order of tied Governors.</p>
+        <p class="muted"><span class="num">${rows.length - needs}</span> matched · <span class="num">${needs}</span> needs ID. ${live
+          ? `The reader's latest reading. Pick a Governor for a "needs ID" row: the pick goes into Name History, and the reader's next reading matches the name.`
+          : `Pick a Governor to resolve a row, or clear it to leave the row "needs ID". The arrows set the order of tied Governors.`}</p>
         <datalist id="fw-governors">${state.governors.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
         <ol class="fw-rows">${rows.map((r, i) => {
-          const tied = tiedAt(i, -1) || tiedAt(i, 1);
+          const tied = !live && (tiedAt(i, -1) || tiedAt(i, 1));
           const g = r.id != null ? byId.get(r.id) : null;
+          const pickable = !(live && r.read); // a row the reading matched stays as read
           return `
           <li class="fw-row${twice.includes(r.id) ? " clash" : ""}">
             <span class="pos num">${ranked[i].rank}</span>
@@ -471,9 +485,9 @@ async function showFortWeek(section, message = "") {
               ${r.id != null ? `<span class="pid">${esc(r.id)}</span>` : `<span><span class="tag needs-id">needs ID</span></span>`}
             </span>
             <b class="count num">${r.fortCount}</b>
-            <label class="field fw-gov"><span class="sr-only">Governor for row ${i + 1}, ${esc(r.name)}</span>
+            ${pickable ? `<label class="field fw-gov"><span class="sr-only">Governor for row ${i + 1}, ${esc(r.name)}</span>
               <input list="fw-governors" data-row="${i}" value="${g ? esc(label(g)) : ""}" placeholder="Pick a Governor" autocomplete="off">
-            </label>
+            </label>` : `<span class="fw-gov"></span>`}
             <span class="row-actions">${tied ? `
               <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="-1" aria-label="Move ${esc(r.name)} up"${tiedAt(i, -1) ? "" : " disabled"}>${ARROW("M12 19V5M6 11l6-6 6 6")}</button>
               <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="1" aria-label="Move ${esc(r.name)} down"${tiedAt(i, 1) ? "" : " disabled"}>${ARROW("M12 5v14M6 13l6 6 6-6")}</button>` : ""}</span>
@@ -485,10 +499,11 @@ async function showFortWeek(section, message = "") {
       <div class="save-bar" role="region" aria-label="Unsaved Fort Week">
         <span class="pulse unsaved" aria-hidden="true"></span>
         <span class="sum">${blocker
-          ? `<b>Fix before saving.</b> <span>${esc(blocker)}</span>`
+          ? `<b>${live && !picks.length && !twice.length ? "Nothing to save yet." : "Fix before saving."}</b> <span>${esc(blocker)}</span>`
+          : live ? `<b>Not saved yet.</b> <span>${picks.length} ${picks.length === 1 ? "name goes" : "names go"} into Name History. The Live Week's rows change at the reader's next reading.</span>`
           : `<b>Not saved yet.</b> <span>${rows.length} rows for ${esc(range)}, ${completeness === "partial" ? "Partial" : "Complete"} · ${needs} needs ID${saved ? ` · replaces the ${saved.rows} saved rows` : ""}.</span>`}</span>
-        <button class="btn quiet" type="button" data-discard>Discard</button>
-        <button class="btn primary" type="button" data-save${blocker ? " disabled" : ""}>${saved ? "Replace" : "Save"} Fort Week</button>
+        <button class="btn quiet" type="button" data-discard>${live ? "Clear picks" : "Discard"}</button>
+        <button class="btn primary" type="button" data-save${blocker ? " disabled" : ""}>${live ? "Save to Name History" : `${saved ? "Replace" : "Save"} Fort Week`}</button>
       </div>` : ""}`;
     section.replaceChildren(body);
     wire(body);
@@ -497,9 +512,16 @@ async function showFortWeek(section, message = "") {
   function wire(body) {
     const form = body.querySelector("#fw-paste");
     const msg = body.querySelector(".admin-msg");
-    form.week.addEventListener("change", () => { week = form.week.value; draw(); });
-    form.completeness.addEventListener("change", () => { completeness = form.completeness.value; draw(); });
-    form.rows.addEventListener("input", () => { text = form.rows.value; });
+    form.week.addEventListener("change", () => {
+      const wasLive = isLiveWeek(week, Date.now());
+      week = form.week.value;
+      // The Live Week shows the reader's rows; leaving it drops them, so they are never pasted as a week.
+      if (isLiveWeek(week, Date.now())) rows = liveRows();
+      else if (wasLive) rows = null;
+      draw();
+    });
+    form.completeness?.addEventListener("change", () => { completeness = form.completeness.value; draw(); });
+    form.rows?.addEventListener("input", () => { text = form.rows.value; });
     form.addEventListener("submit", (e) => {
       e.preventDefault();
       text = form.rows.value;
@@ -534,14 +556,26 @@ async function showFortWeek(section, message = "") {
     }));
 
     body.querySelector("[data-discard]")?.addEventListener("click", () => {
-      rows = null;
-      msgText = "Discarded the rows. Nothing was saved.";
+      const live = isLiveWeek(week, Date.now());
+      rows = live ? liveRows() : null;
+      msgText = live ? "Cleared the picks. Nothing was saved." : "Discarded the rows. Nothing was saved.";
       draw();
     });
 
     body.querySelector("[data-save]")?.addEventListener("click", async () => {
       body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
       msg.textContent = "Saving…";
+      if (isLiveWeek(week, Date.now())) {
+        const picks = newFortNames(rows.filter((r) => !r.read), state.nameHistory, week);
+        try {
+          check(await saveNames(picks), "Name History");
+          showFortWeek(section, `Added ${picks.length} ${picks.length === 1 ? "name" : "names"} to Name History. The reader's next reading of the Live Week matches ${picks.length === 1 ? "it" : "them"}.`);
+        } catch (err) {
+          body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
+          msg.textContent = `Could not save: ${err.message}`;
+        }
+        return;
+      }
       try {
         const warning = await saveFortWeek(week, completeness, rows, state.weeks.get(week), newFortNames(rows, state.nameHistory, week));
         const needs = rows.filter((r) => r.id == null).length;
@@ -579,12 +613,17 @@ async function saveFortWeek(week, completeness, rows, saved, newNames) {
     check(res, "Fort Week rows");
   }
   if (newNames.length) {
-    const names = await supabase.from("governor_name").upsert(
-      newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
-      { onConflict: "character_id,name", ignoreDuplicates: true });
+    const names = await saveNames(newNames);
     if (names.error) return ` Its new names did not reach Name History (${names.error.message}), so they will need picking again next week.`;
   }
   return "";
+}
+
+// Adds names the Council picked a Governor for to Name History; a name already there is left alone.
+function saveNames(newNames) {
+  return supabase.from("governor_name").upsert(
+    newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
+    { onConflict: "character_id,name", ignoreDuplicates: true });
 }
 
 // ---------- Roster Snapshot (ticket 05) ----------

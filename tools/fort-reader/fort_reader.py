@@ -11,6 +11,7 @@ used, so you can keep working while it runs.
                                           only when the run found no problems
 """
 import argparse
+import datetime
 import os
 import subprocess
 import sys
@@ -154,7 +155,11 @@ def main():
         if problems or not rows:
             raise SystemExit("Not sent to the Live Week: fix the problems above, or paste the week by hand once it closes.")
         from send import send_live_week
-        result = send_live_week(rows)
+        # The reading is as of its first screenshot, not of when it is sent: the database refuses
+        # screenshots from a week that has closed, such as an old run read again with --from.
+        first = min(run_dir.glob("screen-*.png"))
+        read_at = datetime.datetime.fromtimestamp(first.stat().st_mtime, datetime.timezone.utc)
+        result = send_live_week(rows, read_at)
         print(f"Sent to the Live Week: {result['rows']} rows, {result['matched']} matched, "
               f"{result['needs_id']} \"needs ID\".")
 

@@ -24,7 +24,7 @@ The game runs in BlueStacks 5, because the PC client ignores input from programs
 
 `.venv\Scripts\python.exe fort_reader.py --send` signs in as the reader's own Supabase user and calls `record_live_week`. Fort Rankings then shows the week marked "live, as of HH:MM UTC". The reading is sent only when the run found no problems; otherwise the Live Week keeps its last reading.
 
-Needs `FORT_READER_EMAIL` and `FORT_READER_PASSWORD` in the repo's `.env`: a Supabase user whose email is on `fort_reader` and not on `council_member`. The database matches names exactly against Name History, leaves the rest "needs ID", and refuses any week but the Live Week. A name the Council resolves in the admin page goes into Name History, so the next reading matches it.
+Needs `FORT_READER_EMAIL` and `FORT_READER_PASSWORD` in the repo's `.env`: a Supabase user whose email is on `fort_reader` and not on `council_member`. The database matches names exactly against Name History, leaves the rest "needs ID", and refuses any week but the Live Week. The reading counts as of its first screenshot, so `--from` with `--send` works only for a run taken in the Live Week and no older than the saved reading, and a run that crosses the Monday reset is refused: paste that week by hand once it closes. A "needs ID" name the Council resolves in the admin page, Live Week included, goes into Name History, so the next reading matches it.
 
 Screenshots and `paste.txt` are kept under `runs/`. To re-read a run without the game: `fort_reader.py --from runs\<folder>`.
 

@@ -68,7 +68,7 @@ Council admin patterns:
 - **Change lists**: renames read `old (struck through) → new · ID`. An empty group is one line, not a blank box.
 - **Sticky save bar**: appears while anything is unsaved and summarises what Save will do; Discard is quiet and Save is primary. Nothing writes before Save.
 - **Confirm / Dismiss rows**: the decision becomes a "Linked" / "Dismissed" label with Undo. Group by Main and offer "Confirm all N".
-- **Paste review rows** `.fw-row`: rank, the name as pasted, Fort Count, a Governor picker (datalist of "Name (Character ID)"), then the Character ID or a "needs ID" tag. Tied rows get up/down arrows that move them only within the tie. A row that blocks saving gets a `--down` edge on the left.
+- **Paste review rows** `.fw-row`: rank, the name as pasted, Fort Count, a Governor picker (datalist of "Name (Character ID)"), then the Character ID or a "needs ID" tag. Tied rows get up/down arrows that move them only within the tie. A row that blocks saving gets a `--down` edge on the left. For the Live Week the paste is refused and the rows are the reader's latest reading: only its "needs ID" rows get a picker, no tie arrows, and Save writes the picks to Name History only.
 - **Not built yet**: show the planned steps dashed with "Coming soon", never a tall empty card.
 
 ## Motion
