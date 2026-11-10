@@ -22,7 +22,7 @@ async function rows(table, query) {
 }
 
 export async function loadKingdom() {
-  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots] = await Promise.all([
+  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards] = await Promise.all([
     rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
     rows("fort_week", "select=starts_on,completeness,read_at&order=starts_on.asc"),
@@ -31,6 +31,7 @@ export async function loadKingdom() {
     rows("gh_entry", "select=event_id,place,character_id,name,alliance,golden_heads&order=place.asc"),
     rows("kvk_entry", "select=*&order=rank.asc"),
     rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc&limit=1"),
+    rows("weekly_award", "select=week,character_id,place,award,note&order=week.desc,place.asc,id.asc"),
   ]);
   const latest = snapshots[0];
   const snapshotRows = latest
@@ -101,5 +102,7 @@ export async function loadKingdom() {
     // Kind and Farm link for the Mains ranking: { id, name, kind, mainId }.
     governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id })),
     nameHistory: names.map((n) => ({ id: n.character_id, name: n.name })),
+    // Weekly Awards { week, id, place, award, note }; always a Main's Character ID.
+    weeklyAwards: awards.map((a) => ({ week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note })),
   };
 }

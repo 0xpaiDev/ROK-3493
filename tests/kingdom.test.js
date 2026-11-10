@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -362,4 +362,37 @@ test("a Council pick sticks at the next reading only for a name one row holds an
   assert.deepEqual(liveReadingIds([{ name: "Twin", fortCount: 5 }, { name: "Twin", fortCount: 4 }], [...pick("Twin", "8"), { id: "9", name: "Twin" }]), [null, null]);
   // A row read two ways: a pick for its spelling never matches it.
   assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, needsId: true }], pick("Odd", "9")), [null]);
+});
+
+// Weekly Awards: { week, id, place, award, note }. Governors carry their kind.
+const award = (id, place = 1, week = "2026-11-02", text = "Legendary King's Chest") => ({ week, id, place, award: text, note: "" });
+const awardees = [gov("1", "TasteMyFat"), gov("2", "TasteMyFatFarm", "farm", "1")];
+const afterWeek = Date.parse("2026-11-10T12:00:00Z");
+
+test("a Farm cannot receive a Weekly Award", () => {
+  assert.match(checkWeeklyAward(award("2"), awardees, afterWeek), /Farm/);
+});
+
+test("a Weekly Award needs a Governor on record, picked by Character ID", () => {
+  assert.match(checkWeeklyAward(award("99"), awardees, afterWeek), /not on record/);
+});
+
+test("a Weekly Award waits until the Monday reset closes its Fort Week", () => {
+  const sundayNight = Date.parse("2026-11-08T23:59:00Z");
+  assert.match(checkWeeklyAward(award("1"), awardees, sundayNight), /Live Week/);
+});
+
+test("a Weekly Award needs a place from 1 up and the award's text", () => {
+  assert.deepEqual([award("1", 0), award("1", 1.5), award("1", 2, undefined, "  ")].map((a) => Boolean(checkWeeklyAward(a, awardees, afterWeek))), [true, true, true]);
+  assert.equal(checkWeeklyAward(award("1", 2), awardees, afterWeek), null);
+});
+
+test("Weekly Awards group by Fort Week, the latest week first and each week in place order", () => {
+  const awards = [award("1", 2, "2026-10-26"), award("3", 1, "2026-11-02"), award("4", 1, "2026-10-26"), award("5", 2, "2026-11-02")];
+  assert.deepEqual(awardsByWeek(awards).map((w) => [w.week, w.awards.map((a) => a.id)]), [["2026-11-02", ["3", "5"]], ["2026-10-26", ["4", "1"]]]);
+});
+
+test("a Governor's popup lists only their Weekly Awards, the latest first", () => {
+  const awards = [award("1", 3, "2026-10-26"), award("4", 1, "2026-11-02"), award("1", 1, "2026-11-02")];
+  assert.deepEqual(awardsOf(awards, "1").map((a) => [a.week, a.place]), [["2026-11-02", 1], ["2026-10-26", 3]]);
 });

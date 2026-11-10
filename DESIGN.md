@@ -59,6 +59,7 @@ Reuse these before inventing new ones (classes in `styles.css`).
 - **Tag** `.tag`: Draft, Partial Week, Live (`.tag.live`, "Live, as of 14:05 UTC", on the Live Week's ranking and hero), Migrated, needs ID (`.tag.needs-id`, in Draft's gold), Farm (`.tag.farm`, also "Farm · unlinked", in the ranking and Fort Averages). "needs ID" is always visible, never hidden: in the ranking rows, the podium and the admin page.
 - **Buttons** `.btn`: primary = `--accent` fill with dark text (one per view); secondary = outlined; quiet = text only. Minimum height 36 px; anything tapped on a phone is 44 px.
 - **Segmented control / chips** `.seg`, `.chip`: filters and view toggles (Mains / Main + Farm).
+- **Weekly Award winners** `.tiers.winners` on `.card.award`: place in mono, its metal following the place (`.p1`–`.p3`, so two 1sts are both gold), then the Main, the award and the Council's note stacked in `.aw`. The home page shows the latest awarded Fort Week (no shimmer: the one shimmer stays on the rewards card); Fort Rankings → Awards lists every week, latest first; the Governor popup lists that Main's awards.
 
 Council admin patterns:
 
@@ -69,6 +70,7 @@ Council admin patterns:
 - **Sticky save bar**: appears while anything is unsaved and summarises what Save will do; Discard is quiet and Save is primary. Nothing writes before Save.
 - **Confirm / Dismiss rows**: the decision becomes a "Linked" / "Dismissed" label with Undo. Group by Main and offer "Confirm all N".
 - **Paste review rows** `.fw-row`: rank, the name as pasted, Fort Count, a Governor picker (datalist of "Name (Character ID)"), then the Character ID or a "needs ID" tag. Tied rows get up/down arrows that move them only within the tie. A row that blocks saving gets a `--down` edge on the left. For the Live Week the paste is refused and the rows are the reader's latest reading: only its "needs ID" rows get a picker (a row the reader read two ways gets a `.muted` note instead), no tie arrows, and Save writes the picks to Name History only. A pick the next reading would not match blocks Save and says why.
+- **Weekly Awards** `.aw-rows`: on a saved, closed Fort Week, flat rows of place · Main · award and note · quiet Remove (with a confirm), and a secondary "Add award" form whose Main picker lists Mains only. Each award saves on its own, so there is no save bar.
 - **Not built yet**: show the planned steps dashed with "Coming soon", never a tall empty card.
 
 ## Motion

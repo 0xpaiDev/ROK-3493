@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, liveReadingIds } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -14,6 +14,7 @@ const gov = (id, name) => `<span class="ell" title="${esc(name)}">${esc(name)}</
 const dayMonth = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 // A typed "Name (Character ID)" from a datalist, or a bare Character ID.
 const typedId = (typed) => typed.match(/\((\d+)\)$/)?.[1] ?? (/^\d+$/.test(typed) ? typed : null);
+const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 
 // Tasks not built yet show their planned steps. Filled in by later tickets of the kingdom-admin line.
 const TASKS = [
@@ -368,18 +369,19 @@ const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${erro
 
 async function loadFortWeekState() {
   const liveWeek = fortWeekAt(Date.now()).start;
-  const [governors, names, weeks, entries, live] = await Promise.all([
-    allRows("governor", "character_id,current_name"),
+  const [governors, names, weeks, entries, live, awards] = await Promise.all([
+    allRows("governor", "character_id,current_name,kind"),
     allRows("governor_name", "character_id,name"),
     allRows("fort_week", "starts_on,completeness"),
     allRows("fort_entry", "week"),
     supabase.from("fort_entry").select("character_id,name,fort_count,read_two_ways").eq("week", liveWeek)
       .order("fort_count", { ascending: false }).order("tie_order").order("id"),
+    allRows("weekly_award", "id,week,character_id,place,award,note"),
   ]);
   check(live, "Live Week rows");
   const saved = new Map();
   for (const e of entries) saved.set(e.week, (saved.get(e.week) ?? 0) + 1);
-  const people = governors.map((g) => ({ id: g.character_id, name: g.current_name }));
+  const people = governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind }));
   return {
     governors: people,
     nameHistory: namesToMatch(people, names),
@@ -387,13 +389,16 @@ async function loadFortWeekState() {
     // The reader's latest reading of the Live Week, for resolving its "needs ID" rows. `read` marks a row the
     // reading matched; `needsId` a row it read two ways, which no pick can match.
     liveWeek,
+    // Weekly Awards in id order, so equal places keep the order they were given in. `row` is the award's own id.
+    awards: awards.sort((a, b) => a.id - b.id).map((a) => ({ row: a.id, week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note })),
     liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null, needsId: e.read_two_ways })),
   };
 }
 
 const ARROW = (d) => `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${d}"/></svg>`;
 
-async function showFortWeek(section, message = "") {
+// startWeek keeps the Council on the week it was working on after a reload (adding a Weekly Award, say).
+async function showFortWeek(section, message = "", startWeek = null) {
   let state;
   try {
     state = await loadFortWeekState();
@@ -407,7 +412,7 @@ async function showFortWeek(section, message = "") {
   const latest = [...state.weeks.keys()].sort().at(-1);
 
   // The Fort Week that closed last is the usual one to log.
-  let week = fortWeekAt(Date.now() - 7 * 864e5).start;
+  let week = startWeek ?? fortWeekAt(Date.now() - 7 * 864e5).start;
   let completeness = "complete";
   let text = "";
   let rows = null; // matched rows in ranking order; null until "Match names"
@@ -479,6 +484,8 @@ async function showFortWeek(section, message = "") {
           : `Week of ${esc(range)} is not logged yet. A Complete Week counts a missing Governor as 0; mark it Partial if the ranking is incomplete.`}</p>
       </section>
 
+      ${saved && !live && !rows ? awardsCard(week, range) : ""}
+
       ${rows ? `
       <section class="card admin-card" aria-label="Rows to save">
         <h2>Rows <span class="faint num">${rows.length}</span></h2>
@@ -522,9 +529,77 @@ async function showFortWeek(section, message = "") {
     wire(body);
   }
 
+  // Weekly Awards for a saved, closed Fort Week. Only Mains are offered; the rules module refuses a Farm,
+  // and the database refuses one too. Each award saves on its own.
+  const mains = state.governors.filter((g) => g.kind !== "farm").sort((a, b) => a.name.localeCompare(b.name));
+  const weekAwards = (w) => awardsByWeek(state.awards).find((x) => x.week === w)?.awards ?? [];
+  function awardsCard(w, range) {
+    const awards = weekAwards(w);
+    const next = Math.max(0, ...awards.map((a) => a.place)) + 1;
+    const nameOf = (id) => byId.get(id)?.name ?? id;
+    return `
+      <section class="card admin-card" aria-label="Weekly Awards">
+        <h2>Weekly Awards <span class="faint num">${awards.length}</span></h2>
+        <p class="muted">Given for ${esc(range)}. Only Mains are on the list: a Farm never receives a Weekly Award. An award shows on the public site as soon as it is added.</p>
+        ${awards.length ? `<ol class="aw-rows">${awards.map((a) => `
+          <li>
+            <span class="place num p${a.place}">${ordinal(a.place)}</span>
+            <span class="who">${gov(a.id, nameOf(a.id))}</span>
+            <span class="aw"><span>${esc(a.award)}</span>${a.note ? `<small>${esc(a.note)}</small>` : ""}</span>
+            <button class="btn quiet sm" type="button" data-award-remove="${a.row}">Remove<span class="sr-only"> the ${ordinal(a.place)} place award for ${esc(nameOf(a.id))}</span></button>
+          </li>`).join("")}</ol>` : ""}
+        <datalist id="aw-mains">${mains.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
+        <form id="aw-add" class="fields">
+          <label class="field narrow">Place
+            <input type="number" name="place" min="1" step="1" value="${next}" required>
+          </label>
+          <label class="field wide">Main
+            <input list="aw-mains" name="main" placeholder="Pick a Main" autocomplete="off" required>
+          </label>
+          <label class="field wide">Award
+            <input name="award" placeholder="2 Legendary King's Chests" autocomplete="off" required>
+          </label>
+          <label class="field wide">Note
+            <input name="note" placeholder="Optional" autocomplete="off">
+          </label>
+          <button class="btn" type="submit">Add award</button>
+        </form>
+      </section>`;
+  }
+
+  function wireAwards(body, msg) {
+    const form = body.querySelector("#aw-add");
+    const nameOf = (id) => byId.get(id)?.name ?? id;
+    form?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const award = { week, id: typedId(form.main.value.trim()), place: Number(form.place.value), award: form.award.value.trim(), note: form.note.value.trim() || null };
+      const problem = checkWeeklyAward(award, state.governors, Date.now());
+      if (problem) { msg.textContent = `Could not add the award: ${problem}`; return; }
+      form.querySelector("button").disabled = true;
+      msg.textContent = "Saving…";
+      const { error } = await supabase.from("weekly_award").insert({ week, character_id: award.id, place: award.place, award: award.award, note: award.note });
+      if (error) {
+        form.querySelector("button").disabled = false;
+        // 23503 = Postgres foreign_key_violation: no Main on record with that Character ID (a Farm, say).
+        msg.textContent = error.code === "23503" ? `Could not add the award: ${nameOf(award.id)} is not a Main on record, so it cannot receive a Weekly Award.` : `Could not add the award: ${error.message}`;
+        return;
+      }
+      showFortWeek(section, `Added the ${ordinal(award.place)} place award for ${nameOf(award.id)}. It is on the public site now.`, week);
+    });
+    body.querySelectorAll("button[data-award-remove]").forEach((b) => b.addEventListener("click", async () => {
+      const a = state.awards.find((x) => String(x.row) === b.dataset.awardRemove);
+      if (!confirm(`Remove the ${ordinal(a.place)} place award for ${nameOf(a.id)}? It leaves the public site.`)) return;
+      b.disabled = true;
+      const { error } = await supabase.from("weekly_award").delete().eq("id", a.row);
+      if (error) { b.disabled = false; msg.textContent = `Could not remove the award: ${error.message}`; return; }
+      showFortWeek(section, `Removed the ${ordinal(a.place)} place award for ${nameOf(a.id)}.`, week);
+    }));
+  }
+
   function wire(body) {
     const form = body.querySelector("#fw-paste");
     const msg = body.querySelector(".admin-msg");
+    wireAwards(body, msg);
     form.week.addEventListener("change", () => {
       const wasLive = liveHere(week);
       week = form.week.value;
