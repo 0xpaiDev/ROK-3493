@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, findInRanking, isLiveWeek } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 
 (async () => {
@@ -37,6 +37,7 @@ import { loadKingdom } from "./store.js";
   };
   const who = (g, cls = "") => `<button class="linkish ${cls}" data-gov="${esc(g.key)}">${esc(g.name)}</button>`;
   const PLACE = ["first", "second", "third"];
+  const weekLabel = (start) => `Week ${isoWeek(start)} · ${fmtRange({ start, end: fortWeekEnd(start) })}`;
   const ICON_INFO = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E9C46A" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.01"/></svg>`;
   const ICON_GO = `<svg class="go" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C3A6FF" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`;
 
@@ -102,6 +103,8 @@ import { loadKingdom } from "./store.js";
   const farmsOf = (id) => D.governors.filter((x) => x.kind === "farm" && x.mainId === id);
   // Name History only adds names to Governors already shown somewhere.
   D.nameHistory.forEach((n) => governors.has(n.id) && get(n.id, n.name));
+  // A Main with a Weekly Award has a popup even if it was never ranked or in a Roster Snapshot.
+  D.weeklyAwards.forEach((a) => get(a.id, record.get(a.id)?.name));
 
   for (const g of governors.values()) {
     // The current name on record wins (Roster Snapshots keep it up to date). A pasted fort name is
@@ -115,9 +118,16 @@ import { loadKingdom } from "./store.js";
     g.avg = g.id ? fortAverage(weeks, g.id, now)?.average ?? null : null;
     g.best = g.played ? Math.max(...counts) : 0;
     g.last = g.fort[weeks.length - 1]?.fortCount ?? null;
+    g.awards = g.id ? awardsOf(D.weeklyAwards, g.id) : [];
   }
   const fortGovernors = [...governors.values()].filter((g) => g.played);
   const byKey = (k) => governors.get(k);
+  const awardWeeks = awardsByWeek(D.weeklyAwards);
+
+  // A Fort Week's Weekly Awards in place order: place in its metal, the Main, the award and the Council's note.
+  const winnersList = (awards) => `<ol class="tiers winners">${awards.map((a) => `
+    <li><span class="place num p${a.place}">${ordinal(a.place)}</span>
+      <span class="aw">${who(byKey(a.id))}<span class="reward">${esc(a.award)}</span>${a.note ? `<small>${esc(a.note)}</small>` : ""}</span></li>`).join("")}</ol>`;
 
   // One Weekly Ranking row per Main (and, with Farms, per unlinked Farm), each with its Farm rows.
   // A row's arrow compares like with like: a summed Main against its sum the week before.
@@ -266,6 +276,12 @@ import { loadKingdom } from "./store.js";
         </div>
 
         <div class="side">
+          ${awardWeeks.length ? `<section class="card award reveal" style="--d:680ms" aria-label="Latest Weekly Awards">
+            <div class="award-head"><span class="eyebrow">Weekly Awards · Week ${isoWeek(awardWeeks[0].week)}</span><a href="#fort/awards">Past winners →</a></div>
+            <h2>Week ${isoWeek(awardWeeks[0].week)} winners</h2>
+            <p>Given by the Council for ${fmtRange({ start: awardWeeks[0].week, end: fortWeekEnd(awardWeeks[0].week) })}.</p>
+            ${winnersList(awardWeeks[0].awards)}
+          </section>` : ""}
           ${R ? `<section class="card award shine reveal" style="--d:700ms">
             <div class="award-head"><span class="eyebrow">Weekly Award · Week ${nowN}</span>${R.draft ? '<span class="tag draft">Draft</span>' : ""}</div>
             <h2>${esc(R.title)}</h2>
@@ -309,12 +325,27 @@ import { loadKingdom } from "./store.js";
     const head = `
       <div class="section-head reveal">
         <div><div class="eyebrow">Fort grind</div><h1>Fort Rankings</h1>
-          <p class="muted">${state.fortView === "weekly" ? "Weekly Rankings. Arrows compare each Governor to their own previous week." : "Every logged Fort Week. A Fort Average starts at each Governor's first ranked week: a missed Complete Week counts as 0, a Partial Week counts only when ranked."}</p></div>
+          <p class="muted">${state.fortView === "weekly" ? "Weekly Rankings. Arrows compare each Governor to their own previous week."
+            : state.fortView === "awards" ? "Every Weekly Award the Council has given, the latest Fort Week first. Weekly Awards go to Mains only."
+            : "Every logged Fort Week. A Fort Average starts at each Governor's first ranked week: a missed Complete Week counts as 0, a Partial Week counts only when ranked."}</p></div>
         <div class="seg" role="group" aria-label="View">
           <button data-fortview="weekly" class="${state.fortView === "weekly" ? "on" : ""}" aria-pressed="${state.fortView === "weekly"}">Weekly</button>
           <button data-fortview="avg" class="${state.fortView === "avg" ? "on" : ""}" aria-pressed="${state.fortView === "avg"}">Averages</button>
+          <button data-fortview="awards" class="${state.fortView === "awards" ? "on" : ""}" aria-pressed="${state.fortView === "awards"}">Awards</button>
         </div>
       </div>`;
+
+    if (state.fortView === "awards") {
+      return `<div class="wrap page">${head}
+        ${awardWeeks.length ? `<div class="grid">${awardWeeks.map((w) => `
+          <section class="card award" aria-label="Weekly Awards, ${esc(weekLabel(w.week))}">
+            <div class="award-head"><span class="eyebrow">Weekly Awards</span></div>
+            <h2>${esc(weekLabel(w.week))}</h2>
+            ${winnersList(w.awards)}
+          </section>`).join("")}</div>`
+        : `<div class="card empty">No Weekly Awards yet. The Council records them after each Fort Week.</div>`}
+      </div>`;
+    }
 
     if (state.fortView === "weekly") {
       const i = state.fortWeek, w = weeks[i];
@@ -456,6 +487,7 @@ import { loadKingdom } from "./store.js";
         </div>
         ${g.played ? `<div><div class="eyebrow">Fort history</div>
           <ol class="mini-list">${g.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted mono">${e.rank != null ? "#" + e.rank : "Farm"}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
+        ${g.awards.length ? `<div><div class="eyebrow">Weekly Awards</div><ol class="mini-list">${g.awards.map((a) => `<li><span class="place mono p${a.place}">${ordinal(a.place)}</span><span class="aw"><b>${esc(a.award)}</b><small>${esc(weekLabel(a.week))}${a.note ? ` · ${esc(a.note)}` : ""}</small></span></li>`).join("")}</ol></div>` : ""}
         ${g.gh.length ? `<div><div class="eyebrow">GH Events</div><ol class="mini-list">${g.gh.map((x) => `<li><span style="flex:1">${esc(x.label)}</span><span class="muted mono">#${x.rank}</span><b class="num">${x.gh} GH</b></li>`).join("")}</ol></div>` : ""}
         ${g.kvk ? `<div><div class="eyebrow">Last KvK</div><div class="kv"><div><small>Rank</small><b>#${g.kvk.rank}</b></div><div><small>Kill points</small><b>${big(g.kvk.killPoints)}</b></div><div><small>Status</small><b>${esc(g.kvk.status)}</b></div></div></div>` : ""}
       </div>`;
@@ -578,7 +610,10 @@ import { loadKingdom } from "./store.js";
       try { await shareCard(); } catch (err) { console.error(err); } finally { t.disabled = false; }
       return;
     }
-    if (t.dataset.fortview) state.fortView = t.dataset.fortview;
+    if (t.dataset.fortview) {
+      state.fortView = t.dataset.fortview;
+      history.replaceState(null, "", state.fortView === "awards" ? "#fort/awards" : "#fort");
+    }
     else if (t.dataset.week) state.fortWeek = +t.dataset.week;
     else if (t.dataset.farms) state.withFarms = t.dataset.farms === "1";
     else if (t.dataset.avgsort) state.avgSort = t.dataset.avgsort;
@@ -618,8 +653,15 @@ import { loadKingdom } from "./store.js";
     const t = ev.target.closest("[data-gov]");
     if (t) openGovernor(t.dataset.gov);
   });
-  window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); });
+  // "#fort/awards" (the home page's "Past winners" link) opens Fort Rankings on its Awards view;
+  // the Fort Rankings tab (#fort) leaves the Awards view, so the URL and the view always agree.
+  const viewFromHash = () => {
+    if (location.hash === "#fort/awards") state.fortView = "awards";
+    else if (location.hash === "#fort" && state.fortView === "awards") state.fortView = "weekly";
+  };
+  window.addEventListener("hashchange", () => { viewFromHash(); render(); window.scrollTo(0, 0); });
 
   document.getElementById("generated").textContent = `Data updated ${fmtDay(D.generated)} ${D.generated.slice(0, 4)}`;
+  viewFromHash();
   render();
 })();

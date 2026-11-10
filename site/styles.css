@@ -329,6 +329,17 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .tiers li:nth-child(2) .place { color: var(--silver); }
 .tiers li:nth-child(3) .place { color: var(--bronze); }
 .tiers .reward { color: var(--muted); font-size: 14px; }
+/* Weekly Award winners (home card, past winners, popup): the metal follows the place, not the row,
+   so two Mains given 1st are both gold. Each winner stacks the Main, the award, then the Council's note. */
+.tiers.winners li { align-items: flex-start; }
+.tiers.winners li .place { color: var(--text); }
+.tiers.winners li .place.p1, .mini-list .place.p1, .aw-rows .place.p1 { color: var(--gold); }
+.tiers.winners li .place.p2, .mini-list .place.p2, .aw-rows .place.p2 { color: var(--silver); }
+.tiers.winners li .place.p3, .mini-list .place.p3, .aw-rows .place.p3 { color: var(--bronze); }
+.mini-list .place { min-width: 44px; flex: none; font-size: 13px; color: var(--muted); }
+.aw { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.aw .linkish { justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.aw small { font-size: 13px; color: var(--faint); }
 .rules { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
 .shine::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; pointer-events: none;
@@ -578,6 +589,14 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
 .fw-row .count { min-width: 40px; text-align: right; font-weight: 600; }
 .fw-row .row-actions { justify-content: flex-end; }
 .btn.icon { width: 36px; padding: 0; justify-content: center; }
+
+/* Weekly Awards on the Fort Week screen: flat rows like the Farm list, the place in its metal */
+.field.narrow { flex: 0 1 96px; }
+.aw-rows { list-style: none; margin: 12px 0 0; padding: 0; }
+.aw-rows li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.aw-rows .place { min-width: 44px; font: 14px var(--mono); color: var(--text); }
+.aw-rows .who { flex: 1 1 200px; display: flex; align-items: baseline; gap: 8px; min-width: 0; font-weight: 500; }
+.aw-rows .aw { flex: 2 1 240px; }
 
 /* Tasks not built yet */
 .plan { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }

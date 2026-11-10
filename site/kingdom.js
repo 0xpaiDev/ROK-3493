@@ -52,6 +52,11 @@ export function isLiveWeek(startsOn, now) {
   return fortWeekAt(now).start === startsOn;
 }
 
+// A Fort Week the Monday reset has closed: it started before the Live Week. A later week has not even begun.
+export function isClosedWeek(startsOn, now) {
+  return startsOn < fortWeekAt(now).start;
+}
+
 // "Find your Governor": the ranked entries whose Governor has ever gone by a name containing
 // the query (Name History, by Character ID), or whose Character ID contains it. Case-insensitive.
 export function findInRanking(ranked, nameHistory, query) {
@@ -245,4 +250,30 @@ export function moveInTie(rows, index, step) {
 export function newFortNames(rows, nameHistory, week) {
   const seen = seenPairs(nameHistory);
   return rows.filter((r) => r.id != null && !isSeen(seen, r)).map((r) => ({ id: r.id, name: r.name, firstSeen: week }));
+}
+
+// Weekly Awards: { week, id, place, award, note }, a Fort Week's Monday and the Main's Character ID.
+// Why an award can't be saved, as a sentence for the Council, or null when it can. Farms never receive one.
+export function checkWeeklyAward(award, governors, now = Date.now()) {
+  const g = governors.find((x) => x.id === award.id);
+  if (!g) return award.id ? `Character ID ${award.id} is not on record. Pick the Main from the list.` : "Pick the Main from the list.";
+  if (g.kind === "farm") return `${g.name} is a Farm. A Weekly Award goes to a Main.`;
+  // The Council gives Weekly Awards after a Fort Week, once its Weekly Ranking is final.
+  if (isLiveWeek(award.week, now)) return "This is the Live Week. Weekly Awards are given once the Monday reset closes it.";
+  if (!isClosedWeek(award.week, now)) return "This Fort Week has not started yet. Weekly Awards are given once the Monday reset closes it.";
+  if (!Number.isInteger(award.place) || award.place < 1) return "The place is a whole number from 1 up.";
+  if (!award.award?.trim()) return "Write what the award is, for example the King's Chests it gives.";
+  return null;
+}
+
+// Weekly Awards by Fort Week: [{ week, awards }], the latest week first, each week in place order
+// (equal places keep the order they were given in). The home page shows the first; past winners are all of them.
+export function awardsByWeek(awards) {
+  const weeks = [...new Set(awards.map((a) => a.week))].sort().reverse();
+  return weeks.map((week) => ({ week, awards: awards.filter((a) => a.week === week).sort((a, b) => a.place - b.place) }));
+}
+
+// One Governor's Weekly Awards, by Character ID, the latest Fort Week first.
+export function awardsOf(awards, characterId) {
+  return awardsByWeek(awards.filter((a) => a.id === characterId)).flatMap((w) => w.awards);
 }
