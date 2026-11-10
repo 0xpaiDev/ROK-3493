@@ -48,13 +48,13 @@ export function isFortWeekStart(day) {
 
 // The Live Week: the Fort Week a moment falls in, whose Weekly Ranking the reader still refreshes.
 // It closes at the Monday reset. Comes from the date, never from a stored flag.
+export function isLiveWeek(startsOn, now) {
+  return fortWeekAt(now).start === startsOn;
+}
+
 // A Fort Week the Monday reset has closed: it started before the Live Week. A later week has not even begun.
 export function isClosedWeek(startsOn, now) {
   return startsOn < fortWeekAt(now).start;
-}
-
-export function isLiveWeek(startsOn, now) {
-  return fortWeekAt(now).start === startsOn;
 }
 
 // "Find your Governor": the ranked entries whose Governor has ever gone by a name containing

@@ -653,8 +653,12 @@ import { loadKingdom } from "./store.js";
     const t = ev.target.closest("[data-gov]");
     if (t) openGovernor(t.dataset.gov);
   });
-  // "#fort/awards" (the home page's "Past winners" link) opens Fort Rankings on its Awards view.
-  const viewFromHash = () => { if (location.hash === "#fort/awards") state.fortView = "awards"; };
+  // "#fort/awards" (the home page's "Past winners" link) opens Fort Rankings on its Awards view;
+  // the Fort Rankings tab (#fort) leaves the Awards view, so the URL and the view always agree.
+  const viewFromHash = () => {
+    if (location.hash === "#fort/awards") state.fortView = "awards";
+    else if (location.hash === "#fort" && state.fortView === "awards") state.fortView = "weekly";
+  };
   window.addEventListener("hashchange", () => { viewFromHash(); render(); window.scrollTo(0, 0); });
 
   document.getElementById("generated").textContent = `Data updated ${fmtDay(D.generated)} ${D.generated.slice(0, 4)}`;
