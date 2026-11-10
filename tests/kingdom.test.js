@@ -380,6 +380,9 @@ test("a Weekly Award needs a Governor on record, picked by Character ID", () => 
 test("a Weekly Award waits until the Monday reset closes its Fort Week", () => {
   const sundayNight = Date.parse("2026-11-08T23:59:00Z");
   assert.match(checkWeeklyAward(award("1"), awardees, sundayNight), /Live Week/);
+  // A Fort Week after the Live Week has not even started, so it cannot be awarded either.
+  assert.match(checkWeeklyAward(award("1", 1, "2026-11-16"), awardees, afterWeek), /not started/);
+  assert.match(checkWeeklyAward(award("1", 1, "2026-11-09"), awardees, afterWeek), /Live Week/);
 });
 
 test("a Weekly Award needs a place from 1 up and the award's text", () => {

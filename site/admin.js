@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek } from "./kingdom.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -484,7 +484,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
           : `Week of ${esc(range)} is not logged yet. A Complete Week counts a missing Governor as 0; mark it Partial if the ranking is incomplete.`}</p>
       </section>
 
-      ${saved && !live && !rows ? awardsCard(week, range) : ""}
+      ${saved && !live && !rows && isClosedWeek(week, Date.now()) ? awardsCard(week, range) : ""}
 
       ${rows ? `
       <section class="card admin-card" aria-label="Rows to save">
@@ -580,8 +580,11 @@ async function showFortWeek(section, message = "", startWeek = null) {
       const { error } = await supabase.from("weekly_award").insert({ week, character_id: award.id, place: award.place, award: award.award, note: award.note });
       if (error) {
         form.querySelector("button").disabled = false;
-        // 23503 = Postgres foreign_key_violation: no Main on record with that Character ID (a Farm, say).
-        msg.textContent = error.code === "23503" ? `Could not add the award: ${nameOf(award.id)} is not a Main on record, so it cannot receive a Weekly Award.` : `Could not add the award: ${error.message}`;
+        // 23503 = Postgres foreign_key_violation, from one of weekly_award's two foreign keys: the Fort Week
+        // (weekly_award_week_fkey: the week was removed while this page was open) or the Main (a Farm, say).
+        msg.textContent = error.code !== "23503" ? `Could not add the award: ${error.message}`
+          : error.message.includes("weekly_award_week_fkey") ? "Could not add the award: this Fort Week is no longer saved. Reload the page."
+          : `Could not add the award: ${nameOf(award.id)} is not a Main on record, so it cannot receive a Weekly Award.`;
         return;
       }
       showFortWeek(section, `Added the ${ordinal(award.place)} place award for ${nameOf(award.id)}. It is on the public site now.`, week);

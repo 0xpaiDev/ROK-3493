@@ -48,6 +48,11 @@ export function isFortWeekStart(day) {
 
 // The Live Week: the Fort Week a moment falls in, whose Weekly Ranking the reader still refreshes.
 // It closes at the Monday reset. Comes from the date, never from a stored flag.
+// A Fort Week the Monday reset has closed: it started before the Live Week. A later week has not even begun.
+export function isClosedWeek(startsOn, now) {
+  return startsOn < fortWeekAt(now).start;
+}
+
 export function isLiveWeek(startsOn, now) {
   return fortWeekAt(now).start === startsOn;
 }
@@ -255,6 +260,7 @@ export function checkWeeklyAward(award, governors, now = Date.now()) {
   if (g.kind === "farm") return `${g.name} is a Farm. A Weekly Award goes to a Main.`;
   // The Council gives Weekly Awards after a Fort Week, once its Weekly Ranking is final.
   if (isLiveWeek(award.week, now)) return "This is the Live Week. Weekly Awards are given once the Monday reset closes it.";
+  if (!isClosedWeek(award.week, now)) return "This Fort Week has not started yet. Weekly Awards are given once the Monday reset closes it.";
   if (!Number.isInteger(award.place) || award.place < 1) return "The place is a whole number from 1 up.";
   if (!award.award?.trim()) return "Write what the award is, for example the King's Chests it gives.";
   return null;

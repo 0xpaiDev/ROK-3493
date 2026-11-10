@@ -610,7 +610,10 @@ import { loadKingdom } from "./store.js";
       try { await shareCard(); } catch (err) { console.error(err); } finally { t.disabled = false; }
       return;
     }
-    if (t.dataset.fortview) state.fortView = t.dataset.fortview;
+    if (t.dataset.fortview) {
+      state.fortView = t.dataset.fortview;
+      history.replaceState(null, "", state.fortView === "awards" ? "#fort/awards" : "#fort");
+    }
     else if (t.dataset.week) state.fortWeek = +t.dataset.week;
     else if (t.dataset.farms) state.withFarms = t.dataset.farms === "1";
     else if (t.dataset.avgsort) state.avgSort = t.dataset.avgsort;
