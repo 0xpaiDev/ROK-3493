@@ -57,6 +57,14 @@ export function isClosedWeek(startsOn, now) {
   return startsOn < fortWeekAt(now).start;
 }
 
+// The Fort Week the home page shows, as an index into `weeks` (date order): the Live Week
+// once it has a ranked row, otherwise the last closed Fort Week; -1 when there is neither.
+// A week that has not begun is never shown.
+export function homeWeek(weeks, now) {
+  const live = weeks.findIndex((w) => isLiveWeek(w.start, now) && w.entries.length > 0);
+  return live >= 0 ? live : weeks.findLastIndex((w) => isClosedWeek(w.start, now));
+}
+
 // "Find your Governor": the ranked entries whose Governor has ever gone by a name containing
 // the query (Name History, by Character ID), or whose Character ID contains it. Case-insensitive.
 export function findInRanking(ranked, nameHistory, query) {
