@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -390,7 +390,7 @@ const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${erro
 async function loadFortWeekState() {
   const liveWeek = fortWeekAt(Date.now()).start;
   const [governors, names, weeks, entries, live, awards] = await Promise.all([
-    allRows("governor", "character_id,current_name,kind"),
+    allRows("governor", "character_id,current_name,kind,main_character_id"),
     allRows("governor_name", "character_id,name"),
     allRows("fort_week", "starts_on,completeness"),
     allRows("fort_entry", "week"),
@@ -401,7 +401,7 @@ async function loadFortWeekState() {
   check(live, "Live Week rows");
   const saved = new Map();
   for (const e of entries) saved.set(e.week, (saved.get(e.week) ?? 0) + 1);
-  const people = governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind }));
+  const people = governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id }));
   return {
     governors: people,
     nameHistory: namesToMatch(people, names),
@@ -552,88 +552,182 @@ async function showFortWeek(section, message = "", startWeek = null) {
     wire(body);
   }
 
-  // Weekly Awards for a saved, closed Fort Week. Only Mains are offered; the rules module refuses a Farm,
-  // and the database refuses one too. Each award saves on its own.
+  // Weekly Awards for a saved, closed Fort Week, as a draft that lives on this page only. It opens with the week's
+  // published awards; Fill drafts them from the Reward Promise; add, edit and remove change the draft; Publish
+  // replaces the week's awards in one call. A reload drops the draft. Only Mains are offered; the rules module
+  // refuses a Farm, and the database refuses one too.
   const mains = state.governors.filter((g) => g.kind !== "farm").sort((a, b) => a.name.localeCompare(b.name));
-  const weekAwards = (w) => awardsByWeek(state.awards).find((x) => x.week === w)?.awards ?? [];
+  const nameOf = (id) => byId.get(id)?.name ?? id;
+  const published = (w) => (awardsByWeek(state.awards).find((x) => x.week === w)?.awards ?? [])
+    .map((a) => ({ id: a.id, place: a.place, award: a.award ?? null, note: a.note ?? null, items: a.items.map((x) => ({ ...x })) }));
+  // The draft: the week it is for, its awards in place order, the promise Fill last used, Fill's skips,
+  // whether the Council has changed it since it was opened or filled, and the award open in the form.
+  let draft = null;
+  const openDraft = () => { draft = { week, awards: published(week), filled: null, skipped: [], edited: false, editing: null }; };
+  const sameAwards = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // Places in order; equal places keep the order they were given in.
+  const setDraftAwards = (awards) => { draft.awards = [...awards].sort((a, b) => a.place - b.place); };
+
   function awardsCard(w, range) {
-    const awards = weekAwards(w);
+    if (draft?.week !== w) openDraft();
+    const awards = draft.awards;
+    const live = published(w);
+    const changed = !sameAwards(awards, live);
+    const editing = draft.editing != null ? awards[draft.editing] : null;
     const next = Math.max(0, ...awards.map((a) => a.place)) + 1;
-    const nameOf = (id) => byId.get(id)?.name ?? id;
+    const amounts = editing ? Object.fromEntries(editing.items.map((x) => [x.item, awardAmountLabel(x.item, x.amount).replace(/^×/, "")])) : {};
+    const f = draft.filled;
     return `
       <section class="card admin-card" aria-label="Weekly Awards">
         <h2>Weekly Awards <span class="faint num">${awards.length}</span></h2>
-        <p class="muted">Given for ${esc(range)}. Only Mains are on the list: a Farm never receives a Weekly Award. An award shows on the public site as soon as it is added.</p>
-        ${awards.length ? `<ol class="aw-rows">${awards.map((a) => `
-          <li>
+        <p class="muted">Given for ${esc(range)}. A draft: nothing reaches the public site until you press Publish, and a reload starts again from the published awards. Only Mains are on the list: a Farm never receives a Weekly Award.</p>
+        <div class="aw-fill">
+          <button class="btn" type="button" data-award-fill>Fill from the promise</button>
+          <p class="match">${f ? `Filled from the week of <b>${esc(dayMonth(f.week))}</b>'s Reward Promise${f.week === w ? "" : ", the latest before this week"}, paid on the ${esc(PAID_ON_LABEL[f.paidOn] ?? f.paidOn)} ranking.`
+            : live.length ? `Opened with the ${live.length} published ${live.length === 1 ? "award" : "awards"}.` : "No awards published for this week yet."}</p>
+        </div>
+        ${draft.skipped.length ? `<div class="note" role="note"><span><b>Fill skipped ${draft.skipped.length} ${draft.skipped.length === 1 ? "row" : "rows"}</b>, and the next Main moved up: ${draft.skipped.map((s) => `${esc(s.name)} (${esc(s.reason)})`).join(", ")}. Check whether ${draft.skipped.length === 1 ? "it" : "they"} should have had an award.</span></div>` : ""}
+        ${awards.length ? `<ol class="aw-rows">${awards.map((a, i) => `
+          <li${i === draft.editing ? ' class="editing"' : ""}>
             <span class="place num p${a.place}">${ordinal(a.place)}</span>
             <span class="who">${gov(a.id, nameOf(a.id))}</span>
             <span class="aw">${a.items.length ? rewardItems(a.items) : ""}${a.award ? `<span>${esc(a.award)}</span>` : ""}${a.note ? `<small>${esc(a.note)}</small>` : ""}</span>
-            <button class="btn quiet sm" type="button" data-award-remove="${a.row}">Remove<span class="sr-only"> the ${ordinal(a.place)} place award for ${esc(nameOf(a.id))}</span></button>
-          </li>`).join("")}</ol>` : ""}
+            <span class="row-actions">
+              <button class="btn quiet sm" type="button" data-award-edit="${i}">Edit<span class="sr-only"> the ${ordinal(a.place)} place award for ${esc(nameOf(a.id))}</span></button>
+              <button class="btn quiet sm" type="button" data-award-remove="${i}">Remove<span class="sr-only"> the ${ordinal(a.place)} place award for ${esc(nameOf(a.id))}</span></button>
+            </span>
+          </li>`).join("")}</ol>` : `<p class="match">The draft has no awards.${live.length ? " Publishing it clears the week." : ""}</p>`}
+        <h3 class="aw-form-title">${editing ? `Edit the ${ordinal(editing.place)} place award` : "Add an award"}</h3>
         <datalist id="aw-mains">${mains.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
         <form id="aw-add" class="fields">
           <label class="field narrow">Place
-            <input type="number" name="place" min="1" step="1" value="${next}" required>
+            <input type="number" name="place" min="1" step="1" value="${editing ? editing.place : next}" required>
           </label>
           <label class="field wide">Main
-            <input list="aw-mains" name="main" placeholder="Pick a Main" autocomplete="off" required>
+            <input list="aw-mains" name="main" value="${editing ? esc(label(byId.get(editing.id) ?? { name: editing.id, id: editing.id })) : ""}" placeholder="Pick a Main" autocomplete="off" required>
           </label>
           <fieldset class="field reward-pick">
             <legend>Reward items <span class="faint">· type an amount for each item the award gives</span></legend>
             <div class="reward-grid">${REWARD_ITEMS.map((r) => `
               <label class="reward-opt"><img src="${r.icon}" alt="${esc(r.name)}"><span>${esc(r.name)}</span>
-                <input name="item-${r.id}" inputmode="decimal" autocomplete="off" placeholder="${r.kind === "chest" ? "1" : "2M"}" aria-describedby="aw-amount-hint"></label>`).join("")}
+                <input name="item-${r.id}" value="${esc(amounts[r.id] ?? "")}" inputmode="decimal" autocomplete="off" placeholder="${r.kind === "chest" ? "1" : "2M"}" aria-describedby="aw-amount-hint"></label>`).join("")}
             </div>
             <small id="aw-amount-hint" class="faint">A chest takes a count. A resource takes a number with K or M, for example 500K or 2M.</small>
           </fieldset>
           <label class="field wide">Other
-            <input name="award" placeholder="Optional, for anything not in the list" autocomplete="off">
+            <input name="award" value="${esc(editing?.award ?? "")}" placeholder="Optional, for anything not in the list" autocomplete="off">
           </label>
           <label class="field wide">Note
-            <input name="note" placeholder="Optional" autocomplete="off">
+            <input name="note" value="${esc(editing?.note ?? "")}" placeholder="Optional" autocomplete="off">
           </label>
-          <button class="btn" type="submit">Add award</button>
+          <button class="btn" type="submit">${editing ? "Save to draft" : "Add to draft"}</button>
+          ${editing ? `<button class="btn quiet" type="button" data-award-cancel>Cancel</button>` : ""}
         </form>
-      </section>`;
+      </section>
+      ${changed ? `
+      <div class="save-bar" role="region" aria-label="Unpublished Weekly Awards">
+        <span class="pulse unsaved" aria-hidden="true"></span>
+        <span class="sum"><b>Not published.</b> <span>${awards.length
+          ? `${awards.length} ${awards.length === 1 ? "award" : "awards"} for ${esc(range)}${live.length ? `, replacing the ${live.length} published` : ""}.`
+          : `Publishing clears the week's ${live.length} published ${live.length === 1 ? "award" : "awards"}.`}</span></span>
+        <button class="btn quiet" type="button" data-award-discard>Discard</button>
+        <button class="btn primary" type="button" data-award-publish>Publish</button>
+      </div>` : ""}`;
   }
 
   function wireAwards(body, msg) {
     const form = body.querySelector("#aw-add");
-    const nameOf = (id) => byId.get(id)?.name ?? id;
-    form?.addEventListener("submit", async (e) => {
+    if (!form) return;
+    const redraw = (text) => { msgText = text; draw(); };
+
+    body.querySelector("[data-award-fill]").addEventListener("click", async (e) => {
+      if (draft.edited && !confirm("Fill replaces the draft, and your changes to it are lost. Fill anyway?")) return;
+      e.target.disabled = true;
+      msg.textContent = "Filling…";
+      let promises, entries;
+      try {
+        // The week's rows in the Council's order: Fort Count, then tie order, as the public ranking shows them.
+        const res = await supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", week)
+          .order("fort_count", { ascending: false }).order("tie_order").order("id");
+        check(res, "Fort Week rows");
+        entries = res.data.map((r) => ({ id: r.character_id, name: r.name, fortCount: r.fort_count }));
+        promises = await loadPromises();
+      } catch (err) {
+        e.target.disabled = false;
+        msg.textContent = `Could not fill: ${err.message}`;
+        return;
+      }
+      const promise = promiseToStartFrom(promises, week);
+      if (!promise) {
+        redraw(`There is no Reward Promise for the week of ${dayMonth(week)} or any week before it, so Fill drafted nothing.`);
+        return;
+      }
+      const ranking = mainsRanking(entries, state.governors, { withFarms: promise.paidOn === "main_farm" });
+      const filled = fillWeeklyAwards(promise, ranking);
+      setDraftAwards(filled.awards.map((a) => ({ id: a.id, place: a.place, award: a.award ?? null, note: null, items: a.items })));
+      Object.assign(draft, { filled: { week: promise.week, paidOn: promise.paidOn }, skipped: filled.skipped, edited: false, editing: null });
+      redraw(`Filled ${filled.awards.length} ${filled.awards.length === 1 ? "award" : "awards"} from the week of ${dayMonth(promise.week)}'s Reward Promise. Check the draft, then publish it.`);
+    });
+
+    form.addEventListener("submit", (e) => {
       e.preventDefault();
       // Each item with an amount typed is on the award, in list order. A typed amount that is not one
       // stays on as null, so the rules module names the item it is wrong for.
       const items = REWARD_ITEMS.filter((r) => form[`item-${r.id}`].value.trim())
         .map((r) => ({ item: r.id, amount: parseAwardAmount(form[`item-${r.id}`].value, r.kind) }));
-      const award = { week, id: typedId(form.main.value.trim()), place: Number(form.place.value), award: form.award.value.trim(), note: form.note.value.trim() || null, items };
+      const award = { week, id: typedId(form.main.value.trim()), place: Number(form.place.value), award: form.award.value.trim() || null, note: form.note.value.trim() || null, items };
       const problem = checkWeeklyAward(award, state.governors, Date.now());
-      if (problem) { msg.textContent = `Could not add the award: ${problem}`; return; }
-      const submit = form.querySelector("button[type=submit]");
-      submit.disabled = true;
-      msg.textContent = "Saving…";
-      // One call adds the award and its items together (add_weekly_award in supabase/migrations).
-      const { error } = await supabase.rpc("add_weekly_award", { week, character_id: award.id, place: award.place, award: award.award || null, note: award.note, items });
+      if (problem) { msg.textContent = `Could not ${draft.editing != null ? "change" : "add"} the award: ${problem}`; return; }
+      const { week: _, ...a } = award;
+      const was = draft.editing;
+      setDraftAwards(was != null ? draft.awards.map((x, i) => (i === was ? a : x)) : [...draft.awards, a]);
+      Object.assign(draft, { edited: true, editing: null });
+      redraw(`${was != null ? "Changed" : "Added"} the ${ordinal(a.place)} place award for ${nameOf(a.id)} in the draft. Publish to put it on the public site.`);
+    });
+    body.querySelector("[data-award-cancel]")?.addEventListener("click", () => { draft.editing = null; redraw(""); });
+    body.querySelectorAll("button[data-award-edit]").forEach((b) => b.addEventListener("click", () => {
+      draft.editing = Number(b.dataset.awardEdit);
+      redraw("");
+      section.querySelector("#aw-add [name=main]")?.focus();
+    }));
+    body.querySelectorAll("button[data-award-remove]").forEach((b) => b.addEventListener("click", () => {
+      const i = Number(b.dataset.awardRemove), a = draft.awards[i];
+      draft.awards = draft.awards.filter((_, k) => k !== i);
+      Object.assign(draft, { edited: true, editing: draft.editing === i ? null : draft.editing != null && draft.editing > i ? draft.editing - 1 : draft.editing });
+      redraw(`Removed the ${ordinal(a.place)} place award for ${nameOf(a.id)} from the draft.`);
+    }));
+    body.querySelector("[data-award-discard]")?.addEventListener("click", () => {
+      openDraft();
+      redraw("Discarded the draft. The published awards are unchanged.");
+    });
+
+    body.querySelector("[data-award-publish]")?.addEventListener("click", async (e) => {
+      const awards = draft.awards;
+      const live = published(week);
+      for (const a of awards) {
+        const problem = checkWeeklyAward({ ...a, week }, state.governors, Date.now());
+        if (problem) { msg.textContent = `Could not publish the ${ordinal(a.place)} place award for ${nameOf(a.id)}: ${problem}`; return; }
+      }
+      if (!awards.length && !confirm(`Publish no awards for the week of ${dayMonth(week)}? Its ${live.length} published ${live.length === 1 ? "award leaves" : "awards leave"} the public site.`)) return;
+      body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
+      msg.textContent = "Publishing…";
+      // One call replaces the week's awards and their items together (publish_weekly_awards in supabase/migrations).
+      const { error } = await supabase.rpc("publish_weekly_awards", {
+        week, awards: awards.map((a) => ({ character_id: a.id, place: a.place, award: a.award, note: a.note, items: a.items })),
+      });
       if (error) {
-        submit.disabled = false;
+        body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
         // 23503 = Postgres foreign_key_violation, from one of weekly_award's two foreign keys: the Fort Week
         // (weekly_award_week_fkey: the week was removed while this page was open) or the Main (a Farm, say).
-        msg.textContent = error.code !== "23503" ? `Could not add the award: ${error.message}`
-          : error.message.includes("weekly_award_week_fkey") ? "Could not add the award: this Fort Week is no longer saved. Reload the page."
-          : `Could not add the award: ${nameOf(award.id)} is not a Main on record, so it cannot receive a Weekly Award.`;
+        msg.textContent = error.code !== "23503" ? `Could not publish: ${error.message}. Nothing changed on the public site.`
+          : error.message.includes("weekly_award_week_fkey") ? "Could not publish: this Fort Week is no longer saved. Reload the page."
+          : "Could not publish: a Governor on the draft is no longer a Main on record, so it cannot receive a Weekly Award. Nothing changed on the public site.";
         return;
       }
-      showFortWeek(section, `Added the ${ordinal(award.place)} place award for ${nameOf(award.id)}. It is on the public site now.`, week);
+      showFortWeek(section, awards.length
+        ? `Published ${awards.length} ${awards.length === 1 ? "award" : "awards"} for the week of ${dayMonth(week)}. ${awards.length === 1 ? "It is" : "They are"} on the public site now.`
+        : `Cleared the Weekly Awards for the week of ${dayMonth(week)}.`, week);
     });
-    body.querySelectorAll("button[data-award-remove]").forEach((b) => b.addEventListener("click", async () => {
-      const a = state.awards.find((x) => String(x.row) === b.dataset.awardRemove);
-      if (!confirm(`Remove the ${ordinal(a.place)} place award for ${nameOf(a.id)}? It leaves the public site.`)) return;
-      b.disabled = true;
-      const { error } = await supabase.from("weekly_award").delete().eq("id", a.row);
-      if (error) { b.disabled = false; msg.textContent = `Could not remove the award: ${error.message}`; return; }
-      showFortWeek(section, `Removed the ${ordinal(a.place)} place award for ${nameOf(a.id)}.`, week);
-    }));
   }
 
   function wire(body) {

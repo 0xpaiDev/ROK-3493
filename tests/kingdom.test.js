@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, livePromise, promiseToStartFrom, ordinal } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -505,4 +505,48 @@ test("two tiers of one promise can't pay the same place, but a gap is allowed", 
   assert.equal(checkRewardPromise(promise(w, tier(1, gold), tier(2, gold), tier(6, gold)), inWeek), null);
   const fifteen = Array.from({ length: 15 }, (_, i) => tier(i + 1, gold));
   assert.equal(checkRewardPromise(promise(w, ...fifteen), inWeek), null);
+});
+
+// Fill: a closed week's Weekly Awards drafted from its Reward Promise and the ranking it pays on.
+const gold = (m) => [{ item: "rss-gold", amount: m * 1e6 }];
+
+test("Fill gives the Main at each promised place that tier's items", () => {
+  const governors = [main("a"), main("b"), main("c")];
+  const ranking = mainsRanking([entry("a", 40), entry("b", 30), entry("c", 20)], governors);
+  const { awards, skipped } = fillWeeklyAwards(promise("2026-11-02", tier(1, gold(5)), tier(2, gold(3), "and a shout-out")), ranking);
+  assert.deepEqual(awards, [
+    { id: "a", place: 1, items: [{ item: "rss-gold", amount: 5e6 }], award: null },
+    { id: "b", place: 2, items: [{ item: "rss-gold", amount: 3e6 }], award: "and a shout-out" },
+  ]);
+  assert.deepEqual(skipped, []);
+});
+
+test("Fill gives Mains tied on forts consecutive places in the Council's tie order", () => {
+  const governors = [main("a"), main("b"), main("c")];
+  const ranking = mainsRanking([entry("b", 30), entry("a", 30), entry("c", 20)], governors);
+  const { awards } = fillWeeklyAwards(promise("2026-11-02", tier(1, gold(5)), tier(2, gold(3)), tier(3, gold(1))), ranking);
+  assert.deepEqual(awards.map((a) => [a.id, a.place]), [["b", 1], ["a", 2], ["c", 3]]);
+});
+
+test('Fill skips "needs ID" rows and unlinked Farms, moves the next Main up and lists each skip', () => {
+  const governors = [main("a"), main("b"), main("c"), farm("u")];
+  const ranking = mainsRanking([entry("a", 40), { id: null, name: "Nameless", fortCount: 35 }, entry("u", 32), entry("b", 30), entry("c", 20)], governors, { withFarms: true });
+  const { awards, skipped } = fillWeeklyAwards(promise("2026-11-02", tier(1, gold(5)), tier(2, gold(3)), tier(3, gold(1))), ranking);
+  assert.deepEqual(awards.map((a) => [a.id, a.place]), [["a", 1], ["b", 2], ["c", 3]]);
+  assert.deepEqual(skipped, [{ name: "Nameless", reason: "needs ID" }, { name: "Gov u", reason: "unlinked Farm" }]);
+});
+
+test("Fill pays nothing for a promised place past the end of the ranking, nor for a gap", () => {
+  const governors = [main("a"), main("b"), main("c")];
+  const ranking = mainsRanking([entry("a", 40), entry("b", 30), entry("c", 20)], governors);
+  const { awards } = fillWeeklyAwards(promise("2026-11-02", tier(1, gold(5)), tier(3, gold(1)), tier(10, gold(1))), ranking);
+  assert.deepEqual(awards.map((a) => [a.id, a.place]), [["a", 1], ["c", 3]]);
+});
+
+test("Fill on the Main + Farm ranking pays the Mains in Group Score order, never a Farm under its Main", () => {
+  const governors = [main("a"), main("b"), farm("f1", "b"), farm("f2", "b")];
+  const ranking = mainsRanking([entry("a", 35), entry("b", 30), entry("f1", 10), entry("f2", 10)], governors, { withFarms: true });
+  const { awards, skipped } = fillWeeklyAwards({ ...promise("2026-11-02", tier(1, gold(5)), tier(2, gold(3)), tier(3, gold(1))), paidOn: "main_farm" }, ranking);
+  assert.deepEqual(awards.map((a) => [a.id, a.place]), [["b", 1], ["a", 2]]);
+  assert.deepEqual(skipped, []);
 });
