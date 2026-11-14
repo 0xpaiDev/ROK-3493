@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -36,7 +36,6 @@ import { rewardItem } from "./rewards.js";
   }).join("")}</span>`;
   // What an award gives: its reward items, then any free text. An award from before reward items is text only.
   const awardBody = (a, textTag = "span") => `${a.items?.length ? rewardItems(a.items) : ""}${a.award ? `<${textTag} class="reward">${esc(a.award)}</${textTag}>` : ""}`;
-  const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
   const pad = (n) => String(n).padStart(2, "0");
   const deltaHtml = (v, isNew) => {
     if (isNew) return `<span class="delta new">NEW</span>`;
@@ -305,7 +304,8 @@ import { rewardItem } from "./rewards.js";
             <div class="award-head"><span class="eyebrow">Reward Promise · Week ${nowN}</span><span class="mono faint" data-countdown>${document.getElementById("countdown").textContent}</span></div>
             <h2>Fort Grind: ${fmtRange(now)}</h2>
             ${P.intro || R.intro ? `<p>${esc(P.intro || R.intro)}</p>` : ""}
-            <ul class="tiers">${P.tiers.map((t) => `<li><span class="place">${esc(t.place)}</span><span class="aw">${awardBody({ items: t.items, award: t.reward })}</span></li>`).join("")}</ul>
+            <ul class="tiers">${P.tiers.map((t) => `<li><span class="place">${ordinal(t.place)}</span><span class="aw">${awardBody({ items: t.items, award: t.reward })}</span></li>`).join("")}</ul>
+            <p class="paid-on">Paid on the <b>${P.paidOn === "main_farm" ? "Main + Farm" : "Mains"}</b> ranking of Week ${nowN}.</p>
             ${R.rules?.length ? `<ul class="rules">${R.rules.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
           </section>` : ""}
           <section class="card reveal" style="--d:780ms">

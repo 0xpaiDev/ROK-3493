@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, livePromise, promiseToStartFrom } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, livePromise, promiseToStartFrom, ordinal } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -454,26 +454,25 @@ test("a resource's amount that rounds up to the next unit reads in that unit", (
 
 // Reward Promises. 2026-11-14 is a Saturday in the Fort Week of Monday 9 Nov.
 const inWeek = Date.parse("2026-11-14T12:00:00Z");
-const promise = (week, ...tiers) => ({ week, intro: null, tiers });
+const promise = (week, ...tiers) => ({ week, intro: null, paidOn: "mains", tiers });
 const tier = (place, items = [], reward = null) => ({ place, items, reward });
 
 test("a Reward Promise can be set for the Live Week and later weeks, never a closed one", () => {
-  const p = (w) => promise(w, tier("1st", [{ item: "chest-legendary", amount: 1 }]));
+  const p = (w) => promise(w, tier(1, [{ item: "chest-legendary", amount: 1 }]));
   assert.equal(checkRewardPromise(p("2026-11-09"), inWeek), null);
   assert.equal(checkRewardPromise(p("2026-11-16"), inWeek), null);
   assert.match(checkRewardPromise(p("2026-11-02"), inWeek), /closed/);
   assert.match(checkRewardPromise(p("2026-11-10"), inWeek), /Monday/);
 });
 
-test("each place on a Reward Promise needs a label and items or text, with whole amounts above 0", () => {
+test("each place on a Reward Promise needs items or text, with whole amounts above 0", () => {
   const w = "2026-11-09";
   assert.match(checkRewardPromise(promise(w), inWeek), /at least one place/);
-  assert.match(checkRewardPromise(promise(w, tier(" ", [{ item: "rss-food", amount: 1 }])), inWeek), /Name place 1/);
-  assert.match(checkRewardPromise(promise(w, tier("1st")), inWeek), /1st: pick a reward item/);
-  assert.equal(checkRewardPromise(promise(w, tier("Top 10", [], "A shout-out")), inWeek), null);
-  assert.match(checkRewardPromise(promise(w, tier("1st", [{ item: "gems", amount: 1 }])), inWeek), /not a reward item/);
-  assert.match(checkRewardPromise(promise(w, tier("2nd", [{ item: "chest-epic", amount: null }])), inWeek), /2nd: the amount of Epic Chest is a count/);
-  assert.match(checkRewardPromise(promise(w, tier("2nd", [{ item: "rss-gold", amount: 0 }])), inWeek), /500K or 2M/);
+  assert.match(checkRewardPromise(promise(w, tier(1)), inWeek), /1st: pick a reward item/);
+  assert.equal(checkRewardPromise(promise(w, tier(10, [], "A shout-out")), inWeek), null);
+  assert.match(checkRewardPromise(promise(w, tier(1, [{ item: "gems", amount: 1 }])), inWeek), /not a reward item/);
+  assert.match(checkRewardPromise(promise(w, tier(2, [{ item: "chest-epic", amount: null }])), inWeek), /2nd: the amount of Epic Chest is a count/);
+  assert.match(checkRewardPromise(promise(w, tier(2, [{ item: "rss-gold", amount: 0 }])), inWeek), /500K or 2M/);
 });
 
 test("home shows only the Live Week's Reward Promise", () => {
@@ -487,4 +486,23 @@ test("a week with no Reward Promise starts from the latest one before it", () =>
   assert.equal(promiseToStartFrom(all, "2026-11-02").week, "2026-11-02");
   assert.equal(promiseToStartFrom(all, "2026-11-16").week, "2026-11-02");
   assert.equal(promiseToStartFrom(all, "2026-10-19"), null);
+});
+
+test("a place reads as an ordinal: 1st, 2nd, 3rd, 11th, 22nd", () => {
+  assert.deepEqual([1, 2, 3, 4, 11, 12, 13, 21, 22, 101, 111, 112].map(ordinal),
+    ["1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "22nd", "101st", "111th", "112th"]);
+});
+
+test("a promise tier pays one place, a whole number from 1 to 1000", () => {
+  const w = "2026-11-09", gold = [{ item: "rss-gold", amount: 1e6 }];
+  assert.deepEqual([tier(0, gold), tier(1.5, gold), tier(null, gold), tier(1001, gold), tier("6", gold)].map((t) => checkRewardPromise(promise(w, t), inWeek)).map((m) => /Place 1: its place is a whole number from 1 to 1000/.test(m)), [true, true, true, true, true]);
+  assert.equal(checkRewardPromise(promise(w, tier(1000, gold)), inWeek), null);
+});
+
+test("two tiers of one promise can't pay the same place, but a gap is allowed", () => {
+  const w = "2026-11-09", gold = [{ item: "rss-gold", amount: 1e6 }];
+  assert.match(checkRewardPromise(promise(w, tier(1, gold), tier(6, gold), tier(6, gold)), inWeek), /6th is promised twice/);
+  assert.equal(checkRewardPromise(promise(w, tier(1, gold), tier(2, gold), tier(6, gold)), inWeek), null);
+  const fifteen = Array.from({ length: 15 }, (_, i) => tier(i + 1, gold));
+  assert.equal(checkRewardPromise(promise(w, ...fifteen), inWeek), null);
 });

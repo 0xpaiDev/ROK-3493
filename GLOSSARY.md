@@ -89,12 +89,16 @@ A reward the Council gives a Main after a Fort Week, as King's Chests or resourc
 _Avoid_: Prize, bonus
 
 **Reward Promise**:
-What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Home shows it until the Monday reset; then that week's Weekly Awards take over. A place is a label ("1st", "Top 10"), not a number.
+What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Each tier pays exactly one place (1st, 7th), so the promise matches the ranking place for place, and the promise says whether it pays on the Mains ranking or the "Main + Farm" ranking. Home shows it until the Monday reset; then that week's Weekly Awards take over.
 _Avoid_: Prize pool, bounty
 
 **Reward item**:
-One thing a Weekly Award gives, with its amount: a King's Chest grade as a count (×2) or a resource (Food, Wood, Stone, Gold) in K or M (2M Food). The game fixes the list; an award can hold several, plus free text for anything outside it.
+One thing a Weekly Award gives, with its amount: a King's Chest grade as a count (×2) or a resource (Food, Wood, Stone, Gold, Any Resource) in K or M (2M Food). The game fixes the list; an award can hold several, plus free text for anything outside it.
 _Avoid_: Prize, loot
+
+**Any Resource**:
+A resource Reward item where the winner picks which resource they receive, counted in K or M.
+_Avoid_: RSS of choice, choice chest
 
 **King's Chest**:
 A reward chest the King hands out as part of a Weekly Award, in four grades: Legendary, Epic, Elite and Advanced. The game labels them "Trophy".
