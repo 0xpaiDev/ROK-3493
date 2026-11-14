@@ -149,6 +149,7 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .tag.tie { text-transform: none; letter-spacing: 0; font-weight: 500; background: none; border: 1px solid var(--line-strong); color: var(--muted); cursor: help; }
 .tag.farm { background: none; border: 1px solid var(--line-strong); color: var(--muted); }
 .tag.live { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; background: var(--live-wash); color: var(--live); }
+.tag.final { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; background: none; border: 1px solid var(--line-strong); color: var(--text); }
 .live-line { margin-top: 8px; }
 .linkish { background: none; border: 0; padding: 0; cursor: pointer; color: var(--text); font-weight: 600; text-align: left; max-width: 100%; }
 .linkish:hover { color: var(--link); }

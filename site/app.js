@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 
 (async () => {
@@ -69,6 +69,8 @@ import { loadKingdom } from "./store.js";
   const weeks = D.fortWeeks;
   const now = Date.now();
   const isLive = (w) => isLiveWeek(w.start, now);
+  // The week home, Find your Governor and the share card show: the Live Week once it has rows, else the last closed week.
+  const homeI = homeWeek(weeks, now);
   const governors = new Map();
   // A Fort Week row with no Character ID ("needs ID") is keyed by its own row, so two such rows
   // with the same name stay two Governors: names never merge Governors.
@@ -149,7 +151,8 @@ import { loadKingdom } from "./store.js";
   };
 
   // ---------- views ----------
-  const state = { fortView: "weekly", withFarms: false, fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
+  // Fort Rankings opens on the week home shows, so home's "All N Mains →" and Find links land on it.
+  const state = { fortView: "weekly", withFarms: false, fortWeek: homeI >= 0 ? homeI : weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
 
   function podium(rows, { live = false } = {}) {
     const step = (r, place) => {
@@ -199,12 +202,13 @@ import { loadKingdom } from "./store.js";
     const day = t.toISOString().slice(0, 10) === new Date(now).toISOString().slice(0, 10) ? "" : `${DAY[t.getUTCDay()]} `;
     return `<span class="tag live" title="Read from the in-game ranking at ${esc(t.toISOString().slice(0, 16).replace("T", " "))} UTC">Live, as of ${day}${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} UTC</span>`;
   };
+  const finalTag = `<span class="tag final" title="The Monday reset closed this week: these Fort Counts are final">Final</span>`;
   const liveNote = `<div class="note">${ICON_INFO}<span>Live Week: read from the in-game ranking once a day until the Monday reset closes it. Fort Counts still rise, so arrows are hidden and Fort Average leaves this week out until then.</span></div>`;
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
 
   function home() {
-    if (!weeks.length) return `<div class="wrap page"><div class="card empty">No Fort Week has been logged yet.</div></div>`;
-    const i = weeks.length - 1, w = weeks[i], rows = weekRows(i), wn = isoWeek(w.start);
+    if (homeI < 0) return `<div class="wrap page"><div class="card empty">${weeks.length ? `Week ${isoWeek((weeks.find(isLive) ?? weeks[weeks.length - 1]).start)} is waiting for its first fort.` : "No Fort Week has been logged yet."}</div></div>`;
+    const i = homeI, w = weeks[i], rows = weekRows(i), wn = isoWeek(w.start);
     const now = fortWeekAt(Date.now()), nowN = isoWeek(now.start);
     const total = w.entries.reduce((a, e) => a + e.fortCount, 0);
     const count = w.entries.length;
@@ -212,10 +216,13 @@ import { loadKingdom } from "./store.js";
     const live = isLive(w);
     const leaders = rows.filter((r) => r.e.rank === 1);
     const lead = leaders[0];
-    const headline = !lead ? `Week ${wn} is waiting for its first fort.`
-      : leaders.length > 1
-        ? `${leaders.map((r) => esc(r.g.name)).join(" and ")} tie for the week with <em>${lead.e.fortCount} forts.</em>`
-        : `${esc(lead.g.name)} ${live ? "leads" : "takes"} the week with <em>${lead.e.fortCount} forts.</em>`;
+    // The headline says which week it is and whether it is still running: "so far" for the Live Week.
+    const names = leaders.map((r) => esc(r.g.name)).join(" and ");
+    const forts = lead ? `<em>${lead.e.fortCount} forts${live ? " so far" : ""}.</em>` : "";
+    const headline = !lead ? `No Governor was ranked in Week ${wn}.`
+      : live
+        ? `${names} ${leaders.length > 1 ? "share the lead in" : "leads"} Week ${wn} with ${forts}`
+        : `${names} ${leaders.length > 1 ? "tie for" : "takes"} Week ${wn} with ${forts}`;
     const reset = now.resetsAt;
     const R = C.rewards;
 
@@ -232,7 +239,7 @@ import { loadKingdom } from "./store.js";
             <div class="week-meta reveal" style="--d:60ms">
               <span class="eyebrow">Fort Week ${wn}</span><span aria-hidden="true">·</span><span>${fmtRange(w)}</span>
               ${partial ? `<span class="tag partial" title="This saved Weekly Ranking is known to be incomplete">Partial Week</span>` : ""}
-              ${live ? liveTag(w) : ""}
+              ${live ? liveTag(w) : finalTag}
             </div>
             <h1 class="reveal" style="--d:140ms">${headline}</h1>
             <p class="hero-sub reveal" style="--d:220ms">${count} Governors ranked in Week ${wn}. Find yourself in the Weekly Ranking${nowN === wn ? "" : `, then go take Week ${nowN}`}.</p>
@@ -257,7 +264,7 @@ import { loadKingdom } from "./store.js";
 
       <section class="wrap" aria-label="Week ${wn} in numbers">
         <div class="stats">
-          <div class="stat reveal" style="--d:380ms"><div class="label">Total Fort Count</div><div class="value num" data-count="${total}">${total.toLocaleString("en")}</div><div class="sub">Week ${wn}, all Governors</div></div>
+          <div class="stat reveal" style="--d:380ms"><div class="label">Total Fort Count</div><div class="value num" data-count="${total}">${total.toLocaleString("en")}</div><div class="sub">Week ${wn}${live ? " so far" : ""}, all Governors</div></div>
           <div class="stat reveal" style="--d:440ms"><div class="label">Governors ranked</div><div class="value num" data-count="${count}">${count}</div><div class="sub">Mains and Farms</div></div>
           <div class="stat reveal" style="--d:500ms"><div class="label">Average Fort Count</div><div class="value num" data-count="${count ? Math.round(total / count) : 0}">${count ? Math.round(total / count) : "–"}</div><div class="sub">per ranked Governor</div></div>
           <div class="stat reveal" style="--d:560ms"><div class="label">Next reset</div><div class="value mono num" data-countdown>${document.getElementById("countdown").textContent}</div><div class="sub">${DAY[reset.getUTCDay()]} ${reset.getUTCDate()} ${MON[reset.getUTCMonth()]} · 00:00 UTC</div></div>
@@ -267,8 +274,8 @@ import { loadKingdom } from "./store.js";
       <section class="wrap body-grid">
         <div class="card ranking reveal" style="--d:620ms">
           <div class="card-head">
-            <div><div class="eyebrow">Weekly Ranking · Mains</div><h2>Week ${wn}, top ${Math.min(10, rows.length)}</h2></div>
-            <a href="#fort">All ${rows.length} Mains →</a>
+            <div><div class="eyebrow">Weekly Ranking · Mains</div><h2>Week ${wn}, top ${Math.min(10, rows.length)}</h2><div class="live-line">${live ? liveTag(w) : finalTag}</div></div>
+            <a href="#fort" data-home-week>All ${rows.length} Mains →</a>
           </div>
           ${partial ? partialNote : ""}
           ${live ? liveNote : ""}
@@ -304,12 +311,12 @@ import { loadKingdom } from "./store.js";
   // "Find your Governor": the query is only ever written into HTML through esc().
   function findResults(query) {
     const q = query.trim();
-    if (!q || !weeks.length) return "";
-    const i = weeks.length - 1, wn = isoWeek(weeks[i].start);
+    if (!q || homeI < 0) return "";
+    const i = homeI, wn = isoWeek(weeks[i].start);
     // Mains as the Weekly Ranking shows them by default, plus every Farm with its own Fort Count.
     const hits = findInRanking([...plain[i], ...grouped[i].flatMap((r) => [...(r.unlinked ? [r] : []), ...r.farms])], D.nameHistory, q);
     if (!hits.length) {
-      return q.length < 2 ? "" : `<p class="find-none">No Governor in the Week ${wn} Weekly Ranking matches “${esc(q)}”. <a href="#fort">Search Fort Rankings →</a></p>`;
+      return q.length < 2 ? "" : `<p class="find-none">No Governor in the Week ${wn} Weekly Ranking matches “${esc(q)}”. <a href="#fort" data-home-week>Search Fort Rankings →</a></p>`;
     }
     return hits.slice(0, 3).map((e) => {
       const g = get(e.id, e.name, e.entry);
@@ -318,7 +325,7 @@ import { loadKingdom } from "./store.js";
         <span class="who"><b class="ell">${esc(g.name)}</b><small>${g.id ? "Character ID " + esc(g.id) : "needs ID"}</small></span>
         <span class="fc"><b class="num">${e.fortCount}</b><small>forts</small></span>
       </button>`;
-    }).join("") + (hits.length > 3 ? `<p class="find-more">${hits.length - 3} more match. Keep typing, or <a href="#fort">open the Weekly Ranking →</a></p>` : "");
+    }).join("") + (hits.length > 3 ? `<p class="find-more">${hits.length - 3} more match. Keep typing, or <a href="#fort" data-home-week>open the Weekly Ranking →</a></p>` : "");
   }
 
   function fort() {
@@ -513,7 +520,7 @@ import { loadKingdom } from "./store.js";
 
   // ---------- Week champion share card: 1080×1350 PNG, drawn client-side ----------
   async function shareCard() {
-    const i = weeks.length - 1, w = weeks[i], rows = weekRows(i), wn = isoWeek(w.start);
+    const i = homeI, w = weeks[i], rows = weekRows(i), wn = isoWeek(w.start), live = isLive(w);
     const [c1, c2, c3] = rows;
     await Promise.all(['150px "Instrument Serif"', '600 40px Geist', '26px "Geist Mono"', '600 260px Geist'].map((f) => document.fonts.load(f, c1.g.name)));
     const W = 1080, H = 1350, cv = document.createElement("canvas");
@@ -552,7 +559,7 @@ import { loadKingdom } from "./store.js";
     x.fillStyle = "#A79FBC"; font(`22px ${MONO}`); x.fillText("Kingdom 3493", 170, 142);
     x.fillStyle = "#C3A6FF"; x.textAlign = "right"; x.fillText(`FORT WEEK ${wn}`, 984, 126); x.textAlign = "left";
 
-    x.fillStyle = "#E9C46A"; font(`26px ${MONO}`); x.fillText(c2?.e.rank === 1 ? "WEEK CHAMPION · TIE" : "WEEK CHAMPION", 96, 340);
+    x.fillStyle = "#E9C46A"; font(`26px ${MONO}`); x.fillText((live ? "LEADING SO FAR" : "WEEK CHAMPION") + (c2?.e.rank === 1 ? " · TIE" : ""), 96, 340);
     x.fillStyle = "#EEEAF6";
     const name = fit(c1.g.name, (s) => `${s}px ${SERIF}`, 150, 888);
     x.fillText(name, 96, 490);
@@ -602,6 +609,8 @@ import { loadKingdom } from "./store.js";
   }
 
   app.addEventListener("click", async (ev) => {
+    // Home's links into Fort Rankings open the week home shows, even after a chip picked another.
+    if (ev.target.closest("a[data-home-week]") && homeI >= 0) state.fortWeek = homeI;
     const t = ev.target.closest("button");
     if (!t) return;
     if (t.dataset.gov) return openGovernor(t.dataset.gov);

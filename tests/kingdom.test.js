@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -398,4 +398,18 @@ test("Weekly Awards group by Fort Week, the latest week first and each week in p
 test("a Governor's popup lists only their Weekly Awards, the latest first", () => {
   const awards = [award("1", 3, "2026-10-26"), award("4", 1, "2026-11-02"), award("1", 1, "2026-11-02")];
   assert.deepEqual(awardsOf(awards, "1").map((a) => [a.week, a.place]), [["2026-11-02", 1], ["2026-10-26", 3]]);
+});
+
+const fortWeek = (start, ...entries) => ({ start, completeness: "complete", entries });
+
+test("home shows the Live Week once it has a ranked row", () => {
+  const now = "2026-11-14T12:00:00Z";
+  const weeks = [fortWeek("2026-11-02", entry("a", 30)), fortWeek("2026-11-09", entry("b", 4))];
+  assert.equal(homeWeek(weeks, now), 1);
+});
+
+test("home shows the last closed Fort Week while the Live Week has no rows, or there is none", () => {
+  const now = "2026-11-14T12:00:00Z";
+  const closed = [fortWeek("2026-10-26", entry("a", 12)), fortWeek("2026-11-02", entry("a", 30))];
+  assert.deepEqual([homeWeek(closed, now), homeWeek([...closed, fortWeek("2026-11-09")], now)], [1, 1]);
 });
