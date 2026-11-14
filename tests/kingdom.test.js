@@ -494,9 +494,10 @@ test("a promise tier without its own label reads as its place or place range", (
     ["1st", "2nd", "3rd", "11th", "22nd", "6th–15th", "Top 10", "4th"]);
 });
 
-test("a promise tier covers whole places from 1 up, first no later than last", () => {
+test("a promise tier covers whole places from 1 to 1000, first no later than last", () => {
   const w = "2026-11-09", gold = [{ item: "rss-gold", amount: 1e6 }];
-  assert.deepEqual([tier(0, 1, gold), tier(1.5, 2, gold), tier(null, 2, gold), tier(1, null, gold)].map((t) => checkRewardPromise(promise(w, t), inWeek)).map((m) => /whole number from 1 up/.test(m)), [true, true, true, true]);
+  assert.deepEqual([tier(0, 1, gold), tier(1.5, 2, gold), tier(null, 2, gold), tier(1, null, gold), tier(1, 1001, gold)].map((t) => checkRewardPromise(promise(w, t), inWeek)).map((m) => /whole number from 1 to 1000/.test(m)), [true, true, true, true, true]);
+  assert.equal(checkRewardPromise(promise(w, tier(1000, 1000, gold)), inWeek), null);
   assert.match(checkRewardPromise(promise(w, tier(15, 6, gold)), inWeek), /Place 1 runs backwards: 15th comes after 6th/);
 });
 

@@ -326,7 +326,7 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .award-head .eyebrow { color: var(--gold); }
 .award h2 { margin-top: 8px; }
 .award > p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
-.award > .paid-on { margin-top: 14px; }
+.award > .paid-on { margin-top: 16px; }
 .paid-on b { color: var(--text); font-weight: 600; }
 .tiers { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 1px; border-radius: 12px; overflow: hidden; background: rgba(255, 255, 255, .06); }
 .tiers li { display: flex; align-items: center; gap: 14px; padding: 12px 14px; background: var(--surface-award); }

@@ -1,6 +1,6 @@
 -- Reward payout, ticket 01: Any Resource joins the reward items, each Reward Promise tier covers a place
 -- range (first_place to last_place) with an optional label, and the promise names the ranking it pays on.
--- Safe to run twice.
+-- Safe to run twice. Additive: apply it before the site deploys, then 20261115100000 once the site is live.
 
 -- Any Resource ("rss-any"): a resource the winner picks. The item ids are the ones in site/rewards.js.
 alter table weekly_award_item drop constraint if exists weekly_award_item_item_check;
@@ -37,18 +37,24 @@ alter table reward_promise_tier add column if not exists first_place integer;
 alter table reward_promise_tier add column if not exists last_place integer;
 alter table reward_promise_tier add column if not exists label text;
 
--- The free-text place gives way to the range. The only promise saved before this, the week of 9 Nov,
+-- The range takes over from the free-text place. The only promise saved before this, the week of 9 Nov,
 -- had six places, "1st" to "5rd" and then "5-15rd": typos, and the last overlapped 5th. They become
--- 1, 2, 3, 4, 5 and 6–15 with no labels. Any other promise keeps one place per position.
+-- 1, 2, 3, 4, 5 and 6–15 with no labels. Any other promise keeps one place per position, and a place
+-- that isn't the plain ordinal of its position ("Top 10") moves into label, so no text is lost.
+-- place itself stays, nullable, so the site still live on Pages keeps loading until the new one deploys;
+-- 20261115100000_drop_promise_place.sql drops it after that.
 do $$
 begin
   if exists (select 1 from information_schema.columns
              where table_schema = 'public' and table_name = 'reward_promise_tier' and column_name = 'place') then
     update reward_promise_tier
     set first_place = position,
-        last_place = case when week = date '2026-11-09' and position = 6 then 15 else position end
+        last_place = case when week = date '2026-11-09' and position = 6 then 15 else position end,
+        label = case when week = date '2026-11-09' then null
+                     when btrim(place) ~* ('^' || position || '(st|nd|rd|th)$') then null
+                     else btrim(place) end
     where first_place is null;
-    alter table reward_promise_tier drop column place;
+    alter table reward_promise_tier alter column place drop not null;
   end if;
 end $$;
 
@@ -63,7 +69,6 @@ alter table reward_promise_tier add constraint reward_promise_tier_label_check c
 -- transaction so the public never sees a promise half saved. Refuses two tiers that cover the same place;
 -- a gap is fine. Runs as the caller: row-level security still decides, so only the Council can set one.
 -- tiers: [{ first, last, label, reward, items: [{ item, amount }] }], in the order shown.
-drop function if exists public.set_reward_promise(date, text, jsonb);
 create or replace function public.set_reward_promise(week date, intro text, paid_on text, tiers jsonb)
 returns void
 language plpgsql
@@ -98,3 +103,25 @@ $$;
 
 revoke all on function public.set_reward_promise(date, text, text, jsonb) from public, anon;
 grant execute on function public.set_reward_promise(date, text, text, jsonb) to authenticated;
+
+-- The old three-argument call, kept for an admin page still open from before the deploy: each place becomes
+-- one position wide, its text the label, and the promise keeps the ranking it already pays on.
+-- 20261115100000_drop_promise_place.sql drops it with place.
+create or replace function public.set_reward_promise(week date, intro text, tiers jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  perform public.set_reward_promise(
+    set_reward_promise.week, set_reward_promise.intro,
+    (select p.paid_on from reward_promise p where p.week = set_reward_promise.week),
+    (select jsonb_agg(jsonb_build_object('first', e.n, 'last', e.n, 'label', e.x ->> 'place',
+                                         'reward', e.x -> 'reward', 'items', e.x -> 'items') order by e.n)
+     from jsonb_array_elements(set_reward_promise.tiers) with ordinality as e (x, n)));
+end;
+$$;
+
+revoke all on function public.set_reward_promise(date, text, jsonb) from public, anon;
+grant execute on function public.set_reward_promise(date, text, jsonb) to authenticated;
