@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -412,4 +412,42 @@ test("home shows the last closed Fort Week while the Live Week has no rows, or t
   const now = "2026-11-14T12:00:00Z";
   const closed = [fortWeek("2026-10-26", entry("a", 12)), fortWeek("2026-11-02", entry("a", 30))];
   assert.deepEqual([homeWeek(closed, now), homeWeek([...closed, fortWeek("2026-11-09")], now)], [1, 1]);
+});
+
+test("an award item's amount is typed as a plain number or with a K or M suffix", () => {
+  assert.deepEqual(["2", "2M", "1.5m", "2.07M", "500K", "1,200,000"].map(parseAwardAmount), [2, 2000000, 1500000, 2070000, 500000, 1200000]);
+});
+
+test("an award item's amount is a whole number above 0", () => {
+  assert.deepEqual(["0", "0K", "", "abc", "-2", "1.5", "2B"].map(parseAwardAmount), [null, null, null, null, null, null, null]);
+});
+
+test("a King's Chest's amount reads as a count", () => {
+  assert.equal(awardAmountLabel("chest-epic", 2), "×2");
+});
+
+test("a resource's amount reads with K and M", () => {
+  assert.deepEqual([[2000000], [1500000], [500000], [750]].map(([n]) => awardAmountLabel("rss-food", n)), ["2M", "1.5M", "500K", "750"]);
+});
+
+test("a Weekly Award built from reward items needs no text", () => {
+  const items = [{ item: "chest-legendary", amount: 1 }, { item: "rss-food", amount: 2000000 }];
+  assert.equal(checkWeeklyAward({ ...award("1", 1, "2026-11-02", ""), items }, awardees, afterWeek), null);
+});
+
+test("a Weekly Award refuses an item not on the list and an amount of 0 or less", () => {
+  const withItem = (item, amount) => ({ ...award("1"), items: [{ item, amount }] });
+  assert.deepEqual([withItem("chest-mythic", 1), withItem("rss-gold", 0), withItem("rss-gold", -5), withItem("rss-gold", 1.5)].map((a) => Boolean(checkWeeklyAward(a, awardees, afterWeek))), [true, true, true, true]);
+});
+
+test("a King's Chest's amount is a plain count, never K or M", () => {
+  assert.deepEqual([["3", "chest"], ["2M", "chest"], ["2M", "resource"]].map(([t, kind]) => parseAwardAmount(t, kind)), [3, null, 2000000]);
+});
+
+test("an award item's amount past what the page can hold exactly is refused", () => {
+  assert.deepEqual(["12345678901234567", "99999999999999999999K"].map((t) => parseAwardAmount(t)), [null, null]);
+});
+
+test("a resource's amount that rounds up to the next unit reads in that unit", () => {
+  assert.deepEqual([999999, 999999999].map((n) => awardAmountLabel("rss-wood", n)), ["1M", "1000M"]);
 });

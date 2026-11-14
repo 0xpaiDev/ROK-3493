@@ -1,4 +1,5 @@
 // Kingdom rules: pure functions over plain data. No DOM, no network.
+import { rewardItem } from "./rewards.js";
 
 // Weekly Ranking: highest Fort Count first. Ties keep the stored order and share a rank number.
 export function rankWeek(entries) {
@@ -260,7 +261,8 @@ export function newFortNames(rows, nameHistory, week) {
   return rows.filter((r) => r.id != null && !isSeen(seen, r)).map((r) => ({ id: r.id, name: r.name, firstSeen: week }));
 }
 
-// Weekly Awards: { week, id, place, award, note }, a Fort Week's Monday and the Main's Character ID.
+// Weekly Awards: { week, id, place, award, note, items }, a Fort Week's Monday and the Main's Character ID.
+// items are [{ item, amount }], item an id from site/rewards.js; award is free text, optional once there are items.
 // Why an award can't be saved, as a sentence for the Council, or null when it can. Farms never receive one.
 export function checkWeeklyAward(award, governors, now = Date.now()) {
   const g = governors.find((x) => x.id === award.id);
@@ -270,7 +272,15 @@ export function checkWeeklyAward(award, governors, now = Date.now()) {
   if (isLiveWeek(award.week, now)) return "This is the Live Week. Weekly Awards are given once the Monday reset closes it.";
   if (!isClosedWeek(award.week, now)) return "This Fort Week has not started yet. Weekly Awards are given once the Monday reset closes it.";
   if (!Number.isInteger(award.place) || award.place < 1) return "The place is a whole number from 1 up.";
-  if (!award.award?.trim()) return "Write what the award is, for example the King's Chests it gives.";
+  const items = award.items ?? [];
+  const unknown = items.find((x) => !rewardItem(x.item));
+  if (unknown) return `"${unknown.item}" is not a reward item. Pick a King's Chest or a resource from the list.`;
+  const bad = items.find((x) => !Number.isInteger(x.amount) || x.amount < 1);
+  if (bad) return rewardItem(bad.item).kind === "chest"
+    ? `The amount of ${rewardItem(bad.item).name} is a count from 1 up, for example 2.`
+    : `The amount of ${rewardItem(bad.item).name} is a whole number above 0, for example 500K or 2M.`;
+  // The reward items are the award; the text is the fallback for anything outside the list.
+  if (!items.length && !award.award?.trim()) return "Write what the award is, for example the King's Chests it gives.";
   return null;
 }
 
@@ -284,4 +294,24 @@ export function awardsByWeek(awards) {
 // One Governor's Weekly Awards, by Character ID, the latest Fort Week first.
 export function awardsOf(awards, characterId) {
   return awardsByWeek(awards.filter((a) => a.id === characterId)).flatMap((w) => w.awards);
+}
+
+// An award item's amount as the Council types it: a whole number, or for a resource a number with a
+// K or M suffix ("2M", "1.5k"), thousands commas allowed. A King's Chest (kind "chest") takes a plain
+// count, so a stray "2M" is never two million chests. Null when it is not an amount.
+export function parseAwardAmount(text, kind = "resource") {
+  const m = String(text ?? "").trim().replace(/,/g, "").match(kind === "chest" ? /^(\d+)()$/ : /^(\d+(?:\.\d+)?)([km]?)$/i);
+  // Rounded to a millionth first, so 2.07M is 2070000 and not a float a hair below it.
+  const n = m && Number((Number(m[1]) * { "": 1, k: 1e3, m: 1e6 }[m[2].toLowerCase()]).toFixed(6));
+  // Past a safe integer the page can't hold the amount exactly, so it is refused rather than changed.
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+// An award item's amount the way the game writes it: a King's Chest as a count ("×2"), a resource
+// with K and M ("2M", "1.5M", "500K").
+export function awardAmountLabel(itemId, amount) {
+  if (rewardItem(itemId)?.kind === "chest") return "×" + amount;
+  // The unit is picked after rounding, so 999999 reads "1M", not "1000K".
+  const short = (n) => Number((amount / n).toFixed(2));
+  return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }

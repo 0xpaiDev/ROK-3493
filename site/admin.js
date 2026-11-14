@@ -2,7 +2,8 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel } from "./kingdom.js";
+import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const main = document.getElementById("admin");
@@ -14,6 +15,11 @@ const gov = (id, name) => `<span class="ell" title="${esc(name)}">${esc(name)}</
 const dayMonth = (iso) => new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 // A typed "Name (Character ID)" from a datalist, or a bare Character ID.
 const typedId = (typed) => typed.match(/\((\d+)\)$/)?.[1] ?? (/^\d+$/.test(typed) ? typed : null);
+// An award's reward items: icon, amount and name for each, as the public site shows them.
+const rewardItems = (items) => `<span class="reward-items">${items.map((x) => {
+  const r = rewardItem(x.item);
+  return `<span class="reward-item">${r ? `<img src="${r.icon}" alt="${esc(r.name)}">` : ""}<b class="num">${esc(awardAmountLabel(x.item, x.amount))}</b> ${esc(r?.name ?? x.item)}</span>`;
+}).join("")}</span>`;
 const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 
 // Tasks not built yet show their planned steps. Filled in by later tickets of the kingdom-admin line.
@@ -376,7 +382,7 @@ async function loadFortWeekState() {
     allRows("fort_entry", "week"),
     supabase.from("fort_entry").select("character_id,name,fort_count,read_two_ways").eq("week", liveWeek)
       .order("fort_count", { ascending: false }).order("tie_order").order("id"),
-    allRows("weekly_award", "id,week,character_id,place,award,note"),
+    allRows("weekly_award", "id,week,character_id,place,award,note,weekly_award_item(id,item,amount)"),
   ]);
   check(live, "Live Week rows");
   const saved = new Map();
@@ -390,7 +396,10 @@ async function loadFortWeekState() {
     // reading matched; `needsId` a row it read two ways, which no pick can match.
     liveWeek,
     // Weekly Awards in id order, so equal places keep the order they were given in. `row` is the award's own id.
-    awards: awards.sort((a, b) => a.id - b.id).map((a) => ({ row: a.id, week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note })),
+    awards: awards.sort((a, b) => a.id - b.id).map((a) => ({
+      row: a.id, week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note,
+      items: a.weekly_award_item.sort((x, y) => x.id - y.id).map((x) => ({ item: x.item, amount: x.amount })),
+    })),
     liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null, needsId: e.read_two_ways })),
   };
 }
@@ -545,7 +554,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
           <li>
             <span class="place num p${a.place}">${ordinal(a.place)}</span>
             <span class="who">${gov(a.id, nameOf(a.id))}</span>
-            <span class="aw"><span>${esc(a.award)}</span>${a.note ? `<small>${esc(a.note)}</small>` : ""}</span>
+            <span class="aw">${a.items.length ? rewardItems(a.items) : ""}${a.award ? `<span>${esc(a.award)}</span>` : ""}${a.note ? `<small>${esc(a.note)}</small>` : ""}</span>
             <button class="btn quiet sm" type="button" data-award-remove="${a.row}">Remove<span class="sr-only"> the ${ordinal(a.place)} place award for ${esc(nameOf(a.id))}</span></button>
           </li>`).join("")}</ol>` : ""}
         <datalist id="aw-mains">${mains.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
@@ -556,8 +565,16 @@ async function showFortWeek(section, message = "", startWeek = null) {
           <label class="field wide">Main
             <input list="aw-mains" name="main" placeholder="Pick a Main" autocomplete="off" required>
           </label>
-          <label class="field wide">Award
-            <input name="award" placeholder="2 Legendary King's Chests" autocomplete="off" required>
+          <fieldset class="field reward-pick">
+            <legend>Reward items <span class="faint">· type an amount for each item the award gives</span></legend>
+            <div class="reward-grid">${REWARD_ITEMS.map((r) => `
+              <label class="reward-opt"><img src="${r.icon}" alt="${esc(r.name)}"><span>${esc(r.name)}</span>
+                <input name="item-${r.id}" inputmode="decimal" autocomplete="off" placeholder="${r.kind === "chest" ? "1" : "2M"}" aria-describedby="aw-amount-hint"></label>`).join("")}
+            </div>
+            <small id="aw-amount-hint" class="faint">A chest takes a count. A resource takes a number with K or M, for example 500K or 2M.</small>
+          </fieldset>
+          <label class="field wide">Other
+            <input name="award" placeholder="Optional, for anything not in the list" autocomplete="off">
           </label>
           <label class="field wide">Note
             <input name="note" placeholder="Optional" autocomplete="off">
@@ -572,14 +589,20 @@ async function showFortWeek(section, message = "", startWeek = null) {
     const nameOf = (id) => byId.get(id)?.name ?? id;
     form?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const award = { week, id: typedId(form.main.value.trim()), place: Number(form.place.value), award: form.award.value.trim(), note: form.note.value.trim() || null };
+      // Each item with an amount typed is on the award, in list order. A typed amount that is not one
+      // stays on as null, so the rules module names the item it is wrong for.
+      const items = REWARD_ITEMS.filter((r) => form[`item-${r.id}`].value.trim())
+        .map((r) => ({ item: r.id, amount: parseAwardAmount(form[`item-${r.id}`].value, r.kind) }));
+      const award = { week, id: typedId(form.main.value.trim()), place: Number(form.place.value), award: form.award.value.trim(), note: form.note.value.trim() || null, items };
       const problem = checkWeeklyAward(award, state.governors, Date.now());
       if (problem) { msg.textContent = `Could not add the award: ${problem}`; return; }
-      form.querySelector("button").disabled = true;
+      const submit = form.querySelector("button[type=submit]");
+      submit.disabled = true;
       msg.textContent = "Saving…";
-      const { error } = await supabase.from("weekly_award").insert({ week, character_id: award.id, place: award.place, award: award.award, note: award.note });
+      // One call adds the award and its items together (add_weekly_award in supabase/migrations).
+      const { error } = await supabase.rpc("add_weekly_award", { week, character_id: award.id, place: award.place, award: award.award || null, note: award.note, items });
       if (error) {
-        form.querySelector("button").disabled = false;
+        submit.disabled = false;
         // 23503 = Postgres foreign_key_violation, from one of weekly_award's two foreign keys: the Fort Week
         // (weekly_award_week_fkey: the week was removed while this page was open) or the Main (a Farm, say).
         msg.textContent = error.code !== "23503" ? `Could not add the award: ${error.message}`

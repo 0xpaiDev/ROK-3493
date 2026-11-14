@@ -88,6 +88,10 @@ _Avoid_: Average score, avg per week played
 A reward the Council gives a Main after a Fort Week, as King's Chests or resources. The Weekly Ranking informs it; the Council decides it. Farms never receive one.
 _Avoid_: Prize, bonus
 
+**Reward item**:
+One thing a Weekly Award gives, with its amount: a King's Chest grade as a count (×2) or a resource (Food, Wood, Stone, Gold) in K or M (2M Food). The game fixes the list; an award can hold several, plus free text for anything outside it.
+_Avoid_: Prize, loot
+
 **King's Chest**:
 A reward chest the King hands out as part of a Weekly Award, in four grades: Legendary, Epic, Elite and Advanced. The game labels them "Trophy".
 _Avoid_: Trophy, Kingdom Chest
