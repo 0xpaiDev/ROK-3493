@@ -316,6 +316,12 @@ export function awardAmountLabel(itemId, amount) {
   return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }
 
+// A place as it is written: 1st, 2nd, 3rd, 11th, 22nd.
+export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+
+// The rankings a Reward Promise can pay on: the Mains ranking, or the Main + Farm ranking.
+export const PAID_ON = ["mains", "main_farm"];
+
 // The last place a promise tier can name. The database holds places to this, and no ranking runs this long.
 export const MAX_PLACE = 1000;
 
@@ -333,7 +339,7 @@ export function checkRewardPromise(promise, now = Date.now()) {
   const tiers = promise.tiers ?? [];
   if (!tiers.length) return "Add at least one place.";
   for (const [i, t] of tiers.entries()) {
-    if (!(Number.isInteger(t.place) && t.place >= 1 && t.place <= MAX_PLACE)) return `Card ${i + 1}: its place is a whole number from 1 to ${MAX_PLACE}.`;
+    if (!(Number.isInteger(t.place) && t.place >= 1 && t.place <= MAX_PLACE)) return `Place ${i + 1}: its place is a whole number from 1 to ${MAX_PLACE}.`;
     const place = ordinal(t.place);
     const items = t.items ?? [];
     const unknown = items.find((x) => !rewardItem(x.item));
@@ -346,12 +352,9 @@ export function checkRewardPromise(promise, now = Date.now()) {
   }
   // No place is promised twice. A gap is fine: nobody there gets an award.
   const twice = tiers.find((t, i) => tiers.findIndex((u) => u.place === t.place) !== i);
-  if (twice) return `${ordinal(twice.place)} is on two cards. Each place is promised once.`;
+  if (twice) return `${ordinal(twice.place)} is promised twice. Each place is promised once.`;
   return null;
 }
-
-// The rankings a Reward Promise can pay on: the Mains ranking, or the Main + Farm ranking.
-export const PAID_ON = ["mains", "main_farm"];
 
 // The promise home shows: the Live Week's, or null. A closed week's promise is done; its Weekly Awards show instead.
 export function livePromise(promises, now) {
@@ -363,6 +366,3 @@ export function livePromise(promises, now) {
 export function promiseToStartFrom(promises, week) {
   return promises.find((p) => p.week === week) ?? promises.filter((p) => p.week < week).sort((a, b) => (a.week < b.week ? 1 : -1))[0] ?? null;
 }
-
-// A place as it is written: 1st, 2nd, 3rd, 11th, 22nd.
-export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");

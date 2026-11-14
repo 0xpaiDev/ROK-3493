@@ -495,13 +495,13 @@ test("a place reads as an ordinal: 1st, 2nd, 3rd, 11th, 22nd", () => {
 
 test("a promise tier pays one place, a whole number from 1 to 1000", () => {
   const w = "2026-11-09", gold = [{ item: "rss-gold", amount: 1e6 }];
-  assert.deepEqual([tier(0, gold), tier(1.5, gold), tier(null, gold), tier(1001, gold), tier("6", gold)].map((t) => checkRewardPromise(promise(w, t), inWeek)).map((m) => /Card 1: its place is a whole number from 1 to 1000/.test(m)), [true, true, true, true, true]);
+  assert.deepEqual([tier(0, gold), tier(1.5, gold), tier(null, gold), tier(1001, gold), tier("6", gold)].map((t) => checkRewardPromise(promise(w, t), inWeek)).map((m) => /Place 1: its place is a whole number from 1 to 1000/.test(m)), [true, true, true, true, true]);
   assert.equal(checkRewardPromise(promise(w, tier(1000, gold)), inWeek), null);
 });
 
 test("two tiers of one promise can't pay the same place, but a gap is allowed", () => {
   const w = "2026-11-09", gold = [{ item: "rss-gold", amount: 1e6 }];
-  assert.match(checkRewardPromise(promise(w, tier(1, gold), tier(6, gold), tier(6, gold)), inWeek), /6th is on two cards/);
+  assert.match(checkRewardPromise(promise(w, tier(1, gold), tier(6, gold), tier(6, gold)), inWeek), /6th is promised twice/);
   assert.equal(checkRewardPromise(promise(w, tier(1, gold), tier(2, gold), tier(6, gold)), inWeek), null);
   const fifteen = Array.from({ length: 15 }, (_, i) => tier(i + 1, gold));
   assert.equal(checkRewardPromise(promise(w, ...fifteen), inWeek), null);

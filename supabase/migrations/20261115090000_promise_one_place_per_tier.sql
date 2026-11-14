@@ -35,15 +35,20 @@ alter table reward_promise add constraint reward_promise_paid_on_check check (pa
 -- A tier pays one place, a whole number, so a promise matches the ranking place for place. The free-text place
 -- ("1st") becomes that number. The only promise saved before this, the week of 9 Nov, had six places, "1st" to
 -- "5rd" and then "5-15rd": typos, and the last overlapped 5th. It becomes fifteen places, 1 to 15, where 6 to 15
--- each get what "5-15rd" promised. Any other promise must already read 1st, 2nd, 3rd… in order, or this stops
--- rather than guess at its places.
+-- each get what "5-15rd" promised. Any other promise, and 9 Nov if it was saved again since, must already read
+-- exactly 1st, 2nd, 3rd… in order, or this stops rather than guess at its places.
 do $$
 begin
   if (select data_type from information_schema.columns
       where table_schema = 'public' and table_name = 'reward_promise_tier' and column_name = 'place') = 'text' then
     if exists (select 1 from reward_promise_tier
-               where week <> date '2026-11-09' and btrim(place) !~* ('^' || position || '(st|nd|rd|th)$')) then
-      raise exception 'A Reward Promise other than 9 Nov has a place that is not its position (1st, 2nd…). Move it by hand.';
+               where lower(btrim(place)) <> position || case when position % 100 between 11 and 13 then 'th'
+                                                             when position % 10 = 1 then 'st' when position % 10 = 2 then 'nd'
+                                                             when position % 10 = 3 then 'rd' else 'th' end
+                 and not (week = date '2026-11-09'
+                          and (select array_agg(u.place order by u.position) from reward_promise_tier u where u.week = date '2026-11-09')
+                              = array['1st', '2nd', '3rd', '4rd', '5rd', '5-15rd'])) then
+      raise exception 'A Reward Promise has a place that is not its position written as 1st, 2nd, 3rd…, and is not the 9 Nov promise as saved. Move it by hand.';
     end if;
     insert into reward_promise_tier (week, position, place, reward, items)
     select t.week, g, g::text, t.reward, t.items
