@@ -1,11 +1,24 @@
 // Council admin page: magic-link sign-in, then one Council task at a time from the sidebar.
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
-import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
+import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
 import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+// The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
+// Another admin tab that holds it and never lets go (the tab the magic link was sent from, a tab the browser
+// froze in the background) then leaves this one on "Checking sign-in…". Wait at most LOCK_WAIT_MS, then take it.
+const LOCK_WAIT_MS = 5000;
+async function authLock(name, acquireTimeout, fn) {
+  if (acquireTimeout >= 0) return navigatorLock(name, acquireTimeout, fn); // a timed or try-now request: keep the library's way
+  try {
+    return await navigatorLock(name, LOCK_WAIT_MS, fn);
+  } catch (e) {
+    if (e?.name !== "AbortError" && !e?.isAcquireTimeout) throw e;
+    return navigator.locks.request(name, { steal: true }, fn);
+  }
+}
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { lock: authLock } });
 const main = document.getElementById("admin");
 const who = document.getElementById("who");
 const signOut = document.getElementById("sign-out");
