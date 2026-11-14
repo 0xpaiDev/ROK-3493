@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, promiseToStartFrom } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -40,6 +40,7 @@ const TASKS = [
   { id: "roster", label: "Roster Snapshot" },
   { id: "farm-links", label: "Farm links" },
   { id: "fort-week", label: "Fort Week" },
+  { id: "reward-promise", label: "Reward Promise" },
   { id: "gh-event", label: "GH Event", meta: "Top 10, Golden Heads", soon: {
     title: "Log a GH Event", body: "Log a GH Event's top 10 with Golden Heads.",
     steps: [["Name and dates", "One result per GH Event"], ["Enter the top 10", "Matched like a Fort Week"], ["Check Golden Heads", "Prefilled 20/10/5/4×7, editable"]] } },
@@ -103,6 +104,7 @@ async function showAdmin(session) {
   showTask();
   showFarmLinks(document.getElementById("task-farm-links"));
   showFortWeek(document.getElementById("task-fort-week"));
+  showRewardPromise(document.getElementById("task-reward-promise"));
   showRoster(document.getElementById("task-roster"), session.user.email);
 }
 
@@ -756,6 +758,192 @@ function saveNames(newNames) {
   return supabase.from("governor_name").upsert(
     newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
     { onConflict: "character_id,name", ignoreDuplicates: true });
+}
+
+// ---------- Reward Promise (ticket 16) ----------
+// What each place will get for a Fort Week, set before the week closes. Home shows the Live Week's promise.
+// The rules module checks it; this section reads, shows and writes.
+
+async function loadPromises() {
+  const rows = await allRows("reward_promise", "week,intro,reward_promise_tier(position,place,reward,items)");
+  return rows.map((p) => ({
+    week: p.week, intro: p.intro,
+    tiers: p.reward_promise_tier.sort((a, b) => a.position - b.position).map((t) => ({ place: t.place, reward: t.reward, items: t.items })),
+  }));
+}
+
+// A tier as the form holds it: amounts as typed, by item id. A chest's "×2" is typed as "2".
+const tierToForm = (t) => ({
+  place: t.place ?? "", reward: t.reward ?? "",
+  amounts: Object.fromEntries((t.items ?? []).map((x) => [x.item, awardAmountLabel(x.item, x.amount).replace(/^×/, "")])),
+});
+const BLANK_TIERS = ["1st", "2nd", "3rd"].map((place) => ({ place, reward: "", amounts: {} }));
+
+async function showRewardPromise(section, message = "", startWeek = null) {
+  let promises;
+  try {
+    promises = await loadPromises();
+  } catch (e) {
+    section.innerHTML = `<div class="eyebrow">Reward Promise</div><p class="admin-msg" role="status">Could not load the Reward Promises: ${esc(e.message)}</p>`;
+    setTaskStatus("reward-promise", "Could not load");
+    return;
+  }
+  const liveWeek = fortWeekAt(Date.now()).start;
+  const live = promises.find((p) => p.week === liveWeek);
+  setTaskStatus("reward-promise", live ? `Week of ${dayMonth(liveWeek)} set` : "Live Week not set");
+
+  let week = startWeek ?? liveWeek;
+  let msgText = message;
+  let intro, tiers, from;
+  // The editor starts from the week's own promise, else the latest one before it, else 1st / 2nd / 3rd.
+  const load = () => {
+    from = promiseToStartFrom(promises, week);
+    intro = from?.intro ?? "";
+    tiers = from ? from.tiers.map(tierToForm) : BLANK_TIERS.map((t) => ({ ...t, amounts: {} }));
+  };
+  load();
+
+  // The form's tiers as a promise for the rules module: each item with an amount typed, in list order.
+  // A typed amount that is not one stays on as null, so the rules module names the item it is wrong for.
+  const asPromise = () => ({
+    week, intro,
+    tiers: tiers.map((t) => ({
+      place: t.place.trim(), reward: t.reward.trim() || null,
+      items: REWARD_ITEMS.filter((r) => t.amounts[r.id]?.trim()).map((r) => ({ item: r.id, amount: parseAwardAmount(t.amounts[r.id], r.kind) })),
+    })),
+  });
+
+  function draw() {
+    const saved = promises.find((p) => p.week === week);
+    const isMonday = isFortWeekStart(week);
+    const problem = checkRewardPromise(asPromise(), Date.now());
+    const when = !isMonday ? "Pick the Monday the Fort Week starts on."
+      : isLiveWeek(week, Date.now()) ? `The week of ${dayMonth(week)} is the Live Week: its promise shows on home until the Monday reset.`
+      : isClosedWeek(week, Date.now()) ? `The week of ${dayMonth(week)} has closed. Give its Weekly Awards on the Fort Week task.`
+      : `The week of ${dayMonth(week)} has not started: its promise shows on home from that Monday.`;
+    const state = saved ? "Saved. Saving again replaces it."
+      : from ? `Not set yet. The form starts from the week of ${dayMonth(from.week)}'s promise.`
+      : "Not set yet.";
+
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <div class="reveal">
+        <div class="eyebrow">Reward Promise</div>
+        <h1 class="task-title">Promise the week of ${esc(isMonday ? dayMonth(week) : week)}</h1>
+        <p class="task-lede">Say what each place will get, so Governors have something to fight for. Home shows the Live Week's promise beside last week's winners. Once the week closes, give the real Weekly Awards on the Fort Week task.</p>
+      </div>
+      <p class="admin-msg" role="status">${esc(msgText)}</p>
+
+      <section class="card admin-card">
+        <h2>Pick the week</h2>
+        <form id="rp-week" class="fields" onsubmit="return false">
+          <label class="field">Fort Week starting
+            <input type="date" name="week" value="${esc(week)}" min="${esc(liveWeek)}" step="7" required>
+          </label>
+          <label class="field wide">Intro
+            <input name="intro" value="${esc(intro)}" placeholder="Optional. Home uses the standing intro without one" autocomplete="off">
+          </label>
+        </form>
+        <p class="match">${esc(when)} ${esc(state)}</p>
+      </section>
+
+      <form id="rp-tiers" onsubmit="return false">
+      ${tiers.map((t, i) => `
+      <section class="card admin-card" aria-label="Place ${i + 1}">
+        <div class="fields">
+          <label class="field narrow">Place
+            <input name="place-${i}" value="${esc(t.place)}" placeholder="1st" autocomplete="off" required>
+          </label>
+          <label class="field wide">Other
+            <input name="reward-${i}" value="${esc(t.reward)}" placeholder="Optional, for anything not in the list" autocomplete="off">
+          </label>
+          <button class="btn quiet sm" type="button" data-tier-remove="${i}"${tiers.length === 1 ? " disabled" : ""}>Remove<span class="sr-only"> place ${esc(t.place || i + 1)}</span></button>
+          <fieldset class="field reward-pick">
+            <legend>Reward items <span class="faint">· type an amount for each item this place gets</span></legend>
+            <div class="reward-grid">${REWARD_ITEMS.map((r) => `
+              <label class="reward-opt"><img src="${r.icon}" alt="${esc(r.name)}"><span>${esc(r.name)}</span>
+                <input name="item-${i}-${r.id}" value="${esc(t.amounts[r.id] ?? "")}" inputmode="decimal" autocomplete="off" placeholder="${r.kind === "chest" ? "1" : "2M"}" aria-describedby="rp-amount-hint"></label>`).join("")}
+            </div>
+          </fieldset>
+        </div>
+      </section>`).join("")}
+      </form>
+      <p><small id="rp-amount-hint" class="faint">A chest takes a count. A resource takes a number with K or M, for example 500K or 2M.</small></p>
+      <p><button class="btn" type="button" data-tier-add>Add place</button></p>
+
+      <div class="save-bar" role="region" aria-label="Reward Promise">
+        <span class="pulse unsaved" aria-hidden="true"></span>
+        <span class="sum">${problem ? `<b>Fix before saving.</b> <span>${esc(problem)}</span>`
+          : `<b>${saved ? "Replaces the saved promise." : "Not saved yet."}</b> <span>${tiers.length} ${tiers.length === 1 ? "place" : "places"} for the week of ${esc(dayMonth(week))}${isLiveWeek(week, Date.now()) ? ", on home as soon as it is saved" : ""}.</span>`}</span>
+        ${saved ? `<button class="btn quiet" type="button" data-remove>Remove promise</button>` : ""}
+        <button class="btn primary" type="button" data-save${problem ? " disabled" : ""}>Save promise</button>
+      </div>`;
+    section.replaceChildren(body);
+    wire(body);
+  }
+
+  // Typing keeps the form's values in `tiers`; the save bar's summary redraws only on change, so focus stays put.
+  function readForm(body) {
+    const f = body.querySelector("#rp-tiers");
+    intro = body.querySelector("#rp-week").intro.value;
+    tiers = tiers.map((_, i) => ({
+      place: f[`place-${i}`].value, reward: f[`reward-${i}`].value,
+      amounts: Object.fromEntries(REWARD_ITEMS.map((r) => [r.id, f[`item-${i}-${r.id}`].value])),
+    }));
+  }
+
+  function wire(body) {
+    const msg = body.querySelector(".admin-msg");
+    body.querySelector("#rp-week").week.addEventListener("change", (e) => {
+      week = e.target.value;
+      msgText = "";
+      load();
+      draw();
+    });
+    body.addEventListener("input", () => readForm(body));
+    body.addEventListener("change", (e) => {
+      if (e.target.name === "week") return;
+      readForm(body);
+      const problem = checkRewardPromise(asPromise(), Date.now());
+      const sum = body.querySelector(".save-bar .sum");
+      const saved = promises.find((p) => p.week === week);
+      sum.innerHTML = problem ? `<b>Fix before saving.</b> <span>${esc(problem)}</span>`
+        : `<b>${saved ? "Replaces the saved promise." : "Not saved yet."}</b> <span>${tiers.length} ${tiers.length === 1 ? "place" : "places"} for the week of ${esc(dayMonth(week))}.</span>`;
+      body.querySelector("[data-save]").disabled = !!problem;
+    });
+    body.querySelector("[data-tier-add]").addEventListener("click", () => {
+      readForm(body);
+      tiers.push({ place: "", reward: "", amounts: {} });
+      draw();
+      section.querySelector(`[name="place-${tiers.length - 1}"]`)?.focus();
+    });
+    body.querySelectorAll("[data-tier-remove]").forEach((b) => b.addEventListener("click", () => {
+      readForm(body);
+      tiers.splice(Number(b.dataset.tierRemove), 1);
+      draw();
+    }));
+    body.querySelector("[data-save]").addEventListener("click", async (e) => {
+      readForm(body);
+      const p = asPromise();
+      const problem = checkRewardPromise(p, Date.now());
+      if (problem) { msg.textContent = `Could not save the promise: ${problem}`; return; }
+      e.target.disabled = true;
+      msg.textContent = "Saving…";
+      // One call replaces the week's promise and its places together (set_reward_promise in supabase/migrations).
+      const { error } = await supabase.rpc("set_reward_promise", { week, intro: intro.trim() || null, tiers: p.tiers });
+      if (error) { e.target.disabled = false; msg.textContent = `Could not save the promise: ${error.message}`; return; }
+      showRewardPromise(section, `Saved the promise for the week of ${dayMonth(week)}.${isLiveWeek(week, Date.now()) ? " It is on home now." : ""}`, week);
+    });
+    body.querySelector("[data-remove]")?.addEventListener("click", async (e) => {
+      if (!confirm(`Remove the promise for the week of ${dayMonth(week)}?${isLiveWeek(week, Date.now()) ? " It leaves home." : ""}`)) return;
+      e.target.disabled = true;
+      const { error } = await supabase.from("reward_promise").delete().eq("week", week);
+      if (error) { e.target.disabled = false; msg.textContent = `Could not remove the promise: ${error.message}`; return; }
+      showRewardPromise(section, `Removed the promise for the week of ${dayMonth(week)}.`, week);
+    });
+  }
+
+  draw();
 }
 
 // ---------- Roster Snapshot (ticket 05) ----------

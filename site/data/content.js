@@ -1,18 +1,9 @@
-// Hand-edited content: news posts and next week's fort rewards.
-// Set draft: false once the text is real; draft items show a "Draft" tag on the page.
-// A reward tier may list items, [{ item: "chest-legendary", amount: 1 }, { item: "rss-food", amount: 2000000 }],
-// with ids from site/rewards.js; they show with their icons. A tier with no items shows its reward text.
+// Hand-edited content: news posts, and the standing intro and rules of the Reward Promise card.
+// The promise itself (what each place gets) is set by the Council on the admin page, per Fort Week.
+// Set draft: false on a news post once the text is real; a draft post shows a "Draft" tag on the page.
 window.KD_CONTENT = {
   rewards: {
-    draft: true,
-    title: "Fort Grind: 2 – 8 Nov",
     intro: "Kill forts all week. Rankings close Sunday at reset, rewards go out Monday.",
-    tiers: [
-      { place: "1st", reward: "Reward to be announced" },
-      { place: "2nd", reward: "Reward to be announced" },
-      { place: "3rd", reward: "Reward to be announced" },
-      { place: "Top 10", reward: "Reward to be announced" }
-    ],
     rules: [
       "Only forts killed by your main account count; farm accounts are ranked separately.",
       "Fort Counts are logged from the in-game ranking screenshot on Sunday."

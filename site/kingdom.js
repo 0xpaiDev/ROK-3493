@@ -315,3 +315,39 @@ export function awardAmountLabel(itemId, amount) {
   const short = (n) => Number((amount / n).toFixed(2));
   return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }
+
+// Reward Promises: { week, intro, tiers: [{ place, reward, items }] }, what each place will get for a Fort Week,
+// set before the week closes so Governors have something to compete for. place is a label ("1st", "Top 10");
+// items are reward items as on a Weekly Award; reward is free text, optional once there are items.
+// Why a promise can't be saved, as a sentence for the Council, or null when it can.
+export function checkRewardPromise(promise, now = Date.now()) {
+  if (!isFortWeekStart(promise.week)) return "Pick the Monday the Fort Week starts on.";
+  // A promise is made before the reset; once a week closes, the Council gives Weekly Awards instead.
+  if (isClosedWeek(promise.week, now)) return "This Fort Week has closed. Give its Weekly Awards on the Fort Week task instead.";
+  const tiers = promise.tiers ?? [];
+  if (!tiers.length) return "Add at least one place.";
+  for (const [i, t] of tiers.entries()) {
+    const place = t.place?.trim();
+    if (!place) return `Name place ${i + 1}, for example 1st or Top 10.`;
+    const items = t.items ?? [];
+    const unknown = items.find((x) => !rewardItem(x.item));
+    if (unknown) return `"${unknown.item}" is not a reward item. Pick a King's Chest or a resource from the list.`;
+    const bad = items.find((x) => !Number.isInteger(x.amount) || x.amount < 1);
+    if (bad) return rewardItem(bad.item).kind === "chest"
+      ? `${place}: the amount of ${rewardItem(bad.item).name} is a count from 1 up, for example 2.`
+      : `${place}: the amount of ${rewardItem(bad.item).name} is a whole number above 0, for example 500K or 2M.`;
+    if (!items.length && !t.reward?.trim()) return `${place}: pick a reward item or write what it gets.`;
+  }
+  return null;
+}
+
+// The promise home shows: the Live Week's, or null. A closed week's promise is done; its Weekly Awards show instead.
+export function livePromise(promises, now) {
+  return promises.find((p) => isLiveWeek(p.week, now)) ?? null;
+}
+
+// The promise a week's editor starts from: its own, else the latest one before it (a standing promise
+// repeats with one save), else null.
+export function promiseToStartFrom(promises, week) {
+  return promises.find((p) => p.week === week) ?? promises.filter((p) => p.week < week).sort((a, b) => (a.week < b.week ? 1 : -1))[0] ?? null;
+}

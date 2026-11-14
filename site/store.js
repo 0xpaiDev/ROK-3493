@@ -22,7 +22,7 @@ async function rows(table, query) {
 }
 
 export async function loadKingdom() {
-  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards] = await Promise.all([
+  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards, promises] = await Promise.all([
     rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
     rows("fort_week", "select=starts_on,completeness,read_at&order=starts_on.asc"),
@@ -32,6 +32,7 @@ export async function loadKingdom() {
     rows("kvk_entry", "select=*&order=rank.asc"),
     rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc&limit=1"),
     rows("weekly_award", "select=week,character_id,place,award,note,weekly_award_item(item,amount)&weekly_award_item.order=id.asc&order=week.desc,place.asc,id.asc"),
+    rows("reward_promise", "select=week,intro,reward_promise_tier(place,reward,items)&reward_promise_tier.order=position.asc&order=week.desc"),
   ]);
   const latest = snapshots[0];
   const snapshotRows = latest
@@ -105,5 +106,7 @@ export async function loadKingdom() {
     // Weekly Awards { week, id, place, award, note, items }; always a Main's Character ID. items are
     // [{ item, amount }] in the order given; award is the free text, null on an award of items only.
     weeklyAwards: awards.map((a) => ({ week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note, items: a.weekly_award_item })),
+    // Reward Promises { week, intro, tiers: [{ place, reward, items }] }, the latest week first.
+    rewardPromises: promises.map((p) => ({ week: p.week, intro: p.intro, tiers: p.reward_promise_tier })),
   };
 }
