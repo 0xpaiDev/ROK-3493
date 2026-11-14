@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -233,7 +233,10 @@ import { rewardItem } from "./rewards.js";
         ? `${names} ${leaders.length > 1 ? "share the lead in" : "leads"} Week ${wn} with ${forts}`
         : `${names} ${leaders.length > 1 ? "tie for" : "takes"} Week ${wn} with ${forts}`;
     const reset = now.resetsAt;
-    const R = C.rewards;
+    // The Council's Reward Promise for the Live Week: what each place will get. Gone once the week closes,
+    // when that week's Weekly Awards take over. Intro and rules fall back to content.js.
+    const P = livePromise(D.rewardPromises, Date.now());
+    const R = C.rewards ?? {};
 
     return `
       <section class="hero">
@@ -298,11 +301,11 @@ import { rewardItem } from "./rewards.js";
             <p>Given by the Council for ${fmtRange({ start: awardWeeks[0].week, end: fortWeekEnd(awardWeeks[0].week) })}.</p>
             ${winnersList(awardWeeks[0].awards)}
           </section>` : ""}
-          ${R ? `<section class="card award shine reveal" style="--d:700ms">
-            <div class="award-head"><span class="eyebrow">Weekly Award · Week ${nowN}</span>${R.draft ? '<span class="tag draft">Draft</span>' : ""}</div>
-            <h2>${esc(R.title)}</h2>
-            <p>${esc(R.intro)}</p>
-            <ul class="tiers">${R.tiers.map((t) => `<li><span class="place">${esc(t.place)}</span>${t.items?.length ? rewardItems(t.items) : `<span class="reward">${esc(t.reward)}</span>`}</li>`).join("")}</ul>
+          ${P ? `<section class="card award shine reveal" style="--d:700ms" aria-label="Reward Promise for Week ${nowN}">
+            <div class="award-head"><span class="eyebrow">Reward Promise · Week ${nowN}</span><span class="mono faint" data-countdown>${document.getElementById("countdown").textContent}</span></div>
+            <h2>Fort Grind: ${fmtRange(now)}</h2>
+            ${P.intro || R.intro ? `<p>${esc(P.intro || R.intro)}</p>` : ""}
+            <ul class="tiers">${P.tiers.map((t) => `<li><span class="place">${esc(t.place)}</span><span class="aw">${awardBody({ items: t.items, award: t.reward })}</span></li>`).join("")}</ul>
             ${R.rules?.length ? `<ul class="rules">${R.rules.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
           </section>` : ""}
           <section class="card reveal" style="--d:780ms">

@@ -88,6 +88,10 @@ _Avoid_: Average score, avg per week played
 A reward the Council gives a Main after a Fort Week, as King's Chests or resources. The Weekly Ranking informs it; the Council decides it. Farms never receive one.
 _Avoid_: Prize, bonus
 
+**Reward Promise**:
+What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Home shows it until the Monday reset; then that week's Weekly Awards take over. A place is a label ("1st", "Top 10"), not a number.
+_Avoid_: Prize pool, bounty
+
 **Reward item**:
 One thing a Weekly Award gives, with its amount: a King's Chest grade as a count (×2) or a resource (Food, Wood, Stone, Gold) in K or M (2M Food). The game fixes the list; an award can hold several, plus free text for anything outside it.
 _Avoid_: Prize, loot

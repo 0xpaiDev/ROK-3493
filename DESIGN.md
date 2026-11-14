@@ -60,6 +60,7 @@ Reuse these before inventing new ones (classes in `styles.css`).
 - **Buttons** `.btn`: primary = `--accent` fill with dark text (one per view); secondary = outlined; quiet = text only. Minimum height 36 px; anything tapped on a phone is 44 px.
 - **Segmented control / chips** `.seg`, `.chip`: filters and view toggles (Mains / Main + Farm).
 - **Reward items** `.reward-items` / `.reward-item`: an award's King's Chests and resources, each as icon (`--reward-icon`, `alt` the item name), amount the way the game writes it ("×2", "2M") and name. They wrap whole, never mid-item. An award from before reward items, or a home tier without items, shows its text instead. The admin picker `.reward-pick` is a grid of `.reward-opt` tiles (`--reward-icon-pick`), one amount input each. Chest art is 114 px, so no icon goes above 48 px.
+- **Reward Promise** `.card.award.shine` with `.tiers`: the Live Week's promise from the Council, the one shimmer card. Eyebrow "Reward Promise · Week N" with the reset countdown beside it, title "Fort Grind: 9 – 15 Nov", then each place's label and its reward items or text. No promise for the Live Week, no card: a closed week's promise never stays up.
 - **Weekly Award winners** `.tiers.winners` on `.card.award`: place in mono, its metal following the place (`.p1`–`.p3`, so two 1sts are both gold), then the Main, the award and the Council's note stacked in `.aw`. The home page shows the latest awarded Fort Week (no shimmer: the one shimmer stays on the rewards card); Fort Rankings → Awards lists every week, latest first; the Governor popup lists that Main's awards.
 
 Council admin patterns:
@@ -72,6 +73,7 @@ Council admin patterns:
 - **Confirm / Dismiss rows**: the decision becomes a "Linked" / "Dismissed" label with Undo. Group by Main and offer "Confirm all N".
 - **Paste review rows** `.fw-row`: rank, the name as pasted, Fort Count, a Governor picker (datalist of "Name (Character ID)"), then the Character ID or a "needs ID" tag. Tied rows get up/down arrows that move them only within the tie. A row that blocks saving gets a `--down` edge on the left. For the Live Week the paste is refused and the rows are the reader's latest reading: only its "needs ID" rows get a picker (a row the reader read two ways gets a `.muted` note instead), no tie arrows, and Save writes the picks to Name History only. A pick the next reading would not match blocks Save and says why.
 - **Weekly Awards** `.aw-rows`: on a saved, closed Fort Week, flat rows of place · Main · award and note · quiet Remove (with a confirm), and a secondary "Add award" form whose Main picker lists Mains only. Each award saves on its own, so there is no save bar.
+- **Reward Promise editor**: a week picker that starts on the Live Week (earlier weeks are refused), an optional intro, then one card per place with a place label, the `.reward-pick` grid and an Other text field. A week with no promise starts from the latest earlier one. The sticky save bar says what Save does; Remove promise is quiet, with a confirm.
 - **Not built yet**: show the planned steps dashed with "Coming soon", never a tall empty card.
 
 ## Motion
