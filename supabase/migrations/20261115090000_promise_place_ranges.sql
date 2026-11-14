@@ -58,6 +58,42 @@ begin
   end if;
 end $$;
 
+-- Until 20261115100000 drops place, every tier saved also fills it in, so the site still live on Pages and
+-- an admin page open from before the deploy read a place, not a blank: the label, else the range written as
+-- the site writes it ("1st", "6th–15th").
+create or replace function public.reward_promise_tier_fill_place()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  n integer;
+  ords text[] := '{}';
+begin
+  if new.place is null then
+    foreach n in array array[new.first_place, new.last_place]
+    loop
+      ords := ords || (n || case when n % 100 between 11 and 13 then 'th'
+                                 when n % 10 = 1 then 'st' when n % 10 = 2 then 'nd' when n % 10 = 3 then 'rd'
+                                 else 'th' end);
+    end loop;
+    new.place := coalesce(new.label,
+                          case when new.first_place = new.last_place then ords[1] else ords[1] || '–' || ords[2] end);
+  end if;
+  return new;
+end;
+$$;
+
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = 'public' and table_name = 'reward_promise_tier' and column_name = 'place') then
+    drop trigger if exists reward_promise_tier_fill_place on reward_promise_tier;
+    create trigger reward_promise_tier_fill_place before insert or update on reward_promise_tier
+      for each row execute function public.reward_promise_tier_fill_place();
+  end if;
+end $$;
+
 alter table reward_promise_tier alter column first_place set not null;
 alter table reward_promise_tier alter column last_place set not null;
 alter table reward_promise_tier drop constraint if exists reward_promise_tier_range_check;
