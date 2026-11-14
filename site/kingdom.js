@@ -321,6 +321,14 @@ export function awardAmountLabel(itemId, amount) {
   return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }
 
+// An amount as an edit form prefills it: the label when it reads back as the same amount, else the exact
+// number, so saving an edit never rounds 1234567 to 1.23M. A chest's "×2" is typed as "2".
+export function awardAmountInput(itemId, amount) {
+  const kind = rewardItem(itemId)?.kind ?? "resource";
+  const text = awardAmountLabel(itemId, amount).replace(/^×/, "");
+  return parseAwardAmount(text, kind) === amount ? text : String(amount);
+}
+
 // A place as it is written: 1st, 2nd, 3rd, 11th, 22nd.
 export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 
@@ -370,4 +378,25 @@ export function livePromise(promises, now) {
 // repeats with one save), else null.
 export function promiseToStartFrom(promises, week) {
   return promises.find((p) => p.week === week) ?? promises.filter((p) => p.week < week).sort((a, b) => (a.week < b.week ? 1 : -1))[0] ?? null;
+}
+
+// Fill: a closed Fort Week's Weekly Awards drafted from its Reward Promise. Takes the promise and the ranking it
+// pays on (mainsRanking, plain or withFarms), in ranking order. Places count down that ranking over the rows
+// that can receive an award, and the Main at each promised place gets that tier's items and text. A draft only:
+// nothing is saved here. Returns { awards: [{ id, place, items, award }], skipped: [{ name, reason }] }.
+export function fillWeeklyAwards(promise, ranking) {
+  const tierAt = new Map(promise.tiers.map((t) => [t.place, t]));
+  const last = Math.max(0, ...tierAt.keys());
+  const awards = [], skipped = [];
+  let place = 0;
+  for (const r of ranking) {
+    // Rows below the last promised place move nobody, so they are neither walked nor listed.
+    if (place >= last) break;
+    // A Weekly Award goes to a Main on record: a "needs ID" row and an unlinked Farm can't take one.
+    const reason = r.id == null ? "needs ID" : r.unlinked ? "unlinked Farm" : null;
+    if (reason) { skipped.push({ name: r.name, reason }); continue; }
+    const t = tierAt.get(++place);
+    if (t) awards.push({ id: r.id, place, items: (t.items ?? []).map((x) => ({ ...x })), award: t.reward ?? null });
+  }
+  return { awards, skipped };
 }
