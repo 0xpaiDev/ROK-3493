@@ -233,33 +233,33 @@ test("the default Mains ranking leaves Farms out and ranks the Mains among thems
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["b", 2]]);
 });
 
-test("with Farms shown, a Main's Fort Count adds its Farms' and the Mains are reranked by that sum", () => {
+test("with Farms shown, a Main with 30 forts and two Farms of 10 has a Group Score of 40 and the Mains rerank on it", () => {
   const governors = [main("a"), farm("f1", "a"), farm("f2", "a"), main("b")];
-  const rows = mainsRanking([entry("b", 40), entry("a", 30), entry("f1", 25), entry("f2", 5)], governors, { withFarms: true });
-  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.fortCount, r.own, r.farms.map((f) => [f.id, f.fortCount])]), [
-    ["a", 1, 60, 30, [["f1", 25], ["f2", 5]]],
-    ["b", 2, 40, 40, []],
+  const rows = mainsRanking([entry("b", 35), entry("a", 30), entry("f1", 10), entry("f2", 10)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.groupScore, r.own, r.farms.map((f) => [f.id, f.fortCount])]), [
+    ["a", 1, 40, 30, [["f1", 10], ["f2", 10]]],
+    ["b", 2, 35, 35, []],
   ]);
 });
 
-test("Mains tied on the sum keep the Council's order", () => {
+test("Mains tied on the Group Score keep the Council's order", () => {
   const governors = [main("a"), main("b"), farm("f", "b")];
-  const rows = mainsRanking([entry("b", 20), entry("a", 30), entry("f", 10)], governors, { withFarms: true });
-  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.fortCount]), [["b", 1, 30], ["a", 1, 30]]);
+  const rows = mainsRanking([entry("b", 25), entry("a", 30), entry("f", 10)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.groupScore]), [["b", 1, 30], ["a", 1, 30]]);
 });
 
-test("a Main with 0 forts is ranked on its Farms' sum when one of its Farms has forts", () => {
+test("a Main with 0 forts and a Farm of 5 has a Group Score of 2.5", () => {
   const governors = [main("a"), main("z"), farm("f", "z")];
-  const rows = mainsRanking([entry("a", 30), entry("f", 12)], governors, { withFarms: true });
-  assert.deepEqual(rows.map((r) => [r.id, r.name, r.fortCount, r.own, r.rank, r.farms.map((f) => f.id)]), [
-    ["a", "Gov a", 30, 30, 1, []],
-    ["z", "Gov z", 12, 0, 2, ["f"]],
+  const rows = mainsRanking([entry("a", 3), entry("f", 5)], governors, { withFarms: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.name, r.groupScore, r.own, r.rank, r.farms.map((f) => [f.id, f.fortCount])]), [
+    ["a", "Gov a", 3, 3, 1, []],
+    ["z", "Gov z", 2.5, 0, 2, [["f", 5]]],
   ]);
 });
 
 test("an unlinked Farm is its own unranked row, placed by Fort Count, and the Mains keep their ranks", () => {
-  const governors = [main("a"), main("b"), farm("u")];
-  const rows = mainsRanking([entry("a", 30), entry("u", 20), entry("b", 10)], governors, { withFarms: true });
+  const governors = [main("a"), main("b"), farm("f", "b"), farm("u")];
+  const rows = mainsRanking([entry("a", 30), entry("u", 20), entry("b", 10), entry("f", 18)], governors, { withFarms: true });
   assert.deepEqual(rows.map((r) => [r.id, r.rank, r.unlinked ?? false]), [["a", 1, false], ["u", null, true], ["b", 2, false]]);
 });
 

@@ -306,8 +306,8 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .row.second .bar i { background: linear-gradient(90deg, rgba(165, 123, 255, .35), var(--silver)); }
 .row.third .bar i { background: linear-gradient(90deg, rgba(165, 123, 255, .35), var(--bronze)); }
 .row .count { text-align: right; font-size: 17px; font-weight: 600; }
-/* "Main + Farm": a Main's count is a total, and the parts that add up to it (the Main's own Fort Count,
-   then each Farm's) sit indented under it, quieter, so they never read as ranked or as extra. */
+/* "Main + Farm": a Main's count is its Group Score, and its parts (the Main's own Fort Count, then each
+   Farm's real Fort Count) sit indented under it, quieter, so they never read as ranked or as extra. */
 .row .count small { display: block; font: 400 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
 .row.part { padding-top: 8px; padding-bottom: 8px; }
 .row.part .row-main { padding-left: 20px; border-left: 1px solid var(--line-2); }
@@ -711,7 +711,7 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
   .ranking > .note { margin: 0 16px 8px; }
   .ranking .rank-list { padding: 0 4px 8px; }
   .row { grid-template-columns: 30px minmax(0, 1fr) 48px; gap: 10px; padding: 14px 12px; }
-  .row.with-delta { grid-template-columns: 30px minmax(0, 1fr) 44px 48px; }
+  .row.with-delta { grid-template-columns: 30px minmax(0, 1fr) 48px 48px; }
   .row .go { display: none; }
   .row .tag.tie .long { display: none; }
   .table-wrap { margin: 0 -20px; padding: 0 20px; }

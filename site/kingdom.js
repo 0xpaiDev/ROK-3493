@@ -1,11 +1,14 @@
 // Kingdom rules: pure functions over plain data. No DOM, no network.
 import { rewardItem } from "./rewards.js";
 
-// Weekly Ranking: highest Fort Count first. Ties keep the stored order and share a rank number.
-export function rankWeek(entries) {
-  const sorted = [...entries].sort((a, b) => b.fortCount - a.fortCount);
-  return sorted.map((e) => ({ ...e, rank: 1 + sorted.findIndex((x) => x.fortCount === e.fortCount) }));
+// Weekly Ranking: highest Fort Count first (or highest `by`). Ties keep the stored order and share a rank number.
+export function rankWeek(entries, by = (e) => e.fortCount) {
+  const sorted = [...entries].sort((a, b) => by(b) - by(a));
+  return sorted.map((e) => ({ ...e, rank: 1 + sorted.findIndex((x) => by(x) === by(e)) }));
 }
+
+// What a Weekly Ranking row is ranked and shown on: a Main's Group Score in "Main + Farm", else its Fort Count.
+export const rowScore = (r) => r.groupScore ?? r.fortCount;
 
 // Fort Average for one Governor, or null if never ranked. Weeks are in date order.
 // The window starts at the Governor's first ranked Fort Week. A Complete Week they are
@@ -168,8 +171,8 @@ export function parseStatsExport(filename, cells) {
 
 // Mains ranking for a Fort Week. Governors are { id, name, kind, mainId }; a Farm's mainId is its
 // Farm link. By default Mains rank on their own Fort Counts and Farms are left out. withFarms
-// attaches each Main's Farms, adds their Fort Counts to the Main's (`own` keeps the Main's), and
-// reranks the Mains on that sum.
+// attaches each Main's Farms, gives each Main its Group Score (`own` and `fortCount` keep the
+// Main's Fort Count), and reranks the Mains on it.
 // A ranked Governor not on record ("needs ID") counts as a Main.
 export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   const farmOf = new Map(governors.filter((g) => g.kind === "farm").map((g) => [g.id, g.mainId]));
@@ -182,17 +185,19 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   const idle = governors
     .filter((g) => g.kind !== "farm" && !ranked.has(g.id) && farmsOf(g.id).length)
     .map((g) => ({ id: g.id, name: g.name, fortCount: 0 }));
-  // A Main's Fort Count here is its own plus its Farms'; the Mains rank on that sum.
-  // Entry order stays the tie-break, so Mains tied on the sum keep the Council's order.
-  const sums = [...entries.filter((e) => !farmOf.has(e.id)), ...idle].map((m) => {
+  // A Main's Group Score is its own Fort Count plus half of each Farm's; the Mains rank on it.
+  // Its fortCount stays its own. Entry order stays the tie-break, so Mains tied on the Group Score
+  // keep the Council's order.
+  const scored = [...entries.filter((e) => !farmOf.has(e.id)), ...idle].map((m) => {
     const farms = farmsOf(m.id);
-    return { ...m, own: m.fortCount, fortCount: m.fortCount + farms.reduce((a, f) => a + f.fortCount, 0), farms };
+    return { ...m, own: m.fortCount, groupScore: m.fortCount + farms.reduce((a, f) => a + f.fortCount, 0) / 2, farms };
   });
-  // An unlinked Farm is its own row in Fort Count order, with no rank: Mains rank only among Mains.
+  // An unlinked Farm is its own row with no rank, placed by its Fort Count among the Group Scores:
+  // Mains rank only among Mains.
   const unlinked = entries
     .filter((e) => farmOf.has(e.id) && !farmOf.get(e.id))
     .map((e) => ({ ...e, rank: null, unlinked: true, farms: [] }));
-  return [...rankWeek(sums), ...unlinked].sort((x, y) => y.fortCount - x.fortCount);
+  return [...rankWeek(scored, (m) => m.groupScore), ...unlinked].sort((x, y) => rowScore(y) - rowScore(x));
 }
 
 // Each Character ID + name pair already in Name History, to tell which names are new.
