@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, tierLabel, ordinal } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -304,7 +304,7 @@ import { rewardItem } from "./rewards.js";
             <div class="award-head"><span class="eyebrow">Reward Promise · Week ${nowN}</span><span class="mono faint" data-countdown>${document.getElementById("countdown").textContent}</span></div>
             <h2>Fort Grind: ${fmtRange(now)}</h2>
             ${P.intro || R.intro ? `<p>${esc(P.intro || R.intro)}</p>` : ""}
-            <ul class="tiers">${P.tiers.map((t) => `<li><span class="place">${esc(tierLabel(t))}</span><span class="aw">${awardBody({ items: t.items, award: t.reward })}</span></li>`).join("")}</ul>
+            <ul class="tiers">${P.tiers.map((t) => `<li><span class="place">${ordinal(t.place)}</span><span class="aw">${awardBody({ items: t.items, award: t.reward })}</span></li>`).join("")}</ul>
             <p class="paid-on">Paid on the <b>${P.paidOn === "main_farm" ? "Main + Farm" : "Mains"}</b> ranking of Week ${nowN}.</p>
             ${R.rules?.length ? `<ul class="rules">${R.rules.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
           </section>` : ""}

@@ -316,13 +316,14 @@ export function awardAmountLabel(itemId, amount) {
   return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }
 
-// The last place a promise tier can name. The database stores places as integers, and no ranking runs this long.
+// The last place a promise tier can name. The database holds places to this, and no ranking runs this long.
 export const MAX_PLACE = 1000;
 
-// Reward Promises: { week, intro, paidOn, tiers: [{ first, last, label, reward, items }] }, what each place will
-// get for a Fort Week, set before the week closes so Governors have something to compete for. A tier covers the
-// places first to last (1–1, 6–15) and may carry its own label; paidOn is the ranking it pays on, "mains" or
-// "main_farm". items are reward items as on a Weekly Award; reward is free text, optional once there are items.
+// Reward Promises: { week, intro, paidOn, tiers: [{ place, reward, items }] }, what each place will get for a
+// Fort Week, set before the week closes so Governors have something to compete for. A tier pays exactly one
+// place, a whole number, so a promise matches the ranking place for place; paidOn is the ranking it pays on,
+// "mains" or "main_farm". items are reward items as on a Weekly Award; reward is free text, optional once there
+// are items.
 // Why a promise can't be saved, as a sentence for the Council, or null when it can.
 export function checkRewardPromise(promise, now = Date.now()) {
   if (!isFortWeekStart(promise.week)) return "Pick the Monday the Fort Week starts on.";
@@ -331,11 +332,9 @@ export function checkRewardPromise(promise, now = Date.now()) {
   if (!PAID_ON.includes(promise.paidOn)) return "Say whether the promise pays on the Mains or Main + Farm ranking.";
   const tiers = promise.tiers ?? [];
   if (!tiers.length) return "Add at least one place.";
-  const isPlace = (n) => Number.isInteger(n) && n >= 1 && n <= MAX_PLACE;
   for (const [i, t] of tiers.entries()) {
-    if (!isPlace(t.first) || !isPlace(t.last)) return `Place ${i + 1}: its first and last place are each a whole number from 1 to ${MAX_PLACE}.`;
-    if (t.first > t.last) return `Place ${i + 1} runs backwards: ${ordinal(t.first)} comes after ${ordinal(t.last)}.`;
-    const place = tierLabel(t);
+    if (!(Number.isInteger(t.place) && t.place >= 1 && t.place <= MAX_PLACE)) return `Card ${i + 1}: its place is a whole number from 1 to ${MAX_PLACE}.`;
+    const place = ordinal(t.place);
     const items = t.items ?? [];
     const unknown = items.find((x) => !rewardItem(x.item));
     if (unknown) return `"${unknown.item}" is not a reward item. Pick a King's Chest or a resource from the list.`;
@@ -346,13 +345,8 @@ export function checkRewardPromise(promise, now = Date.now()) {
     if (!items.length && !t.reward?.trim()) return `${place}: pick a reward item or write what it gets.`;
   }
   // No place is promised twice. A gap is fine: nobody there gets an award.
-  for (const [i, a] of tiers.entries()) {
-    for (const b of tiers.slice(i + 1)) {
-      if (a.first <= b.last && b.first <= a.last) {
-        return `${tierLabel(a)} and ${tierLabel(b)} both cover ${ordinal(Math.max(a.first, b.first))}. Each place is promised once.`;
-      }
-    }
-  }
+  const twice = tiers.find((t, i) => tiers.findIndex((u) => u.place === t.place) !== i);
+  if (twice) return `${ordinal(twice.place)} is on two cards. Each place is promised once.`;
   return null;
 }
 
@@ -372,8 +366,3 @@ export function promiseToStartFrom(promises, week) {
 
 // A place as it is written: 1st, 2nd, 3rd, 11th, 22nd.
 export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
-
-// A promise tier as home shows it: its own label, else its place ("1st") or place range ("6th–15th").
-export function tierLabel(tier) {
-  return tier.label?.trim() || (tier.first === tier.last ? ordinal(tier.first) : `${ordinal(tier.first)}–${ordinal(tier.last)}`);
-}

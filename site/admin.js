@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, promiseToStartFrom, tierLabel, ordinal, PAID_ON } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -764,20 +764,19 @@ function saveNames(newNames) {
 // The rules module checks it; this section reads, shows and writes.
 
 async function loadPromises() {
-  const rows = await allRows("reward_promise", "week,intro,paid_on,reward_promise_tier(position,first_place,last_place,label,reward,items)");
+  const rows = await allRows("reward_promise", "week,intro,paid_on,reward_promise_tier(position,place,reward,items)");
   return rows.map((p) => ({
     week: p.week, intro: p.intro, paidOn: p.paid_on,
-    tiers: p.reward_promise_tier.sort((a, b) => a.position - b.position)
-      .map((t) => ({ first: t.first_place, last: t.last_place, label: t.label, reward: t.reward, items: t.items })),
+    tiers: p.reward_promise_tier.sort((a, b) => a.position - b.position).map((t) => ({ place: t.place, reward: t.reward, items: t.items })),
   }));
 }
 
-// A tier as the form holds it: places and amounts as typed, amounts by item id. A chest's "×2" is typed as "2".
+// A tier as the form holds it: its place and amounts as typed, amounts by item id. A chest's "×2" is typed as "2".
 const tierToForm = (t) => ({
-  first: String(t.first ?? ""), last: String(t.last ?? ""), label: t.label ?? "", reward: t.reward ?? "",
+  place: String(t.place ?? ""), reward: t.reward ?? "",
   amounts: Object.fromEntries((t.items ?? []).map((x) => [x.item, awardAmountLabel(x.item, x.amount).replace(/^×/, "")])),
 });
-const BLANK_TIERS = ["1", "2", "3"].map((n) => ({ first: n, last: n, label: "", reward: "", amounts: {} }));
+const BLANK_TIERS = ["1", "2", "3"].map((place) => ({ place, reward: "", amounts: {} }));
 const PAID_ON_LABEL = { mains: "Mains", main_farm: "Main + Farm" };
 // A place as typed: a number, or null when the box is empty, so the rules module names it.
 const placeOf = (text) => (String(text ?? "").trim() === "" ? null : Number(text));
@@ -799,7 +798,7 @@ async function showRewardPromise(section, message = "", startWeek = null) {
   let msgText = message;
   let intro, paidOn, tiers, from;
   // The editor starts from the week's own promise, else the latest one before it, else 1st / 2nd / 3rd.
-  // Starting from another week carries its ranges, labels and Paid on.
+  // Starting from another week carries its places and Paid on.
   const load = () => {
     from = promiseToStartFrom(promises, week);
     intro = from?.intro ?? "";
@@ -813,16 +812,13 @@ async function showRewardPromise(section, message = "", startWeek = null) {
   const asPromise = () => ({
     week, intro, paidOn,
     tiers: tiers.map((t) => ({
-      first: placeOf(t.first), last: placeOf(t.last), label: t.label.trim() || null, reward: t.reward.trim() || null,
+      place: placeOf(t.place), reward: t.reward.trim() || null,
       items: REWARD_ITEMS.filter((r) => t.amounts[r.id]?.trim()).map((r) => ({ item: r.id, amount: parseAwardAmount(t.amounts[r.id], r.kind) })),
     })),
   });
 
-  // The label home will show for a tier as typed, or "" while its places are not whole numbers yet.
-  function formLabel(t) {
-    const first = placeOf(t.first), last = placeOf(t.last);
-    return Number.isInteger(first) && Number.isInteger(last) && first >= 1 && first <= last ? tierLabel({ first, last, label: t.label }) : "";
-  }
+  // The place home will show for a tier as typed, or "" while it is not a whole number yet.
+  const formPlace = (t) => (Number.isInteger(placeOf(t.place)) && placeOf(t.place) >= 1 ? ordinal(placeOf(t.place)) : "");
 
   function draw() {
     const saved = promises.find((p) => p.week === week);
@@ -865,19 +861,13 @@ async function showRewardPromise(section, message = "", startWeek = null) {
       ${tiers.map((t, i) => `
       <section class="card admin-card" aria-label="Place ${i + 1}">
         <div class="fields">
-          <label class="field narrow">First place
-            <input name="first-${i}" value="${esc(t.first)}" type="number" min="1" step="1" inputmode="numeric" placeholder="6" required>
-          </label>
-          <label class="field narrow">Last place
-            <input name="last-${i}" value="${esc(t.last)}" type="number" min="1" step="1" inputmode="numeric" placeholder="15" required>
-          </label>
-          <label class="field">Label
-            <input name="label-${i}" value="${esc(t.label)}" placeholder="${esc(formLabel(t) || "Optional, for example Top 10")}" autocomplete="off">
+          <label class="field narrow">Place
+            <input name="place-${i}" value="${esc(t.place)}" type="number" min="1" max="${MAX_PLACE}" step="1" inputmode="numeric" placeholder="${i + 1}" required>
           </label>
           <label class="field wide">Other
             <input name="reward-${i}" value="${esc(t.reward)}" placeholder="Optional, for anything not in the list" autocomplete="off">
           </label>
-          <button class="btn quiet sm" type="button" data-tier-remove="${i}"${tiers.length === 1 ? " disabled" : ""}>Remove<span class="sr-only"> place ${esc(formLabel(t) || i + 1)}</span></button>
+          <button class="btn quiet sm" type="button" data-tier-remove="${i}"${tiers.length === 1 ? " disabled" : ""}>Remove<span class="sr-only"> place ${esc(formPlace(t) || i + 1)}</span></button>
           <fieldset class="field reward-pick">
             <legend>Reward items <span class="faint">· type an amount for each item this place gets</span></legend>
             <div class="reward-grid">${REWARD_ITEMS.map((r) => `
@@ -909,7 +899,7 @@ async function showRewardPromise(section, message = "", startWeek = null) {
     intro = w.intro.value;
     paidOn = w["paid-on"].value || "mains";
     tiers = tiers.map((_, i) => ({
-      first: f[`first-${i}`].value, last: f[`last-${i}`].value, label: f[`label-${i}`].value, reward: f[`reward-${i}`].value,
+      place: f[`place-${i}`].value, reward: f[`reward-${i}`].value,
       amounts: Object.fromEntries(REWARD_ITEMS.map((r) => [r.id, f[`item-${i}-${r.id}`].value])),
     }));
   }
@@ -935,11 +925,11 @@ async function showRewardPromise(section, message = "", startWeek = null) {
     });
     body.querySelector("[data-tier-add]").addEventListener("click", () => {
       readForm(body);
-      // The new place starts right after the last one, so a standing 1, 2, 3 grows to 4 in one click.
-      const next = Math.max(0, ...tiers.map((t) => placeOf(t.last)).filter(Number.isInteger)) + 1;
-      tiers.push({ first: String(next), last: String(next), label: "", reward: "", amounts: {} });
+      // The new card takes the place after the highest one, so a standing 1, 2, 3 grows to 4 in one click.
+      const next = Math.max(0, ...tiers.map((t) => placeOf(t.place)).filter(Number.isInteger)) + 1;
+      tiers.push({ place: String(next), reward: "", amounts: {} });
       draw();
-      section.querySelector(`[name="first-${tiers.length - 1}"]`)?.focus();
+      section.querySelector(`[name="place-${tiers.length - 1}"]`)?.focus();
     });
     body.querySelectorAll("[data-tier-remove]").forEach((b) => b.addEventListener("click", () => {
       readForm(body);

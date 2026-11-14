@@ -89,7 +89,7 @@ A reward the Council gives a Main after a Fort Week, as King's Chests or resourc
 _Avoid_: Prize, bonus
 
 **Reward Promise**:
-What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Each place is a range of places (1st, 6th–15th), optionally with its own label ("Top 10"), and the promise says whether it pays on the Mains ranking or the "Main + Farm" ranking. Home shows it until the Monday reset; then that week's Weekly Awards take over.
+What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Each tier pays exactly one place (1st, 7th), so the promise matches the ranking place for place, and the promise says whether it pays on the Mains ranking or the "Main + Farm" ranking. Home shows it until the Monday reset; then that week's Weekly Awards take over.
 _Avoid_: Prize pool, bounty
 
 **Reward item**:
