@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
+import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -561,9 +561,10 @@ async function showFortWeek(section, message = "", startWeek = null) {
   const published = (w) => (awardsByWeek(state.awards).find((x) => x.week === w)?.awards ?? [])
     .map((a) => ({ id: a.id, place: a.place, award: a.award ?? null, note: a.note ?? null, items: a.items.map((x) => ({ ...x })) }));
   // The draft: the week it is for, its awards in place order, the promise Fill last used, Fill's skips,
-  // whether the Council has changed it since it was opened or filled, and the award open in the form.
+  // whether the Council has changed it since it was opened or filled, the award open in the form, and whether
+  // a publish of it is on its way, during which nothing may change it.
   let draft = null;
-  const openDraft = () => { draft = { week, awards: published(week), filled: null, skipped: [], edited: false, editing: null }; };
+  const openDraft = () => { draft = { week, awards: published(week), filled: null, skipped: [], edited: false, editing: null, publishing: false }; };
   const sameAwards = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   // Places in order; equal places keep the order they were given in.
   const setDraftAwards = (awards) => { draft.awards = [...awards].sort((a, b) => a.place - b.place); };
@@ -575,7 +576,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
     const changed = !sameAwards(awards, live);
     const editing = draft.editing != null ? awards[draft.editing] : null;
     const next = Math.max(0, ...awards.map((a) => a.place)) + 1;
-    const amounts = editing ? Object.fromEntries(editing.items.map((x) => [x.item, awardAmountLabel(x.item, x.amount).replace(/^×/, "")])) : {};
+    const amounts = editing ? Object.fromEntries(editing.items.map((x) => [x.item, awardAmountInput(x.item, x.amount)])) : {};
     const f = draft.filled;
     return `
       <section class="card admin-card" aria-label="Weekly Awards">
@@ -630,8 +631,8 @@ async function showFortWeek(section, message = "", startWeek = null) {
         <span class="sum"><b>Not published.</b> <span>${awards.length
           ? `${awards.length} ${awards.length === 1 ? "award" : "awards"} for ${esc(range)}${live.length ? `, replacing the ${live.length} published` : ""}.`
           : `Publishing clears the week's ${live.length} published ${live.length === 1 ? "award" : "awards"}.`}</span></span>
-        <button class="btn quiet" type="button" data-award-discard>Discard</button>
-        <button class="btn primary" type="button" data-award-publish>Publish</button>
+        <button class="btn quiet" type="button" data-award-discard${draft.publishing ? " disabled" : ""}>Discard</button>
+        <button class="btn primary" type="button" data-award-publish${draft.publishing ? " disabled" : ""}>${draft.publishing ? "Publishing…" : "Publish"}</button>
       </div>` : ""}`;
   }
 
@@ -640,14 +641,21 @@ async function showFortWeek(section, message = "", startWeek = null) {
     if (!form) return;
     const redraw = (text) => { msgText = text; draw(); };
 
+    // Nothing changes the draft while it is being published.
+    const busy = () => { if (draft.publishing) msg.textContent = "Publishing… wait for it to finish."; return draft.publishing; };
+
     body.querySelector("[data-award-fill]").addEventListener("click", async (e) => {
+      if (busy()) return;
       if (draft.edited && !confirm("Fill replaces the draft, and your changes to it are lost. Fill anyway?")) return;
+      // The week and draft Fill was asked for. The page can move on while the rows load: if the week or the
+      // draft changed meanwhile, Fill drops what it loaded rather than write one week's winners into another.
+      const w = week, d = draft, asked = JSON.stringify(d.awards);
       e.target.disabled = true;
       msg.textContent = "Filling…";
       let promises, entries;
       try {
         // The week's rows in the Council's order: Fort Count, then tie order, as the public ranking shows them.
-        const res = await supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", week)
+        const res = await supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", w)
           .order("fort_count", { ascending: false }).order("tie_order").order("id");
         check(res, "Fort Week rows");
         entries = res.data.map((r) => ({ id: r.character_id, name: r.name, fortCount: r.fort_count }));
@@ -657,9 +665,13 @@ async function showFortWeek(section, message = "", startWeek = null) {
         msg.textContent = `Could not fill: ${err.message}`;
         return;
       }
-      const promise = promiseToStartFrom(promises, week);
+      if (week !== w || draft !== d || d.publishing || JSON.stringify(d.awards) !== asked) {
+        redraw(`The draft changed while Fill was loading, so Fill drafted nothing. Press Fill again to fill the week of ${dayMonth(week)}.`);
+        return;
+      }
+      const promise = promiseToStartFrom(promises, w);
       if (!promise) {
-        redraw(`There is no Reward Promise for the week of ${dayMonth(week)} or any week before it, so Fill drafted nothing.`);
+        redraw(`There is no Reward Promise for the week of ${dayMonth(w)} or any week before it, so Fill drafted nothing.`);
         return;
       }
       const ranking = mainsRanking(entries, state.governors, { withFarms: promise.paidOn === "main_farm" });
@@ -671,6 +683,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
 
     form.addEventListener("submit", (e) => {
       e.preventDefault();
+      if (busy()) return;
       // Each item with an amount typed is on the award, in list order. A typed amount that is not one
       // stays on as null, so the rules module names the item it is wrong for.
       const items = REWARD_ITEMS.filter((r) => form[`item-${r.id}`].value.trim())
@@ -686,47 +699,51 @@ async function showFortWeek(section, message = "", startWeek = null) {
     });
     body.querySelector("[data-award-cancel]")?.addEventListener("click", () => { draft.editing = null; redraw(""); });
     body.querySelectorAll("button[data-award-edit]").forEach((b) => b.addEventListener("click", () => {
+      if (busy()) return;
       draft.editing = Number(b.dataset.awardEdit);
       redraw("");
       section.querySelector("#aw-add [name=main]")?.focus();
     }));
     body.querySelectorAll("button[data-award-remove]").forEach((b) => b.addEventListener("click", () => {
+      if (busy()) return;
       const i = Number(b.dataset.awardRemove), a = draft.awards[i];
       draft.awards = draft.awards.filter((_, k) => k !== i);
       Object.assign(draft, { edited: true, editing: draft.editing === i ? null : draft.editing != null && draft.editing > i ? draft.editing - 1 : draft.editing });
       redraw(`Removed the ${ordinal(a.place)} place award for ${nameOf(a.id)} from the draft.`);
     }));
     body.querySelector("[data-award-discard]")?.addEventListener("click", () => {
+      if (busy()) return;
       openDraft();
       redraw("Discarded the draft. The published awards are unchanged.");
     });
 
-    body.querySelector("[data-award-publish]")?.addEventListener("click", async (e) => {
-      const awards = draft.awards;
-      const live = published(week);
+    body.querySelector("[data-award-publish]")?.addEventListener("click", async () => {
+      if (busy()) return;
+      const w = week, d = draft, awards = d.awards;
+      const live = published(w);
       for (const a of awards) {
-        const problem = checkWeeklyAward({ ...a, week }, state.governors, Date.now());
+        const problem = checkWeeklyAward({ ...a, week: w }, state.governors, Date.now());
         if (problem) { msg.textContent = `Could not publish the ${ordinal(a.place)} place award for ${nameOf(a.id)}: ${problem}`; return; }
       }
-      if (!awards.length && !confirm(`Publish no awards for the week of ${dayMonth(week)}? Its ${live.length} published ${live.length === 1 ? "award leaves" : "awards leave"} the public site.`)) return;
-      body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
-      msg.textContent = "Publishing…";
+      if (!awards.length && !confirm(`Publish no awards for the week of ${dayMonth(w)}? Its ${live.length} published ${live.length === 1 ? "award leaves" : "awards leave"} the public site.`)) return;
+      d.publishing = true;
+      redraw("Publishing…");
       // One call replaces the week's awards and their items together (publish_weekly_awards in supabase/migrations).
       const { error } = await supabase.rpc("publish_weekly_awards", {
-        week, awards: awards.map((a) => ({ character_id: a.id, place: a.place, award: a.award, note: a.note, items: a.items })),
+        week: w, awards: awards.map((a) => ({ character_id: a.id, place: a.place, award: a.award, note: a.note, items: a.items })),
       });
+      d.publishing = false;
       if (error) {
-        body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
         // 23503 = Postgres foreign_key_violation, from one of weekly_award's two foreign keys: the Fort Week
         // (weekly_award_week_fkey: the week was removed while this page was open) or the Main (a Farm, say).
-        msg.textContent = error.code !== "23503" ? `Could not publish: ${error.message}. Nothing changed on the public site.`
+        redraw(error.code !== "23503" ? `Could not publish: ${error.message}. Nothing changed on the public site.`
           : error.message.includes("weekly_award_week_fkey") ? "Could not publish: this Fort Week is no longer saved. Reload the page."
-          : "Could not publish: a Governor on the draft is no longer a Main on record, so it cannot receive a Weekly Award. Nothing changed on the public site.";
+          : "Could not publish: a Governor on the draft is no longer a Main on record, so it cannot receive a Weekly Award. Nothing changed on the public site.");
         return;
       }
       showFortWeek(section, awards.length
-        ? `Published ${awards.length} ${awards.length === 1 ? "award" : "awards"} for the week of ${dayMonth(week)}. ${awards.length === 1 ? "It is" : "They are"} on the public site now.`
-        : `Cleared the Weekly Awards for the week of ${dayMonth(week)}.`, week);
+        ? `Published ${awards.length} ${awards.length === 1 ? "award" : "awards"} for the week of ${dayMonth(w)}. ${awards.length === 1 ? "It is" : "They are"} on the public site now.`
+        : `Cleared the Weekly Awards for the week of ${dayMonth(w)}.`, w);
     });
   }
 
@@ -735,6 +752,12 @@ async function showFortWeek(section, message = "", startWeek = null) {
     const msg = body.querySelector(".admin-msg");
     wireAwards(body, msg);
     form.week.addEventListener("change", () => {
+      // Leaving a week drops its Weekly Awards draft: never mid-publish, and only on a yes when it is unpublished.
+      const unpublished = draft?.week === week && !sameAwards(draft.awards, published(week));
+      if (draft?.publishing || (unpublished && !confirm(`Leave the week of ${dayMonth(week)}? Its Weekly Awards draft is not published, and it is lost.`))) {
+        form.week.value = week;
+        return;
+      }
       const wasLive = liveHere(week);
       week = form.week.value;
       // The Live Week shows the reader's rows; leaving it drops them, so they are never pasted as a week.
@@ -865,10 +888,10 @@ async function loadPromises() {
   }));
 }
 
-// A tier as the form holds it: its place and amounts as typed, amounts by item id. A chest's "×2" is typed as "2".
+// A tier as the form holds it: its place and amounts as typed, amounts by item id.
 const tierToForm = (t) => ({
   place: String(t.place ?? ""), reward: t.reward ?? "",
-  amounts: Object.fromEntries((t.items ?? []).map((x) => [x.item, awardAmountLabel(x.item, x.amount).replace(/^×/, "")])),
+  amounts: Object.fromEntries((t.items ?? []).map((x) => [x.item, awardAmountInput(x.item, x.amount)])),
 });
 const BLANK_TIERS = ["1", "2", "3"].map((place) => ({ place, reward: "", amounts: {} }));
 const PAID_ON_LABEL = { mains: "Mains", main_farm: "Main + Farm" };

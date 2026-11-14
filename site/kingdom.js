@@ -321,6 +321,14 @@ export function awardAmountLabel(itemId, amount) {
   return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }
 
+// An amount as an edit form prefills it: the label when it reads back as the same amount, else the exact
+// number, so saving an edit never rounds 1234567 to 1.23M. A chest's "×2" is typed as "2".
+export function awardAmountInput(itemId, amount) {
+  const kind = rewardItem(itemId)?.kind ?? "resource";
+  const text = awardAmountLabel(itemId, amount).replace(/^×/, "");
+  return parseAwardAmount(text, kind) === amount ? text : String(amount);
+}
+
 // A place as it is written: 1st, 2nd, 3rd, 11th, 22nd.
 export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -450,6 +450,13 @@ test("an award item's amount past what the page can hold exactly is refused", ()
 
 test("a resource's amount that rounds up to the next unit reads in that unit", () => {
   assert.deepEqual([999999, 999999999].map((n) => awardAmountLabel("rss-wood", n)), ["1M", "1000M"]);
+});
+
+test("an edit form prefills an amount it can save back unchanged, never a rounded label", () => {
+  assert.deepEqual([2000000, 1500000, 500000, 750].map((n) => awardAmountInput("rss-food", n)), ["2M", "1.5M", "500K", "750"]);
+  assert.deepEqual([1234567, 999999].map((n) => awardAmountInput("rss-food", n)), ["1234567", "999999"]);
+  assert.equal(awardAmountInput("chest-epic", 2), "2");
+  for (const n of [1234567, 999999, 2070000]) assert.equal(parseAwardAmount(awardAmountInput("rss-gold", n)), n);
 });
 
 // Reward Promises. 2026-11-14 is a Saturday in the Fort Week of Monday 9 Nov.

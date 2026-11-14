@@ -96,6 +96,10 @@ _Avoid_: Prize, bonus
 What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Each tier pays exactly one place (1st, 7th), so the promise matches the ranking place for place, and the promise says whether it pays on the Mains ranking or the "Main + Farm" ranking. Home shows it until the Monday reset; then that week's Weekly Awards take over.
 _Avoid_: Prize pool, bounty
 
+**Fill**:
+Drafting a closed week's Weekly Awards from its Reward Promise, or the latest earlier one: each promised place goes to the Main at that place on the ranking the promise pays on. "Needs ID" rows and unlinked Farms are skipped and listed, and the next Main moves up. The draft stays on the admin page until the Council publishes it.
+_Avoid_: Auto-assign, payout run
+
 **Reward item**:
 One thing a Weekly Award gives, with its amount: a King's Chest grade as a count (×2) or a resource (Food, Wood, Stone, Gold, Any Resource) in K or M (2M Food). The game fixes the list; an award can hold several, plus free text for anything outside it.
 _Avoid_: Prize, loot

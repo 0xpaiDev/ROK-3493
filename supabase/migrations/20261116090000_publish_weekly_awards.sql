@@ -22,6 +22,9 @@ begin
   if jsonb_typeof(coalesce(awards, '[]'::jsonb)) <> 'array' then
     raise exception 'The Weekly Awards are a list.' using errcode = '22023';
   end if;
+  -- Two publishes of one week take turns on its Fort Week row, so the second deletes what the first wrote
+  -- instead of adding to it. A week that is gone locks nothing, and the insert's foreign key refuses it.
+  perform 1 from fort_week f where f.starts_on = publish_weekly_awards.week for update;
   delete from weekly_award w where w.week = publish_weekly_awards.week;
   for a in
     select x.character_id, x.place, x.award, x.note, coalesce(x.items, '[]'::jsonb) as items
