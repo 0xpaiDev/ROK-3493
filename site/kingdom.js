@@ -316,19 +316,23 @@ export function awardAmountLabel(itemId, amount) {
   return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }
 
-// Reward Promises: { week, intro, tiers: [{ place, reward, items }] }, what each place will get for a Fort Week,
-// set before the week closes so Governors have something to compete for. place is a label ("1st", "Top 10");
-// items are reward items as on a Weekly Award; reward is free text, optional once there are items.
+// Reward Promises: { week, intro, paidOn, tiers: [{ first, last, label, reward, items }] }, what each place will
+// get for a Fort Week, set before the week closes so Governors have something to compete for. A tier covers the
+// places first to last (1–1, 6–15) and may carry its own label; paidOn is the ranking it pays on, "mains" or
+// "main_farm". items are reward items as on a Weekly Award; reward is free text, optional once there are items.
 // Why a promise can't be saved, as a sentence for the Council, or null when it can.
 export function checkRewardPromise(promise, now = Date.now()) {
   if (!isFortWeekStart(promise.week)) return "Pick the Monday the Fort Week starts on.";
   // A promise is made before the reset; once a week closes, the Council gives Weekly Awards instead.
   if (isClosedWeek(promise.week, now)) return "This Fort Week has closed. Give its Weekly Awards on the Fort Week task instead.";
+  if (!PAID_ON.includes(promise.paidOn)) return "Say whether the promise pays on the Mains or Main + Farm ranking.";
   const tiers = promise.tiers ?? [];
   if (!tiers.length) return "Add at least one place.";
+  const isPlace = (n) => Number.isInteger(n) && n >= 1;
   for (const [i, t] of tiers.entries()) {
-    const place = t.place?.trim();
-    if (!place) return `Name place ${i + 1}, for example 1st or Top 10.`;
+    if (!isPlace(t.first) || !isPlace(t.last)) return `Place ${i + 1}: its first and last place are each a whole number from 1 up.`;
+    if (t.first > t.last) return `Place ${i + 1} runs backwards: ${ordinal(t.first)} comes after ${ordinal(t.last)}.`;
+    const place = tierLabel(t);
     const items = t.items ?? [];
     const unknown = items.find((x) => !rewardItem(x.item));
     if (unknown) return `"${unknown.item}" is not a reward item. Pick a King's Chest or a resource from the list.`;
@@ -338,8 +342,19 @@ export function checkRewardPromise(promise, now = Date.now()) {
       : `${place}: the amount of ${rewardItem(bad.item).name} is a whole number above 0, for example 500K or 2M.`;
     if (!items.length && !t.reward?.trim()) return `${place}: pick a reward item or write what it gets.`;
   }
+  // No place is promised twice. A gap is fine: nobody there gets an award.
+  for (const [i, a] of tiers.entries()) {
+    for (const b of tiers.slice(i + 1)) {
+      if (a.first <= b.last && b.first <= a.last) {
+        return `${tierLabel(a)} and ${tierLabel(b)} both cover ${ordinal(Math.max(a.first, b.first))}. Each place is promised once.`;
+      }
+    }
+  }
   return null;
 }
+
+// The rankings a Reward Promise can pay on: the Mains ranking, or the Main + Farm ranking.
+export const PAID_ON = ["mains", "main_farm"];
 
 // The promise home shows: the Live Week's, or null. A closed week's promise is done; its Weekly Awards show instead.
 export function livePromise(promises, now) {
@@ -350,4 +365,12 @@ export function livePromise(promises, now) {
 // repeats with one save), else null.
 export function promiseToStartFrom(promises, week) {
   return promises.find((p) => p.week === week) ?? promises.filter((p) => p.week < week).sort((a, b) => (a.week < b.week ? 1 : -1))[0] ?? null;
+}
+
+// A place as it is written: 1st, 2nd, 3rd, 11th, 22nd.
+export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+
+// A promise tier as home shows it: its own label, else its place ("1st") or place range ("6th–15th").
+export function tierLabel(tier) {
+  return tier.label?.trim() || (tier.first === tier.last ? ordinal(tier.first) : `${ordinal(tier.first)}–${ordinal(tier.last)}`);
 }
