@@ -31,7 +31,7 @@ export async function loadKingdom() {
     rows("gh_entry", "select=event_id,place,character_id,name,alliance,golden_heads&order=place.asc"),
     rows("kvk_entry", "select=*&order=rank.asc"),
     rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc&limit=1"),
-    rows("weekly_award", "select=week,character_id,place,award,note&order=week.desc,place.asc,id.asc"),
+    rows("weekly_award", "select=week,character_id,place,award,note,weekly_award_item(item,amount)&weekly_award_item.order=id.asc&order=week.desc,place.asc,id.asc"),
   ]);
   const latest = snapshots[0];
   const snapshotRows = latest
@@ -102,7 +102,8 @@ export async function loadKingdom() {
     // Kind and Farm link for the Mains ranking: { id, name, kind, mainId }.
     governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id })),
     nameHistory: names.map((n) => ({ id: n.character_id, name: n.name })),
-    // Weekly Awards { week, id, place, award, note }; always a Main's Character ID.
-    weeklyAwards: awards.map((a) => ({ week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note })),
+    // Weekly Awards { week, id, place, award, note, items }; always a Main's Character ID. items are
+    // [{ item, amount }] in the order given; award is the free text, null on an award of items only.
+    weeklyAwards: awards.map((a) => ({ week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note, items: a.weekly_award_item })),
   };
 }

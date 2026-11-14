@@ -1,5 +1,6 @@
-import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek } from "./kingdom.js";
+import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
+import { rewardItem } from "./rewards.js";
 
 (async () => {
   const C = window.KD_CONTENT || { news: [] };
@@ -27,6 +28,14 @@ import { loadKingdom } from "./store.js";
     return String(Math.round(n));
   };
   const one = (n) => (Math.round(n * 10) / 10).toLocaleString("en");
+  // An award's reward items: icon, amount and name for each ("×1 Legendary Chest", "2M Food").
+  // An item id the list no longer has shows as its id rather than vanishing.
+  const rewardItems = (items) => `<span class="reward-items">${items.map((x) => {
+    const r = rewardItem(x.item);
+    return `<span class="reward-item">${r ? `<img src="${r.icon}" alt="${esc(r.name)}" loading="lazy">` : ""}<b class="num">${esc(awardAmountLabel(x.item, x.amount))}</b> ${esc(r?.name ?? x.item)}</span>`;
+  }).join("")}</span>`;
+  // What an award gives: its reward items, then any free text. An award from before reward items is text only.
+  const awardBody = (a, textTag = "span") => `${a.items?.length ? rewardItems(a.items) : ""}${a.award ? `<${textTag} class="reward">${esc(a.award)}</${textTag}>` : ""}`;
   const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
   const pad = (n) => String(n).padStart(2, "0");
   const deltaHtml = (v, isNew) => {
@@ -129,7 +138,7 @@ import { loadKingdom } from "./store.js";
   // A Fort Week's Weekly Awards in place order: place in its metal, the Main, the award and the Council's note.
   const winnersList = (awards) => `<ol class="tiers winners">${awards.map((a) => `
     <li><span class="place num p${a.place}">${ordinal(a.place)}</span>
-      <span class="aw">${who(byKey(a.id))}<span class="reward">${esc(a.award)}</span>${a.note ? `<small>${esc(a.note)}</small>` : ""}</span></li>`).join("")}</ol>`;
+      <span class="aw">${who(byKey(a.id))}${awardBody(a)}${a.note ? `<small>${esc(a.note)}</small>` : ""}</span></li>`).join("")}</ol>`;
 
   // One Weekly Ranking row per Main (and, with Farms, per unlinked Farm), each with its Farm rows.
   // A row's arrow compares like with like: a summed Main against its sum the week before.
@@ -293,7 +302,7 @@ import { loadKingdom } from "./store.js";
             <div class="award-head"><span class="eyebrow">Weekly Award · Week ${nowN}</span>${R.draft ? '<span class="tag draft">Draft</span>' : ""}</div>
             <h2>${esc(R.title)}</h2>
             <p>${esc(R.intro)}</p>
-            <ul class="tiers">${R.tiers.map((t) => `<li><span class="place">${esc(t.place)}</span><span class="reward">${esc(t.reward)}</span></li>`).join("")}</ul>
+            <ul class="tiers">${R.tiers.map((t) => `<li><span class="place">${esc(t.place)}</span>${t.items?.length ? rewardItems(t.items) : `<span class="reward">${esc(t.reward)}</span>`}</li>`).join("")}</ul>
             ${R.rules?.length ? `<ul class="rules">${R.rules.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
           </section>` : ""}
           <section class="card reveal" style="--d:780ms">
@@ -494,7 +503,7 @@ import { loadKingdom } from "./store.js";
         </div>
         ${g.played ? `<div><div class="eyebrow">Fort history</div>
           <ol class="mini-list">${g.fort.map((e, k) => ({ e, k })).reverse().map(({ e, k }) => `<li><span style="flex:1">Week ${isoWeek(weeks[k].start)} <span class="muted">· ${fmtRange(weeks[k])}</span></span>${e ? `<span class="muted mono">${e.rank != null ? "#" + e.rank : "Farm"}</span><b class="num" style="min-width:40px;text-align:right">${e.fortCount}</b>` : '<span class="muted">not ranked</span>'}</li>`).join("")}</ol></div>` : ""}
-        ${g.awards.length ? `<div><div class="eyebrow">Weekly Awards</div><ol class="mini-list">${g.awards.map((a) => `<li><span class="place mono p${a.place}">${ordinal(a.place)}</span><span class="aw"><b>${esc(a.award)}</b><small>${esc(weekLabel(a.week))}${a.note ? ` · ${esc(a.note)}` : ""}</small></span></li>`).join("")}</ol></div>` : ""}
+        ${g.awards.length ? `<div><div class="eyebrow">Weekly Awards</div><ol class="mini-list">${g.awards.map((a) => `<li><span class="place mono p${a.place}">${ordinal(a.place)}</span><span class="aw">${awardBody(a, "b")}<small>${esc(weekLabel(a.week))}${a.note ? ` · ${esc(a.note)}` : ""}</small></span></li>`).join("")}</ol></div>` : ""}
         ${g.gh.length ? `<div><div class="eyebrow">GH Events</div><ol class="mini-list">${g.gh.map((x) => `<li><span style="flex:1">${esc(x.label)}</span><span class="muted mono">#${x.rank}</span><b class="num">${x.gh} GH</b></li>`).join("")}</ol></div>` : ""}
         ${g.kvk ? `<div><div class="eyebrow">Last KvK</div><div class="kv"><div><small>Rank</small><b>#${g.kvk.rank}</b></div><div><small>Kill points</small><b>${big(g.kvk.killPoints)}</b></div><div><small>Status</small><b>${esc(g.kvk.status)}</b></div></div></div>` : ""}
       </div>`;

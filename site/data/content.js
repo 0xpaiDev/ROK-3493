@@ -1,5 +1,7 @@
 // Hand-edited content: news posts and next week's fort rewards.
 // Set draft: false once the text is real; draft items show a "Draft" tag on the page.
+// A reward tier may list items, [{ item: "chest-legendary", amount: 1 }, { item: "rss-food", amount: 2000000 }],
+// with ids from site/rewards.js; they show with their icons. A tier with no items shows its reward text.
 window.KD_CONTENT = {
   rewards: {
     draft: true,
