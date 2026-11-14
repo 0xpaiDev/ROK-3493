@@ -151,7 +151,8 @@ import { loadKingdom } from "./store.js";
   };
 
   // ---------- views ----------
-  const state = { fortView: "weekly", withFarms: false, fortWeek: weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
+  // Fort Rankings opens on the week home shows, so home's "All N Mains →" and Find links land on it.
+  const state = { fortView: "weekly", withFarms: false, fortWeek: homeI >= 0 ? homeI : weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
 
   function podium(rows, { live = false } = {}) {
     const step = (r, place) => {
@@ -206,7 +207,7 @@ import { loadKingdom } from "./store.js";
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
 
   function home() {
-    if (homeI < 0) return `<div class="wrap page"><div class="card empty">No Fort Week has been logged yet.</div></div>`;
+    if (homeI < 0) return `<div class="wrap page"><div class="card empty">${weeks.length ? `Week ${isoWeek(weeks[weeks.length - 1].start)} is waiting for its first fort.` : "No Fort Week has been logged yet."}</div></div>`;
     const i = homeI, w = weeks[i], rows = weekRows(i), wn = isoWeek(w.start);
     const now = fortWeekAt(Date.now()), nowN = isoWeek(now.start);
     const total = w.entries.reduce((a, e) => a + e.fortCount, 0);
