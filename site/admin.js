@@ -592,7 +592,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
       // Each item with an amount typed is on the award, in list order. A typed amount that is not one
       // stays on as null, so the rules module names the item it is wrong for.
       const items = REWARD_ITEMS.filter((r) => form[`item-${r.id}`].value.trim())
-        .map((r) => ({ item: r.id, amount: parseAwardAmount(form[`item-${r.id}`].value) }));
+        .map((r) => ({ item: r.id, amount: parseAwardAmount(form[`item-${r.id}`].value, r.kind) }));
       const award = { week, id: typedId(form.main.value.trim()), place: Number(form.place.value), award: form.award.value.trim(), note: form.note.value.trim() || null, items };
       const problem = checkWeeklyAward(award, state.governors, Date.now());
       if (problem) { msg.textContent = `Could not add the award: ${problem}`; return; }

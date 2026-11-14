@@ -276,7 +276,9 @@ export function checkWeeklyAward(award, governors, now = Date.now()) {
   const unknown = items.find((x) => !rewardItem(x.item));
   if (unknown) return `"${unknown.item}" is not a reward item. Pick a King's Chest or a resource from the list.`;
   const bad = items.find((x) => !Number.isInteger(x.amount) || x.amount < 1);
-  if (bad) return `The amount of ${rewardItem(bad.item).name} is a whole number above 0, for example 2 or 2M.`;
+  if (bad) return rewardItem(bad.item).kind === "chest"
+    ? `The amount of ${rewardItem(bad.item).name} is a count from 1 up, for example 2.`
+    : `The amount of ${rewardItem(bad.item).name} is a whole number above 0, for example 500K or 2M.`;
   // The reward items are the award; the text is the fallback for anything outside the list.
   if (!items.length && !award.award?.trim()) return "Write what the award is, for example the King's Chests it gives.";
   return null;
@@ -294,19 +296,22 @@ export function awardsOf(awards, characterId) {
   return awardsByWeek(awards.filter((a) => a.id === characterId)).flatMap((w) => w.awards);
 }
 
-// An award item's amount as the Council types it: a whole number, or a number with a K or M suffix
-// ("2M", "1.5k"), thousands commas allowed. Null when it is not an amount.
-export function parseAwardAmount(text) {
-  const m = String(text ?? "").trim().replace(/,/g, "").match(/^(\d+(?:\.\d+)?)([km]?)$/i);
+// An award item's amount as the Council types it: a whole number, or for a resource a number with a
+// K or M suffix ("2M", "1.5k"), thousands commas allowed. A King's Chest (kind "chest") takes a plain
+// count, so a stray "2M" is never two million chests. Null when it is not an amount.
+export function parseAwardAmount(text, kind = "resource") {
+  const m = String(text ?? "").trim().replace(/,/g, "").match(kind === "chest" ? /^(\d+)()$/ : /^(\d+(?:\.\d+)?)([km]?)$/i);
   // Rounded to a millionth first, so 2.07M is 2070000 and not a float a hair below it.
   const n = m && Number((Number(m[1]) * { "": 1, k: 1e3, m: 1e6 }[m[2].toLowerCase()]).toFixed(6));
-  return Number.isInteger(n) && n > 0 ? n : null;
+  // Past a safe integer the page can't hold the amount exactly, so it is refused rather than changed.
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 
 // An award item's amount the way the game writes it: a King's Chest as a count ("×2"), a resource
 // with K and M ("2M", "1.5M", "500K").
 export function awardAmountLabel(itemId, amount) {
   if (rewardItem(itemId)?.kind === "chest") return "×" + amount;
-  const short = (n, unit) => Number((amount / n).toFixed(2)) + unit;
-  return amount >= 1e6 ? short(1e6, "M") : amount >= 1e3 ? short(1e3, "K") : String(amount);
+  // The unit is picked after rounding, so 999999 reads "1M", not "1000K".
+  const short = (n) => Number((amount / n).toFixed(2));
+  return short(1e6) >= 1 ? short(1e6) + "M" : short(1e3) >= 1 ? short(1e3) + "K" : String(amount);
 }

@@ -439,3 +439,15 @@ test("a Weekly Award refuses an item not on the list and an amount of 0 or less"
   const withItem = (item, amount) => ({ ...award("1"), items: [{ item, amount }] });
   assert.deepEqual([withItem("chest-mythic", 1), withItem("rss-gold", 0), withItem("rss-gold", -5), withItem("rss-gold", 1.5)].map((a) => Boolean(checkWeeklyAward(a, awardees, afterWeek))), [true, true, true, true]);
 });
+
+test("a King's Chest's amount is a plain count, never K or M", () => {
+  assert.deepEqual([["3", "chest"], ["2M", "chest"], ["2M", "resource"]].map(([t, kind]) => parseAwardAmount(t, kind)), [3, null, 2000000]);
+});
+
+test("an award item's amount past what the page can hold exactly is refused", () => {
+  assert.deepEqual(["12345678901234567", "99999999999999999999K"].map((t) => parseAwardAmount(t)), [null, null]);
+});
+
+test("a resource's amount that rounds up to the next unit reads in that unit", () => {
+  assert.deepEqual([999999, 999999999].map((n) => awardAmountLabel("rss-wood", n)), ["1M", "1000M"]);
+});
