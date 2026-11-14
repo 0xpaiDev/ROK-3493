@@ -649,7 +649,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
       if (draft.edited && !confirm("Fill replaces the draft, and your changes to it are lost. Fill anyway?")) return;
       // The week and draft Fill was asked for. The page can move on while the rows load: if the week or the
       // draft changed meanwhile, Fill drops what it loaded rather than write one week's winners into another.
-      const w = week, d = draft, asked = JSON.stringify(d.awards);
+      const w = week, d = draft, asked = d.awards;
       e.target.disabled = true;
       msg.textContent = "Filling…";
       let promises, entries;
@@ -665,7 +665,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
         msg.textContent = `Could not fill: ${err.message}`;
         return;
       }
-      if (week !== w || draft !== d || d.publishing || JSON.stringify(d.awards) !== asked) {
+      if (week !== w || draft !== d || d.publishing || !sameAwards(d.awards, asked)) {
         redraw(`The draft changed while Fill was loading, so Fill drafted nothing. Press Fill again to fill the week of ${dayMonth(week)}.`);
         return;
       }
@@ -732,8 +732,8 @@ async function showFortWeek(section, message = "", startWeek = null) {
       const { error } = await supabase.rpc("publish_weekly_awards", {
         week: w, awards: awards.map((a) => ({ character_id: a.id, place: a.place, award: a.award, note: a.note, items: a.items })),
       });
-      d.publishing = false;
       if (error) {
+        d.publishing = false;
         // 23503 = Postgres foreign_key_violation, from one of weekly_award's two foreign keys: the Fort Week
         // (weekly_award_week_fkey: the week was removed while this page was open) or the Main (a Farm, say).
         redraw(error.code !== "23503" ? `Could not publish: ${error.message}. Nothing changed on the public site.`
@@ -751,10 +751,15 @@ async function showFortWeek(section, message = "", startWeek = null) {
     const form = body.querySelector("#fw-paste");
     const msg = body.querySelector(".admin-msg");
     wireAwards(body, msg);
-    form.week.addEventListener("change", () => {
-      // Leaving a week drops its Weekly Awards draft: never mid-publish, and only on a yes when it is unpublished.
+    // Leaving a week, or saving its Fort Week, drops its Weekly Awards draft: never mid-publish, and only on a
+    // yes when the draft is not published.
+    const leaveDraft = () => {
+      if (draft?.publishing) { msg.textContent = "Publishing… wait for it to finish."; return false; }
       const unpublished = draft?.week === week && !sameAwards(draft.awards, published(week));
-      if (draft?.publishing || (unpublished && !confirm(`Leave the week of ${dayMonth(week)}? Its Weekly Awards draft is not published, and it is lost.`))) {
+      return !unpublished || confirm(`Leave the week of ${dayMonth(week)}? Its Weekly Awards draft is not published, and it is lost.`);
+    };
+    form.week.addEventListener("change", () => {
+      if (!leaveDraft()) {
         form.week.value = week;
         return;
       }
@@ -808,6 +813,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
     });
 
     body.querySelector("[data-save]")?.addEventListener("click", async () => {
+      if (!leaveDraft()) return;
       body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
       msg.textContent = "Saving…";
       if (liveHere(week)) {
