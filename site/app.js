@@ -1,4 +1,4 @@
-import { mainsRanking, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal } from "./kingdom.js";
+import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -144,14 +144,13 @@ import { rewardItem } from "./rewards.js";
   // One Weekly Ranking row per Main (and, with Farms, per unlinked Farm), each with its Farm rows.
   // A row's score is a Main's Group Score in "Main + Farm", else its Fort Count. Its arrow compares
   // like with like: a Main's Group Score against its Group Score the week before.
-  const score = (e) => e.groupScore ?? e.fortCount;
   const row = (i, e, rows, withGroup = false) => {
     const g = get(e.id, e.name, e.entry);
     const prev = i === 0 ? null
       : withGroup && e.id != null ? grouped[i - 1].find((r) => r.id === e.id && r.rank != null)
       : g.fort[i - 1];
-    const tie = e.rank != null && rows.some((o) => o !== e && o.rank != null && score(o) === score(e));
-    return { g, e, tie, delta: prev ? score(e) - score(prev) : null, isNew: i > 0 && !prev };
+    const tie = e.rank != null && rows.some((o) => o !== e && o.rank != null && rowScore(o) === rowScore(e));
+    return { g, e, tie, delta: prev ? rowScore(e) - rowScore(prev) : null, isNew: i > 0 && !prev };
   };
   const weekRows = (i, withFarms = false) => {
     const rows = withFarms ? grouped[i] : plain[i];
@@ -182,7 +181,8 @@ import { rewardItem } from "./rewards.js";
   }
 
   function rankList(rows, { limit = Infinity, deltas = false, stagger = false } = {}) {
-    const top = Math.max(1, ...rows.map((r) => score(r.e)));
+    // Part rows count too: a Farm's real Fort Count can be above the Group Score of the row it sits under.
+    const top = Math.max(1, ...rows.flatMap((r) => [r, ...r.parts]).map((r) => rowScore(r.e)));
     const li = (r, n, { part = false } = {}) => {
       const place = r.e.rank != null && r.e.rank <= 3 ? PLACE[r.e.rank - 1] : "";
       const cls = ["row", place, part && "part", deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
@@ -193,15 +193,15 @@ import { rewardItem } from "./rewards.js";
         + (part ? (r.self
           ? `<span class="tag farm" title="The Main's own Fort Count, counted in full in the Group Score above">Main</span>`
           : `<span class="tag farm" title="A Farm of the Main above. Half its Fort Count counts toward the Group Score above.">Farm</span>`) : "");
-      const total = r.parts?.length ? `<small>score</small>` : "";
+      const scoreLabel = r.parts?.length ? `<small>score</small>` : "";
       return `
       <li class="${cls}"${stagger ? ` style="--d:${700 + n * 70}ms"` : ""}>
         <span class="pos num">${part ? "" : r.e.rank ?? "–"}</span>
         <span class="row-main">
           <span class="row-name">${who(r.g)}${tags}</span>
-          <span class="bar"><i style="width:${(score(r.e) / top) * 100}%;animation-delay:${900 + Math.min(n, 15) * 90}ms"></i></span>
+          <span class="bar"><i style="width:${(rowScore(r.e) / top) * 100}%;animation-delay:${900 + Math.min(n, 15) * 90}ms"></i></span>
         </span>
-        <b class="count num">${score1(score(r.e))}${total}</b>
+        <b class="count num">${score1(rowScore(r.e))}${scoreLabel}</b>
         ${deltas ? deltaHtml(r.delta, r.isNew) : ICON_GO}
       </li>`;
     };
