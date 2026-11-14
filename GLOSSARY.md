@@ -22,7 +22,7 @@ _Avoid_: Gov ID, player ID
 A Governor that a person plays as their primary account.
 
 **Farm**:
-A Governor linked as a secondary account of some Main. Its forts still count for the Kingdom and are added to its Main's total only in the "Main + Farm" view of the Weekly Ranking; it is shown alongside its Main.
+A Governor linked as a secondary account of some Main. Its forts still count for the Kingdom, and count half toward its Main's Group Score in the "Main + Farm" view of the Weekly Ranking; it is shown alongside its Main.
 _Avoid_: Alt, second account
 
 **Migrated**:
@@ -65,6 +65,10 @@ _Avoid_: Fort score, fort kills, points
 **Weekly Ranking**:
 The ordered list of Governors by Fort Count for one Fort Week, copied from the in-game ranking page.
 _Avoid_: Leaderboard, log
+
+**Group Score**:
+A Main's own Fort Count plus half of each of its Farms' Fort Counts, for one Fort Week. The "Main + Farm" view ranks Mains on it. It is not a Fort Count.
+_Avoid_: Points, combined Fort Count, total
 
 **Live Week**:
 The current Fort Week, whose Weekly Ranking the reader refreshes until the Monday reset closes it.
