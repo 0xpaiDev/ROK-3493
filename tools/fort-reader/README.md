@@ -17,10 +17,36 @@ On any other Android device (Redroid on a server, a phone), set `FORT_READER_ADB
 
 ## Run
 
-1. In BlueStacks, open the Fort Destroyer Rankings.
+1. Have BlueStacks running with the game installed and the Reader Account logged in. The game may be open on any screen, or closed.
 2. From this folder: `.venv\Scripts\python.exe fort_reader.py`
-3. It swipes through the list on its own; the PC's mouse is free.
+3. It restarts the game, taps through to the Fort Destroyer Rankings and swipes through the list on its own; the PC's mouse is free.
 4. Paste the result, already on the clipboard, into the admin page's Fort Week.
+
+## Opening the ranking from a closed game
+
+Every run force-stops the game, starts it again, and has Haiku name each screen on the way (`read.name_screen`). Each screen it knows has one fixed tap (`navigate.PATH`, for a 1600x900 screen):
+
+| Screen | Tap | What it is |
+|---|---|---|
+| loading | none, waits 5 s | black screen, title art with a progress bar, a spinner over the city |
+| login_failed_loading | none, waits 5 s | "Network disconnected / Login failed ... REGISTER_AND_LOGING" over the loading screen. A BlueStacks bug: CONFIRM pressed now restarts into the same box, so the reader waits for the city to load behind it |
+| login_failed | CONFIRM (800, 588) | the same box over the city; CONFIRM restarts the game, and this time it loads |
+| city_bar_closed | menu button (1540, 820) | city with the bottom bar folded away |
+| city | Alliance (1160, 840) | city with Items, Alliance, Commander, Mail showing |
+| alliance | gear tab (90, 490) | the Alliance window on any tab |
+| alliance_settings | Rankings (1170, 380) | the gear tab; Quit Alliance is on this page, well below |
+| alliance_rankings | Fort Destroyer (400, 690) | the Rankings tiles |
+| fort_ranking | done | the Fort Destroyer Rankings |
+
+The run stops, saves `stopped-<screen>.png` in its `runs\` folder and sends nothing when it meets:
+
+- **login**: log the Reader Account in by hand.
+- **update**: install the new game version by hand.
+- **loading** for longer than `FORT_READER_LOADING_LIMIT` seconds in all (default 600): a large download or no network.
+- **unknown**: any screen not in the table, such as a new popup. Close it by hand and, if it comes back, add it to `navigate.PATH`.
+- **the same screen tapped three times** without moving on, such as a "Login failed" box over the city that keeps coming back (the account is open somewhere else).
+
+It never guesses a tap and never types a password. Starting the game from closed takes about 1 to 2 minutes on BlueStacks.
 
 ## Send to the Live Week
 
@@ -36,4 +62,4 @@ Rows from overlapping screens are joined by rank. The run lists problems instead
 
 Swiping the game from a script is automation, which Lilith's terms forbid. Run it on an account you can afford to lose.
 
-Tests: `.venv\Scripts\python.exe -m unittest test_merge`
+Tests: `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate`

@@ -56,6 +56,8 @@ def instance_port(conf_path=CONF):
 
 
 SCREEN = (1600, 900)
+PACKAGE = "com.lilithgame.roc.gp"
+ACTIVITY = "com.harry.engine.MainActivity"  # started directly: on Redroid the game isn't in the launcher
 
 
 def screen_size(wm_size):
@@ -89,6 +91,14 @@ class Device:
 
     def screenshot(self):
         return Image.open(io.BytesIO(self._run("exec-out", "screencap", "-p"))).convert("RGB")
+
+    def restart_game(self):
+        """Close the game and start it again, so every run begins from the same place."""
+        self._run("shell", "am", "force-stop", PACKAGE)
+        self._run("shell", "am", "start", "-n", f"{PACKAGE}/{ACTIVITY}")
+
+    def tap(self, x, y):
+        self._run("shell", "input", "tap", str(x), str(y))
 
     def swipe(self, from_y, to_y, ms=1200):
         """Drag the list from one height to another (fractions of the screen), slowly, so it
