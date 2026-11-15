@@ -14,6 +14,7 @@ import argparse
 import datetime
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -170,6 +171,10 @@ def main():
     started_at = datetime.datetime.now(datetime.timezone.utc)
     run_dir = Path(args.source) if args.source else HERE / "runs" / started_at.strftime("%Y-%m-%d_%H%M%S")
     failure = None
+    # systemd stops a run that outlasts its limit with SIGTERM. Python would die without running the
+    # finally below; as a SystemExit the run ends like any other failure, and the email still goes out.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(
+        "The run was stopped by SIGTERM: its time limit (45 minutes on the server), a stop by hand or a shutdown."))
     try:
         run(args, run_dir)
     except KeyboardInterrupt:
@@ -182,6 +187,8 @@ def main():
         failure = f"The reader crashed: {type(e).__name__}: {e}"
         raise
     finally:
+        # A second SIGTERM must not cut the email off; systemd's SIGKILL still ends a stuck send.
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
         if args.send:  # the scheduled run: nobody is watching the console
             alert_after_run(failure, run_dir, started_at)
 

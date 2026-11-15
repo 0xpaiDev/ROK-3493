@@ -58,7 +58,7 @@ Screenshots and `paste.txt` are kept under `runs/`. To re-read a run without the
 
 ## Email when a run fails
 
-With `--send`, a run that ends without sending its reading emails Petras the reason and the newest screenshot of the run (`stopped-<screen>.png` when it stopped on a screen). That covers problems found in the reading, a stop on a screen the reader won't tap past, and a crash. A run that sends its reading emails nobody, and a run without `--send` only prints. A run that started on a Sunday (UTC) is the final run that closes the Fort Week, so its failure also goes to the Council addresses.
+With `--send`, a run that ends without sending its reading emails Petras the reason and the newest screenshot of the run (`stopped-<screen>.png` when it stopped on a screen). That covers problems found in the reading, a stop on a screen the reader won't tap past, and a crash. A run that sends its reading emails nobody, and a run without `--send` only prints. A run that started on a Sunday from 22:00 UTC is the final run that closes the Fort Week (the same cutoff as `record_live_week`), so its failure also goes to the Council addresses. A run stopped at its time limit on the server emails too.
 
 The mail goes out over Gmail SMTP with an app password. In the repo's `.env`:
 
@@ -75,10 +75,82 @@ Without the first three, the reader runs as before and prints the failure only. 
 
 **Revoke or rotate it.** On the same page, delete `fort-reader`; the next failed run then prints `Couldn't email the failure` and carries on. To rotate, create a new one, put it in `.env`, then delete the old one. Turning off 2-Step Verification or changing the account password also revokes every app password.
 
+## The nightly run on the server
+
+On the Oracle A1 `fort-reader` (ADR 0003; its address is in `.scratch/fort-reader/oracle-vm.md`, never in this repo), a systemd timer starts one run a day at 23:45 UTC: `host/run.sh` starts the `redroid` Android container, runs `fort_reader.py --send`, and systemd stops the container afterwards, whatever happened. Each reading sets the Live Week's completeness from its time: a reading taken on the week's Sunday from 22:00 UTC closes it Complete, any earlier one (a run by hand on Sunday morning included) leaves it Partial. So when Sunday's run fails, or the host is down, the week keeps its last reading and is saved as Partial, and the failure email reaches Petras and the Council addresses. A failed weekday run only leaves a stale "as of" time. The site shows the Partial tag only once the week has closed.
+
+**Move the run time.** Set `FORT_READER_RUN_AT=HH:MM` (UTC, from 22:00 to 23:50) in `.env` and run `tools/fort-reader/host/install.sh` again; it prints the next run. Earlier than 22:00, Sunday's reading wouldn't close the week; later than 23:50, a run of about 10 minutes would send after the reset, which is refused. A run missed while the host was off is not made up later.
+
+**Watch a run.** `journalctl -u fort-reader -n 100` shows the last run's output; `systemctl list-timers fort-reader.timer` the next one. To run one now: `sudo systemctl start fort-reader`. Screenshots stay under `tools/fort-reader/runs/`.
+
+### Setup (once)
+
+1. Docker and Android: `sudo apt install docker.io adb`, add the user to the `docker` group, load `binder_linux` at boot (`/etc/modules-load.d/redroid.conf`) and mount binderfs at `/dev/binderfs` from fstab, as ticket 03 records. Create the container once; `run.sh` only starts and stops it:
+
+   ```
+   docker run -d --name redroid --privileged -v /opt/redroid/data:/data -p 127.0.0.1:5555:5555 \
+     redroid/redroid:13.0.0_64only-latest androidboot.redroid_width=1600 androidboot.redroid_height=900 \
+     androidboot.redroid_dpi=450 androidboot.redroid_gpu_mode=guest androidboot.use_memfd=true
+   docker stop redroid
+   ```
+
+   ADB listens on the host's loopback only. `/opt/redroid/data` keeps the game and the login between runs.
+2. The code: `git clone` this repo into the user's home, then `cd tools/fort-reader && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`.
+3. The secrets, in the repo's `.env` on the host only (`install.sh` makes it readable by this user alone):
+
+   ```
+   ANTHROPIC_API_KEY=<a key made for this host>
+   FORT_READER_EMAIL=<the reader's Supabase sign-in>
+   FORT_READER_PASSWORD=<its password>
+   FORT_READER_GMAIL=<the four mail settings, see "Email when a run fails">
+   FORT_READER_GMAIL_APP_PASSWORD=...
+   FORT_READER_ALERT_TO=...
+   FORT_READER_ALERT_COUNCIL=...
+   FORT_READER_ADB=127.0.0.1:5555
+   FORT_READER_MIN_SWIPE_MS=4000
+   FORT_READER_RUN_AT=23:45
+   ```
+
+   `FORT_READER_MIN_SWIPE_MS` stretches every swipe to at least 4 s: Redroid on the A1 ignores quicker ones.
+4. Install the timer: `tools/fort-reader/host/install.sh`.
+5. Close the game in BlueStacks at home, then log the Reader Account in once (below). The account must be open in one place only, or the game shows "Login failed, REGISTER_AND_LOGING".
+
+**Code updates.** After a reader change merges, `git pull` on the host by hand. Nothing pulls before a run.
+
+### Log in once over scrcpy
+
+From the home PC, tunnel ADB and drive the container's screen:
+
+```
+ssh -L 5555:127.0.0.1:5555 <the host>
+docker start redroid
+```
+
+Then on the PC, in a second terminal: `adb connect 127.0.0.1:5555` and `scrcpy -s 127.0.0.1:5555`. Start the game (`adb shell am start -n com.lilithgame.roc.gp/com.harry.engine.MainActivity`; it is not in the launcher), log in with the Reader Account's Lilith email and password, wait for the city, then `docker stop redroid` on the host. Do the same when a run stopped on **login**.
+
+### Install a game update by hand
+
+Redroid has no Play Store. When a run stops on **update**, download the new version's universal bundle from APKMirror (Lilith offers no APK), unzip the `.apkm`, copy `base.apk`, `split_RawAssets.apk` and `split_config.arm64_v8a.apk` to the host, and with the container running:
+
+```
+adb -s 127.0.0.1:5555 install-multiple -r base.apk split_config.arm64_v8a.apk split_RawAssets.apk
+```
+
+It should print `Success`. Then `docker stop redroid`; the next run carries on. The reader itself never downloads an APK.
+
+### Rotate a secret
+
+Each one lives only in the host's `.env`. Put the new value there; the next run uses it.
+
+- **Anthropic key.** In the Anthropic Console, in a workspace with a low monthly spend limit, create a key named `fort-reader host`, put it in `ANTHROPIC_API_KEY`, then delete the old key. A leaked key can spend only up to that limit.
+- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002).
+- **Gmail app password.** See "Revoke or rotate it" above.
+- **Council addresses.** Edit `FORT_READER_ALERT_COUNCIL`.
+
 ## What it checks
 
 Rows from overlapping screens are joined by rank. The run lists problems instead of guessing: ranks with gaps, a Fort Count read two different ways, a Fort Count that rises down the list, or your pinned row disagreeing with the list. A name read two ways with one Fort Count (names in odd scripts, such as `CƦУ㋾`, read differently per screen) is not a problem: the row is kept and sent flagged, so the database leaves it "needs ID" and never matches it by either spelling. Names are copied as read; the admin page matches them against Name History and flags the rest "needs ID".
 
 Swiping the game from a script is automation, which Lilith's terms forbid. Run it on an account you can afford to lose.
 
-Tests: `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate`
+Tests: `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate test_alert`

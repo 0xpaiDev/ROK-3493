@@ -26,10 +26,13 @@ def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
         return []  # no mail settings: the run prints its failure only, as before
     to = [env["FORT_READER_ALERT_TO"]]
     note = ""
-    if started_at.weekday() == 6:  # Sunday (UTC): the final run, which closes the week
+    # Sunday from 22:00 UTC: the final run, which closes the week. The same cutoff as record_live_week
+    # (supabase/migrations/20261116130000_live_week_completeness_from_reading_day.sql).
+    if started_at.weekday() == 6 and started_at.hour >= 22:
         to += [a.strip() for a in env.get("FORT_READER_ALERT_COUNCIL", "").split(",") if a.strip()]
         note = ("\nThis was Sunday's final run, which closes the Fort Week. The week keeps its last "
-                "reading; paste the full ranking on the admin page once the week has closed.\n")
+                "reading and is saved as Partial; paste the full ranking on the admin page once the "
+                "week has closed.\n")
     msg = EmailMessage()
     msg["From"] = env["FORT_READER_GMAIL"]
     msg["To"] = ", ".join(to)

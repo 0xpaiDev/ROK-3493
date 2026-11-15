@@ -18,7 +18,8 @@ import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
 # Every Live Week migration, in order: each test applies them all inside its transaction.
-MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("20261109*.sql"))
+MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("20261109*.sql")) + [
+    ROOT / "supabase" / "migrations" / "20261116130000_live_week_completeness_from_reading_day.sql"]
 CASES = json.loads((ROOT / "tests" / "name-matching-cases.json").read_text(encoding="utf-8"))["cases"]
 
 
@@ -202,6 +203,36 @@ class LiveWeekReading(unittest.TestCase):
         self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=taken)
         self.conn.execute("set local role anon")
         self.assertEqual(self.one("select read_at from fort_week where starts_on = %s", (self.live,)), taken)
+
+    def completeness(self):
+        self.conn.execute("set local role anon")
+        found = self.one("select completeness from fort_week where starts_on = %s", (self.live,))
+        self.as_owner()
+        return found
+
+    def test_a_weekday_reading_leaves_the_week_partial(self):
+        # Until Sunday's final run lands, a Governor the last reading missed has an unknown count, not 0.
+        self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=self.one("select %s::timestamp at time zone 'utc'", (self.live,)))
+        self.assertEqual(self.completeness(), "partial")
+
+    def sunday_at(self, hhmm):
+        """That time on the Live Week's Sunday (UTC), or skip the test while it is still to come:
+        record_live_week refuses a reading stamped in the future."""
+        at = self.one("select (%s::date + 6)::timestamp at time zone 'utc' + %s::interval", (self.live, hhmm))
+        if at > self.one("select now()"):
+            self.skipTest(f"the Live Week's Sunday {hhmm} UTC hasn't come yet")
+        return at
+
+    def test_a_sunday_reading_before_the_final_run_leaves_the_week_partial(self):
+        # A run by hand on Sunday morning is not the final run: the 23:45 one may still fail.
+        self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=self.sunday_at("00:00"))
+        self.assertEqual(self.completeness(), "partial")
+
+    def test_a_sunday_reading_closes_the_week_complete(self):
+        sunday = self.sunday_at("22:00")
+        self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=self.one("select %s::timestamp at time zone 'utc'", (self.live,)))
+        self.record([{"name": "Case Anyone", "fortCount": 5}], read_at=sunday)
+        self.assertEqual(self.completeness(), "complete")
 
 if __name__ == "__main__":
     unittest.main()
