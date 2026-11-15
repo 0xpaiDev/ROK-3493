@@ -17,8 +17,9 @@ MAIL_SETTINGS = ("FORT_READER_GMAIL", "FORT_READER_GMAIL_APP_PASSWORD", "FORT_RE
 
 
 def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
-    """Email the failure and the screen the run stopped on, and return the addresses mailed.
-    failure is None for a run that sent its reading, which emails nobody."""
+    """Email the failure and the screen the run stopped on, and return the addresses mailed:
+    FORT_READER_ALERT_TO first, then any Council addresses, so more than one means the Council
+    was mailed. failure is None for a run that sent its reading, which emails nobody."""
     if failure is None:
         return []
     if not all(env.get(k) for k in MAIL_SETTINGS):
