@@ -13,6 +13,8 @@ Needs `ANTHROPIC_API_KEY` in the repo's `.env`. Each screen is read with Claude 
 
 The game runs in BlueStacks 5, because the PC client ignores input from programs. BlueStacks instance settings: 1600x900, DPI 450, Advanced > Android Debug Bridge enabled. The instance is found by its display name, `ROK` (override with `BLUESTACKS_INSTANCE`). `adb` comes from Android platform-tools, or BlueStacks' own `HD-Adb.exe`.
 
+On any other Android device (Redroid on a server, a phone), set `FORT_READER_ADB` in the repo's `.env` to its ADB address, such as `127.0.0.1:5555`; the reader then talks to that device and never looks for BlueStacks. The screen must be 1600x900 whatever the device: the reader checks it before any swipe and stops, naming the size it found, if not. Where there is no Windows clipboard (Linux), the result is only saved to `paste.txt`.
+
 ## Run
 
 1. In BlueStacks, open the Fort Destroyer Rankings.

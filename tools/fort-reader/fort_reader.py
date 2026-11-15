@@ -1,9 +1,9 @@
 """Read the in-game Fort Destroyer Rankings into Fort Week paste text.
 
-Open the ranking in Rise of Kingdoms running in BlueStacks, then run:
+Open the ranking in Rise of Kingdoms on BlueStacks, or on the device FORT_READER_ADB names, then run:
     .venv\\Scripts\\python.exe fort_reader.py
 It swipes the list to the end over ADB, reads every screen with Claude Haiku, and prints the
-rows for the admin page's Fort Week paste (also copied to the clipboard). The PC's mouse is not
+rows for the admin page's Fort Week paste (also copied to the clipboard on Windows). The PC's mouse is not
 used, so you can keep working while it runs.
 
     fort_reader.py --from runs\\<folder>   re-reads screenshots saved by an earlier run
@@ -13,6 +13,7 @@ used, so you can keep working while it runs.
 import argparse
 import datetime
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -43,7 +44,7 @@ def capture(run_dir, client, read_screen):
     device = game.Device()
     # Check before any swiping: a swipe over the map would pan it instead.
     if not read_screen(client, device.screenshot()).is_fort_ranking:
-        raise SystemExit("The Fort Destroyer Rankings panel isn't open in BlueStacks. Open it and run again.")
+        raise SystemExit("The Fort Destroyer Rankings panel isn't open on the device. Open it and run again.")
     # Back to the top: swipe down until the list stops moving.
     before = device.screenshot()
     for _ in range(MAX_SCREENS):
@@ -91,7 +92,11 @@ def capture(run_dir, client, read_screen):
 
 
 def copy_to_clipboard(text):
+    """Copy to the Windows clipboard; returns False where there is none (Linux, a server)."""
+    if not shutil.which("clip"):
+        return False
     subprocess.run("clip", input=("﻿" + text).encode("utf-16-le"), check=False)
+    return True
 
 
 def main():
@@ -135,9 +140,9 @@ def main():
         problems.insert(0, f"The list stopped moving before any 0-fort Governors showed up: check that rank {len(rows)} is really the last.")
     text = paste_text(rows)
     (run_dir / "paste.txt").write_text(text, encoding="utf-8")
-    copy_to_clipboard(text)
+    copied = "Copied to the clipboard and saved" if copy_to_clipboard(text) else "Saved"
 
-    print(f"\n{len(rows)} Governors read. Copied to the clipboard and saved to {run_dir / 'paste.txt'}.\n")
+    print(f"\n{len(rows)} Governors read. {copied} to {run_dir / 'paste.txt'}.\n")
     print(text)
     unsure = [r for r in rows if r.get("needs_id")]
     if unsure:
