@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The reader runs on the Oracle A1 under Redroid
