@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install (or move) the nightly Fort reader run on the host. Run from anywhere as the reader's user:
 #     tools/fort-reader/host/install.sh
-# It reads FORT_READER_RUN_AT (HH:MM, UTC, default 23:45) from the repo's .env, so changing that one
+# It reads FORT_READER_RUN_AT (HH:MM, UTC, 22:00 to 23:50, default 23:45) from the repo's .env, so changing that one
 # line and running this again moves the next run. Prints when the next run is.
 set -euo pipefail
 
@@ -9,8 +9,10 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"   # tools/fort-reader
 ENV_FILE="$(realpath "$DIR/../..")/.env"
 RUN_AT="$(grep -E '^\s*FORT_READER_RUN_AT\s*=' "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2 | tr -d ' "\r' || true)"
 RUN_AT="${RUN_AT:-23:45}"
-if ! [[ "$RUN_AT" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
-  echo "FORT_READER_RUN_AT must be HH:MM in UTC, such as 23:45; .env has '$RUN_AT'." >&2
+# From 22:00: record_live_week closes the week Complete only on a Sunday reading from 22:00 UTC.
+# To 23:50: a run takes about 10 minutes, and a reading sent after the 00:00 reset is refused.
+if ! [[ "$RUN_AT" =~ ^(22:[0-5][0-9]|23:[0-4][0-9]|23:50)$ ]]; then
+  echo "FORT_READER_RUN_AT must be HH:MM in UTC from 22:00 to 23:50, such as 23:45; .env has '$RUN_AT'." >&2
   exit 1
 fi
 

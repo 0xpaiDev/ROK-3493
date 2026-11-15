@@ -215,12 +215,21 @@ class LiveWeekReading(unittest.TestCase):
         self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=self.one("select %s::timestamp at time zone 'utc'", (self.live,)))
         self.assertEqual(self.completeness(), "partial")
 
+    def sunday_at(self, hhmm):
+        """That time on the Live Week's Sunday (UTC), or skip the test while it is still to come:
+        record_live_week refuses a reading stamped in the future."""
+        at = self.one("select (%s::date + 6)::timestamp at time zone 'utc' + %s::interval", (self.live, hhmm))
+        if at > self.one("select now()"):
+            self.skipTest(f"the Live Week's Sunday {hhmm} UTC hasn't come yet")
+        return at
+
+    def test_a_sunday_reading_before_the_final_run_leaves_the_week_partial(self):
+        # A run by hand on Sunday morning is not the final run: the 23:45 one may still fail.
+        self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=self.sunday_at("00:00"))
+        self.assertEqual(self.completeness(), "partial")
+
     def test_a_sunday_reading_closes_the_week_complete(self):
-        sunday = self.one("select (%s::date + 6)::timestamp at time zone 'utc' + interval '23 hours 45 minutes'", (self.live,))
-        if sunday > self.one("select now()"):
-            sunday = self.one("select (%s::date + 6)::timestamp at time zone 'utc'", (self.live,))
-        if sunday > self.one("select now()"):
-            self.skipTest("the Live Week's Sunday hasn't come yet; this runs on a Sunday (UTC)")
+        sunday = self.sunday_at("22:00")
         self.record([{"name": "Case Anyone", "fortCount": 3}], read_at=self.one("select %s::timestamp at time zone 'utc'", (self.live,)))
         self.record([{"name": "Case Anyone", "fortCount": 5}], read_at=sunday)
         self.assertEqual(self.completeness(), "complete")

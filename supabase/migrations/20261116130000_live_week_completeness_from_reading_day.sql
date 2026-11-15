@@ -1,10 +1,12 @@
--- Fort reader ticket 04: the reading's day sets the Live Week's completeness. A reading taken on the
--- week's Sunday (UTC) is the final run's, so the week is Complete; any earlier reading leaves it Partial.
--- So a final run that fails, or never starts because the host is down, leaves the week Partial with its
--- last reading, and a Governor that reading missed is not counted as 0. Safe to run twice.
+-- Fort reader ticket 04: the reading's time sets the Live Week's completeness. A reading taken on the
+-- week's Sunday from 22:00 UTC is the final run's (the nightly run is held to 22:00-23:50 UTC by
+-- tools/fort-reader/host/install.sh), so the week is Complete; any earlier reading, a run by hand on
+-- Sunday morning included, leaves it Partial. So a final run that fails, or never starts because the
+-- host is down, leaves the week Partial with its last reading, and a Governor that reading missed is
+-- not counted as 0. Safe to run twice.
 
 -- Replaces the Live Week's Weekly Ranking with a reading and stamps its "as of" time.
--- Its completeness comes from the reading's day: Complete on the week's Sunday (UTC), Partial before.
+-- Its completeness comes from the reading's time: Complete from the week's Sunday 22:00 UTC, Partial before.
 -- read_at: when the reader took the first screenshot. Its Fort Week must be the Live Week.
 -- entries: [{ rank, name, fort_count, needs_id? }]. Names match by the rule in tests/name-matching-cases.json
 -- (the same as matchNames in site/kingdom.js): an exact name held by exactly one Governor, in Name
@@ -42,7 +44,8 @@ begin
   end if;
 
   insert into fort_week (starts_on, read_at, completeness) values (reading_week, record_live_week.read_at,
-          case when extract(isodow from record_live_week.read_at at time zone 'utc') = 7 then 'complete' else 'partial' end)
+          case when record_live_week.read_at >= (reading_week + 6)::timestamp at time zone 'utc' + interval '22 hours'
+               then 'complete' else 'partial' end)
   on conflict (starts_on) do update set read_at = excluded.read_at, completeness = excluded.completeness;
   delete from fort_entry where fort_entry.week = reading_week;
 
