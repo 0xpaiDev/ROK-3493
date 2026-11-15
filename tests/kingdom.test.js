@@ -200,6 +200,25 @@ test("a Council status change made after the Roster Snapshot's day stands: the l
   assert.deepEqual(result.statusChanges, []);
 });
 
+// The shared Roster Snapshot cases: the same file runs against record_roster_snapshot in Postgres.
+const rosterCases = JSON.parse(readFileSync(new URL("./roster-snapshot-cases.json", import.meta.url), "utf8"));
+const byId = (a, b) => a[0].localeCompare(b[0]);
+for (const c of rosterCases.cases) {
+  test(`shared Roster Snapshot case: ${c.case}`, () => {
+    const result = applyRosterSnapshot({
+      governors: c.governors.map((g) => ({ id: g.id, name: g.name, status: g.status ?? "current",
+        statusSetBy: g.statusSetBy ?? "snapshot", statusSetAt: g.statusSetAt ?? "2020-01-01T00:00:00Z" })),
+      nameHistory: c.nameHistory,
+      previous: c.previous,
+      snapshot: c.snapshot,
+    });
+    assert.deepEqual(result.statusChanges.map((s) => [s.id, s.to]).sort(byId), c.statusChanges);
+    assert.deepEqual(result.newGovernors.map((g) => [g.id, g.name]).sort(byId), c.newGovernors);
+    assert.deepEqual(result.renames.map((r) => [r.id, r.to]).sort(byId), c.renames);
+    assert.deepEqual(result.newNames.map((n) => [n.id, n.name]).sort(byId), c.newNames);
+  });
+}
+
 // The first rows of samples/3493_20261101_20261101_statsExport.xlsx, as the sheet holds them: all text.
 const exportHeader = ["Character ID", "Username", "Power", "Highest Power", "Total Kill Points", "Resources Gathered", "Alliance Helps"];
 

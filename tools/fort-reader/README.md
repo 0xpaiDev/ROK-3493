@@ -110,6 +110,7 @@ On the Oracle A1 `fort-reader` (ADR 0003; its address is in `.scratch/fort-reade
    FORT_READER_ADB=127.0.0.1:5555
    FORT_READER_MIN_SWIPE_MS=4000
    FORT_READER_RUN_AT=23:45
+   LILITH_PAUTH=<the RoK Toolkit token, see "Roster Snapshot">
    ```
 
    `FORT_READER_MIN_SWIPE_MS` stretches every swipe to at least 4 s: Redroid on the A1 ignores quicker ones.
@@ -144,9 +145,30 @@ It should print `Success`. Then `docker stop redroid`; the next run carries on. 
 Each one lives only in the host's `.env`. Put the new value there; the next run uses it.
 
 - **Anthropic key.** In the Anthropic Console, in a workspace with a low monthly spend limit, create a key named `fort-reader host`, put it in `ANTHROPIC_API_KEY`, then delete the old key. A leaked key can spend only up to that limit.
-- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002).
+- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002) and save a Roster Snapshot for a new day (ADR 0004).
 - **Gmail app password.** See "Revoke or rotate it" above.
 - **Council addresses.** Edit `FORT_READER_ALERT_COUNCIL`.
+- **Lilith token.** See "Roster Snapshot" below; signing out of the RoK Toolkit ends it.
+
+## Roster Snapshot
+
+`roster.py` saves Lilith's newest day of Kingdom Member Data as a Roster Snapshot (ADR 0004), with the same rules as the admin page's upload: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
+
+```
+.venv/bin/python roster.py              # fetch the newest day and save it
+.venv/bin/python roster.py --dry-run    # fetch and print, save nothing
+.venv/bin/python roster.py --day 2026-11-14
+```
+
+It emails `FORT_READER_ALERT_TO` (the mail settings above) when a run saves nothing because of an error, when the token has fewer than 5 days left, and when Lilith's newest day is 3 or more days old. `journalctl -u roster -n 50` shows the last runs; `systemctl list-timers roster.timer` shows the next one. `install.sh` installs the timer with the reader's.
+
+**The Lilith token.** The RoK Toolkit signs in with a token that lasts 30 days. Use the Reader Account, not your own game account: the token carries a Lilith session token for whichever account signed in. To get it:
+
+1. Open https://rok-game-tools-global.lilith.com/statsExport/detail?locale=en in a desktop browser and log in with the Reader Account's Lilith email.
+2. Open the developer tools (F12), Application > Local Storage > the site, and copy `state.pauth` from `rok-auth-storage`. The cookie `pauth` holds the same value.
+3. On the host, put it in the repo's `.env` as `LILITH_PAUTH=<the token>`, then run `roster.py --dry-run` to check it.
+
+The site keeps the login after you close it, so the token stays valid when you don't sign out. Repeat these steps when the reminder email arrives. The game's notice board building opens the same site already logged in, which could let the reader refresh the token by itself later (ticket 10).
 
 ## What it checks
 
@@ -154,4 +176,4 @@ Rows from overlapping screens are joined by rank. The run lists problems instead
 
 Swiping the game from a script is automation, which Lilith's terms forbid. Run it on an account you can afford to lose.
 
-Tests: `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate test_alert`
+Tests: `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate test_alert test_roster`

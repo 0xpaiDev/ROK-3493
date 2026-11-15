@@ -1,0 +1,77 @@
+{
+  "about": "What a Roster Snapshot changes. Runs against applyRosterSnapshot in site/kingdom.js (the admin page's upload) and record_roster_snapshot in Postgres (the daily roster job), so the two can't drift apart. previous is the latest saved snapshot, a day before takenOn. The Postgres run clears the real snapshots inside its rolled-back transaction. Character IDs here are short on purpose: real ones are 8 to 9 digits, so they never collide.",
+  "cases": [
+    {
+      "case": "a Top 200 Governor absent from the new snapshot becomes Inactive, not Migrated",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": [{ "id": "1", "power": 900 }, { "id": "2", "power": 800 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 950 }] },
+      "statusChanges": [["2", "inactive"]], "newGovernors": [], "renames": [], "newNames": []
+    },
+    {
+      "case": "an absent Governor missing from the previous snapshot too stays as it was",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": [{ "id": "1", "power": 900 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 950 }] },
+      "statusChanges": [], "newGovernors": [], "renames": [], "newNames": []
+    },
+    {
+      "case": "an Inactive Governor who reappears becomes Current",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2", "status": "inactive" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": [{ "id": "1", "power": 900 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }, { "id": "2", "name": "Gov 2", "power": 10 }] },
+      "statusChanges": [["2", "current"]], "newGovernors": [], "renames": [], "newNames": []
+    },
+    {
+      "case": "a Migrated Governor who reappears becomes Current",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2", "status": "migrated" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": [{ "id": "1", "power": 900 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }, { "id": "2", "name": "Gov 2", "power": 10 }] },
+      "statusChanges": [["2", "current"]], "newGovernors": [], "renames": [], "newNames": []
+    },
+    {
+      "case": "a Council status change made before the snapshot's day is overruled by it",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2", "status": "migrated", "statusSetBy": "council", "statusSetAt": "2020-01-07T12:00:00Z" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": [{ "id": "1", "power": 900 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }, { "id": "2", "name": "Gov 2", "power": 800 }] },
+      "statusChanges": [["2", "current"]], "newGovernors": [], "renames": [], "newNames": []
+    },
+    {
+      "case": "a Council status change made after the snapshot's day stands: the latest event wins",
+      "governors": [{ "id": "1", "name": "Gov 1", "statusSetBy": "council", "statusSetAt": "2020-01-08T09:00:00Z" }, { "id": "2", "name": "Gov 2", "status": "migrated", "statusSetBy": "council", "statusSetAt": "2020-01-08T00:00:00Z" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": [{ "id": "1", "power": 900 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "2", "name": "Gov 2", "power": 800 }] },
+      "statusChanges": [], "newGovernors": [], "renames": [], "newNames": []
+    },
+    {
+      "case": "a renamed Governor takes the new name, which joins Name History; a known old name does not",
+      "governors": [{ "id": "1", "name": "TasteMyFat" }, { "id": "2", "name": "vkreçislaw" }],
+      "nameHistory": [{ "id": "1", "name": "OldTaste" }, { "id": "1", "name": "TasteMyFat" }, { "id": "2", "name": "vkreçislaw" }],
+      "previous": [{ "id": "1", "power": 900 }, { "id": "2", "power": 800 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "OldTaste", "power": 900 }, { "id": "2", "name": "vkreçislaw II", "power": 800 }] },
+      "statusChanges": [], "newGovernors": [], "renames": [["1", "OldTaste"], ["2", "vkreçislaw II"]], "newNames": [["2", "vkreçislaw II"]]
+    },
+    {
+      "case": "a Character ID never seen before joins as a new Current Governor with its name in Name History",
+      "governors": [{ "id": "1", "name": "Gov 1" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }],
+      "previous": [{ "id": "1", "power": 900 }],
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }, { "id": "3", "name": "ᵛø Newcomer", "power": 50 }] },
+      "statusChanges": [], "newGovernors": [["3", "ᵛø Newcomer"]], "renames": [], "newNames": [["3", "ᵛø Newcomer"]]
+    },
+    {
+      "case": "the first snapshot ever marks nobody Inactive",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "previous": null,
+      "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }] },
+      "statusChanges": [], "newGovernors": [], "renames": [], "newNames": []
+    }
+  ]
+}

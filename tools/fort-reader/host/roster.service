@@ -1,0 +1,13 @@
+# The daily Roster Snapshot (ADR 0004). install.sh copies this to /etc/systemd/system with __USER__
+# and __DIR__ filled in; roster.timer starts it. It needs no Android: two API calls and one save.
+[Unit]
+Description=Roster job: save Lilith's newest day as a Roster Snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/.venv/bin/python roster.py
+TimeoutStartSec=10min
