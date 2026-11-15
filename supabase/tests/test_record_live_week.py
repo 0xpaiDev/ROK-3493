@@ -196,8 +196,10 @@ class LiveWeekReading(unittest.TestCase):
         self.governors([{"id": "990000015", "name": "Case ᵛøHBK"}])
         self.record([{"name": "Case ᵞøHBK", "fortCount": 9, "names": ["Case ᵞøHBK", "Case ᵛøHBK"]}, {"name": "Case Plain", "fortCount": 1}])
         self.assertEqual(self.public_week(), [("990000015", "Case ᵛøHBK", 9), (None, "Case Plain", 1)])
-        self.assertEqual(self.conn.execute("select read_two_ways from fort_entry where week = %s order by tie_order", (self.live,)).fetchall(),
-                         [(True,), (False,)])
+        self.conn.execute("set local role anon")  # the admin reads the spellings with the public key
+        self.assertEqual(self.conn.execute("select read_two_ways, spellings from fort_entry where week = %s order by tie_order", (self.live,)).fetchall(),
+                         [(True, ["Case ᵞøHBK", "Case ᵛøHBK"]), (False, None)])
+        self.as_owner()
 
     def test_a_row_an_older_reader_flagged_stays_needs_id_even_when_its_name_matches(self):
         # The reader before names were sent flagged a row read two ways needs_id; such a row is never matched.

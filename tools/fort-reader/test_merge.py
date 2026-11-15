@@ -51,6 +51,11 @@ class Pinned(unittest.TestCase):
         self.assertEqual(len(check_pinned(row(2, "CƦУ㋾", 8), rows)), 1)
         self.assertEqual(len(check_pinned(row(7, "CƦУ㋾", 1), rows)), 1)
 
+    def test_a_pin_read_in_any_spelling_of_its_row_agrees(self):
+        rows, _ = merge_frames([[row(1, "ᵞøFarm", 9)], [row(1, "ᵛøFarm", 9)], [row(1, "ᵛøFarm", 9)]])
+        self.assertEqual(check_pinned(row(1, "ᵞøFarm", 9), rows), [])
+        self.assertEqual(len(check_pinned(row(1, "Someone", 9), rows)), 1)
+
 
 class PasteText(unittest.TestCase):
     def test_one_governor_per_line_name_then_count(self):

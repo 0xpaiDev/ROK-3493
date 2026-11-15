@@ -2,7 +2,13 @@
 -- when those spellings, exactly, lead to one Governor. Until now such a row was flagged needs_id and never
 -- matched, which left a third of the Live Week's "needs ID" rows unmatched though one spelling was in Name
 -- History (week 2026-11-09: ᵛøDarkBFarm1, ᵛø J4KU, CRY㋾). Still no folding: a spelling matches only as
--- written. needs_id: true from an older reader is still never matched. Safe to run twice.
+-- written. needs_id: true from an older reader is still never matched. fort_entry.spellings keeps every
+-- spelling of a row read more than one way, so the admin can tell whether a Council pick will match at the
+-- next reading. Safe to run twice.
+
+alter table public.fort_entry add column if not exists spellings text[];
+comment on column public.fort_entry.spellings is
+  'Every spelling the reader read for a Live Week row read more than one way, in the order sent; null otherwise.';
 
 -- Replaces the Live Week's Weekly Ranking with a reading and stamps its "as of" time.
 -- Its completeness comes from the reading's time: Complete from the week's Sunday 22:00 UTC, Partial before.
@@ -12,7 +18,8 @@
 -- (names, or else its name) are held, exactly, by exactly one Governor, in Name History or as its current
 -- name, gets that Character ID; anything else, including a name on two rows or two rows that lead to one
 -- Governor, is "needs ID". A matched row keeps the spelling that matched. An entry with needs_id: true is
--- "needs ID". read_two_ways marks a row read more than one way. It never writes Name History or Governors.
+-- "needs ID". read_two_ways marks a row read more than one way or flagged needs_id, and spellings holds its
+-- spellings. It never writes Name History or Governors.
 create or replace function public.record_live_week(read_at timestamptz, entries jsonb)
 returns jsonb
 language plpgsql
@@ -52,6 +59,8 @@ begin
     select n as entry, e ->> 'name' as name, (e ->> 'fort_count')::integer as fort_count,
            coalesce((e ->> 'needs_id')::boolean, false) as flagged,
            coalesce(jsonb_array_length(e -> 'names') > 1, false) as read_two_ways,
+           case when jsonb_array_length(e -> 'names') > 1
+                then array(select jsonb_array_elements_text(e -> 'names')) end as spellings,
            row_number() over (order by (e ->> 'rank')::integer, n) - 1 as tie_order
     from jsonb_array_elements(record_live_week.entries) with ordinality as t(e, n)
   ),
@@ -86,11 +95,11 @@ begin
     from matched m
   )
   -- Two rows whose names lead to one Governor: neither gets it, so a week never holds a Governor twice.
-  insert into fort_entry (week, character_id, name, fort_count, tie_order, read_two_ways)
+  insert into fort_entry (week, character_id, name, fort_count, tie_order, read_two_ways, spellings)
   select reading_week,
          case when count(*) over (partition by character_id) = 1 then character_id end,
          case when count(*) over (partition by character_id) = 1 then shown_name else name end,
-         fort_count, tie_order, read_two_ways or flagged
+         fort_count, tie_order, read_two_ways or flagged, spellings
   from shown;
 
   select count(*), count(character_id) into saved, resolved

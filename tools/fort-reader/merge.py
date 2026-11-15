@@ -60,7 +60,8 @@ def check_pinned(pinned, rows):
     hit = next((r for r in rows if r["rank"] == pinned["rank"]), None)
     if hit is None:
         return [f'Your own row (rank {pinned["rank"]}) never appeared in the list.']
-    if (hit["name"], hit["forts"]) != (pinned["name"], pinned["forts"]):
+    # The pin and the list are read on the same screens, so any spelling the list was read as will do.
+    if pinned["name"] not in hit.get("names", [hit["name"]]) or hit["forts"] != pinned["forts"]:
         return [
             f'Your own row reads "{pinned["name"]} {pinned["forts"]}" at the top but '
             f'"{hit["name"]} {hit["forts"]}" in the list.'
