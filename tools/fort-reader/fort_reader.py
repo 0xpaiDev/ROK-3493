@@ -201,7 +201,8 @@ def alert_after_run(failure, run_dir, started_at):
         print(f"Couldn't email the failure: {e}")
         return
     if failure:
-        print("Emailed the failure" + (", Council included (Sunday's final run)." if started_at.weekday() == 6 else "."))
+        council = started_at.weekday() == 6 and os.environ.get("FORT_READER_ALERT_COUNCIL", "").strip(" ,")
+        print("Emailed the failure" + (", Council included (Sunday's final run)." if council else "."))
 
 
 def run(args, run_dir):
