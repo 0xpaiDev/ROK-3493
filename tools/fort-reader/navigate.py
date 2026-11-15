@@ -68,6 +68,8 @@ def open_ranking(game, loading_limit=600):
         # loop, whether the screen repeats or two screens lead back to each other.
         taps[screen] = taps.get(screen, 0) + 1
         if taps[screen] > 3:
-            raise Stopped(screen, f"The game is stuck on {screen}: three taps didn't move it on.")
+            raise Stopped(screen, f"The game is stuck on {screen}: tapped three times, it keeps coming back.")
+        if screen == "login_failed":  # CONFIRM restarts the game, which walks the path again from the city
+            taps = {"login_failed": taps["login_failed"]}
         game.tap(*PATH[screen])
         game.wait(3)

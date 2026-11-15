@@ -87,6 +87,12 @@ class OpenRanking(unittest.TestCase):
         self.assertIn("stuck", stop.exception.reason)
         self.assertLessEqual(len(game.taps), 7)
 
+    def test_taps_before_a_login_failed_restart_dont_count_against_the_screens_after_it(self):
+        game = FakeGame("city_bar_closed", "city_bar_closed", "login_failed", "loading",
+                        "city_bar_closed", "city_bar_closed", "city", "alliance", "alliance_settings",
+                        "alliance_rankings", "fort_ranking")
+        open_ranking(game)  # reaches the ranking: the restart sent the game back through the city
+
     def test_a_download_that_outlasts_its_limit_stops_the_run(self):
         game = FakeGame("loading")
         with self.assertRaises(Stopped) as stop:
