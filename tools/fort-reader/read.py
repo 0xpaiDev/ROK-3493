@@ -57,7 +57,8 @@ def read_screen(client, image):
 
 SCREENS_PROMPT = """This is a screenshot of the Rise of Kingdoms game on a phone or emulator. Name the screen, choosing exactly one:
 
-- login_failed: a box titled "NETWORK DISCONNECTED" saying "Login failed, please click CONFIRM to restart the game", over any background.
+- login_failed_loading: a box titled "NETWORK DISCONNECTED" saying "Login failed, please click CONFIRM to restart the game", over the loading screen (the title artwork with a "Loading" progress bar) or over a black screen.
+- login_failed: that same "NETWORK DISCONNECTED" box, but over the city view (buildings, the top bar with resources).
 - update: any prompt asking to update or download a new version of the app.
 - login: a sign-in or account screen asking for an email, password, Lilith account, Google or Facebook login, or to pick an account.
 - loading: an all-black or blank screen (the game is starting), or the game's loading screen: the title artwork with a progress bar or "Loading ..." / "Downloading ..." text, "Tap to Start", or a spinner over a dimmed city with no box.
@@ -72,7 +73,7 @@ SCREENS_PROMPT = """This is a screenshot of the Rise of Kingdoms game on a phone
 When in doubt, answer unknown.
 """
 
-ScreenName = Literal["login_failed", "update", "login", "loading", "fort_ranking", "alliance_rankings",
+ScreenName = Literal["login_failed_loading", "login_failed", "update", "login", "loading", "fort_ranking", "alliance_rankings",
                   "alliance_settings", "alliance", "city", "city_bar_closed", "unknown"]
 
 

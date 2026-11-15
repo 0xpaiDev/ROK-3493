@@ -59,6 +59,20 @@ class OpenRanking(unittest.TestCase):
         open_ranking(game)
         self.assertEqual(game.taps[0], (800, 588))
 
+    def test_the_login_failed_box_over_the_loading_screen_is_left_until_the_city_loads_behind_it(self):
+        # BlueStacks' bug: CONFIRM pressed while the game still loads restarts it into the same box.
+        game = FakeGame("login_failed_loading", "login_failed_loading", "login_failed", "loading",
+                        "city", "alliance", "alliance_settings", "alliance_rankings", "fort_ranking")
+        open_ranking(game)
+        self.assertEqual(game.taps[0], (800, 588))
+        self.assertEqual(game.taps.count((800, 588)), 1)
+
+    def test_a_login_failed_box_over_the_loading_screen_counts_towards_the_loading_limit(self):
+        game = FakeGame("login_failed_loading")
+        with self.assertRaises(Stopped) as stop:
+            open_ranking(game, loading_limit=600)
+        self.assertEqual((stop.exception.screen, game.taps), ("login_failed_loading", []))
+
     def test_a_screen_that_its_tap_never_moves_on_stops_the_run_after_three_taps(self):
         game = FakeGame("city")
         with self.assertRaises(Stopped) as stop:

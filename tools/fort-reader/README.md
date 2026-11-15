@@ -29,7 +29,8 @@ Every run force-stops the game, starts it again, and has Haiku name each screen 
 | Screen | Tap | What it is |
 |---|---|---|
 | loading | none, waits 5 s | black screen, title art with a progress bar, a spinner over the city |
-| login_failed | CONFIRM (800, 588) | "Network disconnected / Login failed ... REGISTER_AND_LOGING"; the game restarts |
+| login_failed_loading | none, waits 5 s | "Network disconnected / Login failed ... REGISTER_AND_LOGING" over the loading screen. A BlueStacks bug: CONFIRM pressed now restarts into the same box, so the reader waits for the city to load behind it |
+| login_failed | CONFIRM (800, 588) | the same box over the city; CONFIRM restarts the game, and this time it loads |
 | city_bar_closed | menu button (1540, 820) | city with the bottom bar folded away |
 | city | Alliance (1160, 840) | city with Items, Alliance, Commander, Mail showing |
 | alliance | gear tab (90, 490) | the Alliance window on any tab |
@@ -43,7 +44,7 @@ The run stops, saves `stopped-<screen>.png` in its `runs\` folder and sends noth
 - **update**: install the new game version by hand.
 - **loading** for longer than `FORT_READER_LOADING_LIMIT` seconds in all (default 600): a large download or no network.
 - **unknown**: any screen not in the table, such as a new popup. Close it by hand and, if it comes back, add it to `navigate.PATH`.
-- **the same screen tapped three times** without moving on, such as a "Login failed" box that keeps coming back (the account is open somewhere else).
+- **the same screen tapped three times** without moving on, such as a "Login failed" box over the city that keeps coming back (the account is open somewhere else).
 
 It never guesses a tap and never types a password. Starting the game from closed takes about 1 to 2 minutes on BlueStacks.
 

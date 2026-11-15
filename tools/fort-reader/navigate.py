@@ -14,8 +14,8 @@ PATH = {
     "alliance_settings": (1170, 380),  # Rankings, top right ("Quit Alliance" is lower down: never near it)
     "alliance_rankings": (400, 690),   # the Fort Destroyer tile, bottom left
     # Known popups, closed on the way.
-    "login_failed": (800, 588),        # "Network disconnected / Login failed ... REGISTER_AND_LOGING":
-                                       # CONFIRM restarts the game, which then carries on
+    "login_failed": (800, 588),        # "Network disconnected / Login failed ... REGISTER_AND_LOGING" over
+                                       # the city: CONFIRM restarts the game, which then carries on
 }
 
 
@@ -43,7 +43,10 @@ def open_ranking(game, loading_limit=600):
     last, taps = None, 0        # the last screen tapped, and how many times in a row
     while True:
         screen = game.look()
-        if screen == "loading":
+        # "login_failed_loading": the Login failed box over a game still loading. A BlueStacks bug:
+        # CONFIRM pressed now restarts the game into the same box, so leave it until the city
+        # has loaded behind it ("login_failed"), and then CONFIRM works.
+        if screen in ("loading", "login_failed_loading"):
             # Clock time between looks, not just the waits: on a slow device each look takes seconds.
             now = game.now()
             loading += now - since if since is not None else 0
