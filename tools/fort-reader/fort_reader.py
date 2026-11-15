@@ -196,13 +196,12 @@ def alert_after_run(failure, run_dir, started_at):
         return
     shots = sorted(run_dir.glob("*.png"), key=lambda p: p.stat().st_mtime) if run_dir.is_dir() else []
     try:
-        after_run(failure, shots[-1] if shots else None, os.environ, started_at)
+        mailed = after_run(failure, shots[-1] if shots else None, os.environ, started_at)
     except (smtplib.SMTPException, OSError) as e:
         print(f"Couldn't email the failure: {e}")
         return
-    if failure:
-        council = started_at.weekday() == 6 and os.environ.get("FORT_READER_ALERT_COUNCIL", "").strip(" ,")
-        print("Emailed the failure" + (", Council included (Sunday's final run)." if council else "."))
+    if mailed:
+        print("Emailed the failure" + (", Council included (Sunday's final run)." if len(mailed) > 1 else "."))
 
 
 def run(args, run_dir):

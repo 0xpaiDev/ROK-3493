@@ -20,9 +20,11 @@ SUNDAY = datetime.datetime(2026, 11, 15, 23, 45, tzinfo=datetime.timezone.utc)
 class FakeGmail:
     """Gmail's SMTP server at the edge: keeps every message it is handed."""
     sent = []
+    timeouts = []
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, timeout=None):
         self.host = host
+        FakeGmail.timeouts.append(timeout)
 
     def __enter__(self):
         return self
@@ -40,6 +42,7 @@ class FakeGmail:
 class FailureAlert(unittest.TestCase):
     def setUp(self):
         FakeGmail.sent = []
+        FakeGmail.timeouts = []
         self.dir = tempfile.TemporaryDirectory()
         self.shot = Path(self.dir.name) / "stopped-login.png"
         Image.new("RGB", (16, 9)).save(self.shot)
@@ -70,6 +73,11 @@ class FailureAlert(unittest.TestCase):
         after_run("Couldn't connect to 127.0.0.1:5555 over ADB.", None, MAIL, WEDNESDAY, smtp=FakeGmail)
         [msg] = FakeGmail.sent
         self.assertIn("No screenshot was taken", msg.get_body(("plain",)).get_content())
+
+    def test_a_stalled_gmail_connection_gives_up_instead_of_hanging_the_run(self):
+        after_run("Stopped on the login screen.", self.shot, MAIL, WEDNESDAY, smtp=FakeGmail)
+        [timeout] = FakeGmail.timeouts
+        self.assertTrue(timeout is not None and timeout <= 60, timeout)
 
     def test_without_mail_settings_a_failed_run_emails_nobody(self):
         after_run("Stopped on the login screen.", self.shot, {}, SUNDAY, smtp=FakeGmail)

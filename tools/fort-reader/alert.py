@@ -17,12 +17,12 @@ MAIL_SETTINGS = ("FORT_READER_GMAIL", "FORT_READER_GMAIL_APP_PASSWORD", "FORT_RE
 
 
 def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
-    """Email the failure and the screen the run stopped on. failure is None for a run that
-    sent its reading, which emails nobody."""
+    """Email the failure and the screen the run stopped on, and return the addresses mailed.
+    failure is None for a run that sent its reading, which emails nobody."""
     if failure is None:
-        return
+        return []
     if not all(env.get(k) for k in MAIL_SETTINGS):
-        return  # no mail settings: the run prints its failure only, as before
+        return []  # no mail settings: the run prints its failure only, as before
     to = [env["FORT_READER_ALERT_TO"]]
     note = ""
     if started_at.weekday() == 6:  # Sunday (UTC): the final run, which closes the week
@@ -39,6 +39,8 @@ def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
     if screenshot:
         path = Path(screenshot)
         msg.add_attachment(path.read_bytes(), maintype="image", subtype="png", filename=path.name)
-    with smtp("smtp.gmail.com", 465) as server:
+    # A stalled link raises TimeoutError instead of hanging the run, and the next day's run with it.
+    with smtp("smtp.gmail.com", 465, timeout=30) as server:
         server.login(env["FORT_READER_GMAIL"], env["FORT_READER_GMAIL_APP_PASSWORD"])
         server.send_message(msg)
+    return to
