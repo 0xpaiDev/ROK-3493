@@ -471,7 +471,6 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .btn.quiet { background: none; border-color: transparent; color: var(--muted); }
 .btn.quiet:hover { color: var(--text); border-color: var(--line-strong); }
 .btn.sm { min-height: 36px; padding: 0 14px; }
-label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Labelled fields */
 .fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 14px; }
@@ -505,6 +504,7 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
 .progress b { font-weight: 600; }
 .progress .bar { flex: 1 1 200px; margin: 0; }
 .progress .bar i { animation: none; transform: scaleX(var(--p)); transition: transform var(--dur-slow) var(--ease); }
+.groups { display: grid; gap: 12px; }
 .main-group { padding: 0; overflow: hidden; }
 .main-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 14px 16px 14px 20px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
 .main-head .eyebrow { font-size: 11px; color: var(--faint); }

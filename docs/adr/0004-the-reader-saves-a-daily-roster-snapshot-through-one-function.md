@@ -6,7 +6,7 @@ status: proposed
 
 Roster Snapshots came from Lilith's stats export, which a Council member downloaded and uploaded on the admin page. We want one every day with nobody at a PC. Lilith's RoK Toolkit (rok-game-tools-global.lilith.com) has a JSON API behind its export, `/api/kindomMember`, and it takes the same login token the site keeps after you sign in. The Roster job on the Oracle A1 asks it for the newest day (`/api/kindomInformation`) and saves the rows through `record_roster_snapshot`. Only the reader's Supabase sign-in may call that function, the same one ADR 0002 gave the Live Week. The function applies the rules the admin page's upload used, in one transaction: statuses, new Governors, renames, Name History, then the snapshot and its rows.
 
-The Roster job is the only writer of Roster Snapshots. The admin page's upload is gone, and the Council can no longer insert or update a snapshot (Petras, 2026-11-15: the Council has no business uploading once the job does). The Council keeps delete, to remove a wrong snapshot, and still sets a Governor's status by hand.
+The Roster job is the only writer of Roster Snapshots. The admin page's upload is gone, and the Council can no longer insert or update a snapshot (Petras, 2026-11-15: the Council has no business uploading once the job does). The Council still sets a Governor's status by hand. Its database right to delete a snapshot stays, but the admin page has no control for it: Petras removes a wrong one with SQL.
 
 ## Considered options
 

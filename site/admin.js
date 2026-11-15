@@ -1090,7 +1090,8 @@ async function showRewardPromise(section, message = "", startWeek = null) {
 // of snapshots. The Council reads when it last did, and sets a Governor's status by hand where
 // the export gets it wrong.
 
-// The Roster job emails from this age too: Lilith publishes each day a day or so late.
+// Lilith publishes each day a day or so late. Keep in step with STALE_DAYS in
+// tools/fort-reader/roster.py, the age from which the Roster job emails.
 const ROSTER_STALE_DAYS = 3;
 
 async function loadRosterState() {
@@ -1136,7 +1137,7 @@ async function showRoster(section, message = "") {
 
     <section class="card admin-card">
       <h2>Set a Governor's status by hand</h2>
-      <p class="muted">For a Governor the export gets wrong. The latest change wins, so a later Roster Snapshot can overrule this.</p>
+      <p class="muted">For a Governor the export gets wrong. A daily Roster Snapshot sets a Governor in the export back to Current, so Inactive or Migrated by hand lasts only for a Governor the export leaves out.</p>
       <form id="set-status" class="fields">
         <label class="field wide">Governor
           <input name="gov" list="roster-governors" required placeholder="Name or Character ID" autocomplete="off">

@@ -1,5 +1,5 @@
 """The daily Roster Snapshot (ADR 0004): fetch the newest day of the Lilith stats export (its JSON) and
-save it through record_roster_snapshot, which applies the same rules as the admin page's upload.
+save it through record_roster_snapshot, which applies the Roster Snapshot rules in the database.
 
     .venv/bin/python roster.py              fetch the newest day and save it
     .venv/bin/python roster.py --dry-run    fetch and print, save nothing
@@ -32,7 +32,8 @@ API = "https://plat-rok-gametools-global-api.lilithgames.com"
 # Lilith's internal server id for Kingdom 3493 (the game shows 3493; the API wants 2493).
 SERVER_ID = "2493"
 WARN_DAYS = 5     # email when the token has fewer days left than this
-STALE_DAYS = 3    # email when Lilith's newest day is this many days old or more
+STALE_DAYS = 3    # email when Lilith's newest day is this many days old or more;
+                  # ROSTER_STALE_DAYS in site/admin.js flags the admin page from the same age
 # The API's field for each roster_snapshot_row column. Deaths and per-tier kills are not kept.
 FIELDS = {"power": "power", "highest_power": "max_power", "kill_points": "kill",
           "resources_gathered": "collect", "alliance_helps": "help"}
