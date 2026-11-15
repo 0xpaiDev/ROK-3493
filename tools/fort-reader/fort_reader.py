@@ -72,6 +72,7 @@ def open_from_closed(run_dir, device, client):
     limit = float(os.environ.get("FORT_READER_LOADING_LIMIT", "600"))
     print("Restarting the game and opening the Fort Destroyer Rankings:")
     device.restart_game()
+    time.sleep(5)  # the game takes a moment to come to the front: until then the launcher shows
     nav = Navigator(device, client)
     try:
         open_ranking(nav, loading_limit=limit)
