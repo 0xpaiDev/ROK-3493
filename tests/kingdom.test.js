@@ -360,8 +360,9 @@ test("a Council pick sticks at the next reading only for a name one row holds an
   assert.deepEqual(liveReadingIds([{ name: "Shared", fortCount: 5 }], seen), [null]);
   // A name on two rows: picks for both still leave both "needs ID".
   assert.deepEqual(liveReadingIds([{ name: "Twin", fortCount: 5 }, { name: "Twin", fortCount: 4 }], [...pick("Twin", "8"), { id: "9", name: "Twin" }]), [null, null]);
-  // A row read two ways: a pick for its spelling never matches it.
-  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, needsId: true }], pick("Odd", "9")), [null]);
+  // A row read two ways: a pick for one of its spellings matches it, unless another spelling is someone else's.
+  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, names: ["Odd", "Οdd"] }], pick("Odd", "9")), ["9"]);
+  assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, names: ["Odd", "Known"] }], pick("Odd", "9")), [null]);
 });
 
 // Weekly Awards: { week, id, place, award, note }. Governors carry their kind.

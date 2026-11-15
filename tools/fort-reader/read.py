@@ -15,6 +15,7 @@ PROMPT = """This is a screenshot of the Rise of Kingdoms game. Read the "FORT DE
 - rows: every row of the list below the "Name / Forts Destroyed" headers, top to bottom.
   - rank: the number at the left. Ranks 1, 2 and 3 are shown as gold, silver and bronze medals.
   - name: the Governor name in bold. Copy it exactly, character by character: names use superscripts (ᵛ, ᴸ, ᵒ, ᴷ), accented and Cyrillic letters, CJK, Arabic and symbols such as ㋾ or 乄. Never translate, simplify or "correct" a name, and keep spacing as shown. Ignore the small grey title under the name (e.g. "Leader", "Watchful General", "–").
+  - Many names start with the alliance tag "ᵛø": a small raised v (ᵛ) then ø. Write that raised v as ᵛ, never ᵞ, ʸ or Y. Write other raised letters with their own superscript characters (ˢ is a raised s, ᴮ a raised B).
   - forts: the number in the "Forts Destroyed" column.
   - Skip a row cut off at the top or bottom edge of the list so that its name or number is not fully readable.
 """

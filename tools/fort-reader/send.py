@@ -33,13 +33,13 @@ def _post(path, body, token=None):
 
 
 def send_live_week(rows, read_at):
-    """rows: the merged reading, each {rank, name, forts, needs_id?}; read_at: when its first screenshot
+    """rows: the merged reading, each {rank, name, forts, names?}; read_at: when its first screenshot
     was taken (an aware datetime). Returns {rows, matched, needs_id}.
-    A row flagged needs_id (its name read two ways) is sent flagged, so it is never matched by spelling."""
+    A row read two ways is sent with every spelling (names); it matches only when they lead to one Governor."""
     email, password = os.environ.get("FORT_READER_EMAIL"), os.environ.get("FORT_READER_PASSWORD")
     if not email or not password:
         raise SystemExit("Add FORT_READER_EMAIL and FORT_READER_PASSWORD (the reader's Supabase sign-in) to .env.")
     token = _post("/auth/v1/token?grant_type=password", {"email": email, "password": password})["access_token"]
     entries = [{"rank": r["rank"], "name": r["name"], "fort_count": r["forts"],
-                **({"needs_id": True} if r.get("needs_id") else {})} for r in rows]
+                **({"names": r["names"]} if r.get("names") else {})} for r in rows]
     return _post("/rest/v1/rpc/record_live_week", {"read_at": read_at.isoformat(), "entries": entries}, token)

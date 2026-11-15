@@ -224,10 +224,18 @@ export function matchNames(rows, nameHistory) {
 }
 
 // The Character IDs record_live_week gives a reading's rows (supabase/migrations, the newest Live Week one):
-// matchNames, except a row the reader read two ways (needsId) is never matched by spelling, and two rows
-// whose names lead to one Governor both stay "needs ID". Rows { name, fortCount, needsId? } in reading order.
+// matchNames, except a row the reader read more than one way (names, every spelling) matches when those
+// spellings lead to exactly one Governor; a row flagged needsId (an older reader) is never matched; and
+// two rows whose names lead to one Governor both stay "needs ID".
+// Rows { name, fortCount, names?, needsId? } in reading order.
 export function liveReadingIds(rows, nameHistory) {
-  const ids = matchNames(rows, nameHistory).map((r, i) => (rows[i].needsId ? null : r.id));
+  const spellings = (r) => r.names ?? [r.name];
+  const onTwoRows = (name) => rows.filter((o) => o.name === name).length > 1;
+  const ids = rows.map((r) => {
+    if (r.needsId || onTwoRows(r.name)) return null;
+    const found = new Set(nameHistory.filter((n) => spellings(r).includes(n.name)).map((n) => n.id));
+    return found.size === 1 ? [...found][0] : null;
+  });
   return ids.map((id) => (id != null && ids.filter((other) => other === id).length > 1 ? null : id));
 }
 

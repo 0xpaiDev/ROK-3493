@@ -394,7 +394,7 @@ async function loadFortWeekState() {
     allRows("governor_name", "character_id,name"),
     allRows("fort_week", "starts_on,completeness"),
     allRows("fort_entry", "week"),
-    supabase.from("fort_entry").select("character_id,name,fort_count,read_two_ways").eq("week", liveWeek)
+    supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", liveWeek)
       .order("fort_count", { ascending: false }).order("tie_order").order("id"),
     allRows("weekly_award", "id,week,character_id,place,award,note,weekly_award_item(id,item,amount)"),
   ]);
@@ -407,14 +407,15 @@ async function loadFortWeekState() {
     nameHistory: namesToMatch(people, names),
     weeks: new Map(weeks.map((w) => [w.starts_on, { completeness: w.completeness, rows: saved.get(w.starts_on) ?? 0 }])),
     // The reader's latest reading of the Live Week, for resolving its "needs ID" rows. `read` marks a row the
-    // reading matched; `needsId` a row it read two ways, which no pick can match.
+    // reading matched. A row read more than one way can be picked too: the pick's spelling joins Name History,
+    // and the next reading matches it when that spelling is among the ones it reads.
     liveWeek,
     // Weekly Awards in id order, so equal places keep the order they were given in. `row` is the award's own id.
     awards: awards.sort((a, b) => a.id - b.id).map((a) => ({
       row: a.id, week: a.week, id: a.character_id, place: a.place, award: a.award, note: a.note,
       items: a.weekly_award_item.sort((x, y) => x.id - y.id).map((x) => ({ item: x.item, amount: x.amount })),
     })),
-    liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null, needsId: e.read_two_ways })),
+    liveRows: live.data.map((e) => ({ id: e.character_id, name: e.name, fortCount: e.fort_count, read: e.character_id != null })),
   };
 }
 
@@ -519,7 +520,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
         <ol class="fw-rows">${rows.map((r, i) => {
           const tied = !live && (tiedAt(i, -1) || tiedAt(i, 1));
           const g = r.id != null ? byId.get(r.id) : null;
-          const pickable = !(live && (r.read || r.needsId)); // a row the reading matched stays as read
+          const pickable = !(live && r.read); // a row the reading matched stays as read
           return `
           <li class="fw-row${twice.includes(r.id) ? " clash" : ""}">
             <span class="pos num">${ranked[i].rank}</span>
@@ -530,7 +531,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
             <b class="count num">${r.fortCount}</b>
             ${pickable ? `<label class="field fw-gov"><span class="sr-only">Governor for row ${i + 1}, ${esc(r.name)}</span>
               <input list="fw-governors" data-row="${i}" value="${g ? esc(label(g)) : ""}" placeholder="Pick a Governor" autocomplete="off">
-            </label>` : live && r.needsId ? `<span class="fw-gov muted">Read two ways, so no pick can match it. Resolve it in the paste once the week closes.</span>` : `<span class="fw-gov"></span>`}
+            </label>` : `<span class="fw-gov"></span>`}
             <span class="row-actions">${tied ? `
               <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="-1" aria-label="Move ${esc(r.name)} up"${tiedAt(i, -1) ? "" : " disabled"}>${ARROW("M12 19V5M6 11l6-6 6 6")}</button>
               <button class="btn quiet sm icon" type="button" data-move="${i}" data-step="1" aria-label="Move ${esc(r.name)} down"${tiedAt(i, 1) ? "" : " disabled"}>${ARROW("M12 5v14M6 13l6 6 6-6")}</button>` : ""}</span>
