@@ -115,13 +115,13 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
     notify = notify or (lambda subject, body: mail(subject, body, os.environ))
     lines = []
 
-    def note(subject, body, done):
+    def note(subject, body, fact, sent):
         # A reminder that can't be mailed must neither stop the save nor make a saved run look failed.
         try:
             notify(subject, body)
-            lines.append(done)
+            lines.append(f"{fact}; {sent}.")
         except Exception as e:
-            lines.append(f"{done.split(';')[0]}; couldn't email it: {e}")
+            lines.append(f"{fact}; couldn't email it: {e}")
 
     token = os.environ.get("LILITH_PAUTH", "").strip()
     if not token:
@@ -134,7 +134,7 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
         note(f"Roster job: the Lilith token expires {expires:%Y-%m-%d}",
              f"The token in LILITH_PAUTH stops working on {expires:%Y-%m-%d %H:%M} UTC. Log in to the RoK Toolkit, "
              f"copy a new one into .env on the host (README: Roster Snapshot), or the daily Roster Snapshot stops.",
-             f"Token expires {expires:%Y-%m-%d %H:%M} UTC; emailed a reminder.")
+             f"Token expires {expires:%Y-%m-%d %H:%M} UTC", "emailed a reminder")
 
     day = args.day or newest_day(token, opener)
     age = (now.date() - datetime.date.fromisoformat(day)).days
@@ -153,7 +153,7 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
         note(f"Roster job: Lilith's newest stats are from {day}",
              f"Lilith's stats tools still have nothing newer than {day} ({age} days ago), so the roster isn't moving. "
              f"Nothing is wrong on our side; it usually catches up by itself.",
-             f"Lilith's newest day is {age} days old; emailed a note.")
+             f"Lilith's newest day is {age} days old", "emailed a note")
     return lines
 
 

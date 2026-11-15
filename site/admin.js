@@ -1331,29 +1331,32 @@ async function showRoster(section, email, message = "") {
   draw();
 }
 
-// Writes in an order that leaves no half snapshot behind: Governors and names first (harmless on
-// their own), then the snapshot and its rows (removed again if the rows fail), then statuses.
+// The snapshot goes in first: the database refuses one on or before the latest (the daily Roster job
+// may have saved a newer day since this page loaded), and then nothing else has been written. Then
+// Governors and names, then the rows; if any of those fail the snapshot is removed again, so no half
+// snapshot is left behind. Statuses last.
 async function saveSnapshot(snapshot, changes, email) {
-  const people = [...changes.newGovernors.map((g) => ({ character_id: g.id, current_name: g.name })),
-                  ...changes.renames.map((r) => ({ character_id: r.id, current_name: r.to }))];
-  if (people.length) check(await supabase.from("governor").upsert(people, { onConflict: "character_id" }), "Governors");
-  if (changes.newNames.length) {
-    check(await supabase.from("governor_name").upsert(
-      changes.newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
-      { onConflict: "character_id,name", ignoreDuplicates: true }), "Name History");
-  }
   const made = await supabase.from("roster_snapshot").insert({ taken_on: snapshot.takenOn, uploaded_by: email }).select("id").single();
   check(made, "Roster Snapshot");
-  const rows = snapshot.rows.map((r) => ({
-    snapshot_id: made.data.id, character_id: r.id, power: r.power, highest_power: r.highestPower,
-    kill_points: r.killPoints, resources_gathered: r.resources, alliance_helps: r.allianceHelps,
-  }));
-  for (let i = 0; i < rows.length; i += 500) {
-    const res = await supabase.from("roster_snapshot_row").insert(rows.slice(i, i + 500));
-    if (res.error) {
-      await supabase.from("roster_snapshot").delete().eq("id", made.data.id);
-      check(res, "Roster Snapshot rows");
+  try {
+    const people = [...changes.newGovernors.map((g) => ({ character_id: g.id, current_name: g.name })),
+                    ...changes.renames.map((r) => ({ character_id: r.id, current_name: r.to }))];
+    if (people.length) check(await supabase.from("governor").upsert(people, { onConflict: "character_id" }), "Governors");
+    if (changes.newNames.length) {
+      check(await supabase.from("governor_name").upsert(
+        changes.newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
+        { onConflict: "character_id,name", ignoreDuplicates: true }), "Name History");
     }
+    const rows = snapshot.rows.map((r) => ({
+      snapshot_id: made.data.id, character_id: r.id, power: r.power, highest_power: r.highestPower,
+      kill_points: r.killPoints, resources_gathered: r.resources, alliance_helps: r.allianceHelps,
+    }));
+    for (let i = 0; i < rows.length; i += 500) {
+      check(await supabase.from("roster_snapshot_row").insert(rows.slice(i, i + 500)), "Roster Snapshot rows");
+    }
+  } catch (err) {
+    await supabase.from("roster_snapshot").delete().eq("id", made.data.id);
+    throw err;
   }
   for (const to of ["inactive", "current"]) {
     const ids = changes.statusChanges.filter((c) => c.to === to).map((c) => c.id);
