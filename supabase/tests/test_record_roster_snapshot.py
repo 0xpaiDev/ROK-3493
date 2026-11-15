@@ -133,6 +133,29 @@ class RosterSnapshot(unittest.TestCase):
             "select character_id, status from governor where character_id in ('200', '201') order by 1").fetchall(),
             [("200", "inactive"), ("201", "current")])
 
+    def test_a_power_tie_at_place_200_goes_to_the_character_id_first_as_plain_text(self):
+        # The same order as top200 in site/kingdom.js: "1200" sorts before "999".
+        strong = [{"id": str(5000 + i), "name": f"Gov {5000 + i}", "power": 1000} for i in range(199)]
+        tied = [{"id": "999", "name": "Gov 999", "power": 10}, {"id": "1200", "name": "Gov 1200", "power": 10}]
+        self.record("2020-01-06", strong + tied)
+        self.record("2020-01-07", strong)
+        self.assertEqual(self.conn.execute(
+            "select character_id, status from governor where character_id in ('999', '1200') order by 1").fetchall(),
+            [("1200", "inactive"), ("999", "current")])
+
+    def test_no_snapshot_lands_on_or_before_the_latest_whoever_saves_it(self):
+        # The Council's upload inserts directly; a page opened before the job ran still holds an older day.
+        self.record("2020-01-07", [{"id": "1", "name": "Gov 1", "power": 900}])
+        for day in ("2020-01-06", "2020-01-07"):
+            with self.subTest(day):
+                self.conn.execute("savepoint call")
+                try:
+                    with self.assertRaisesRegex(psycopg.errors.InvalidParameterValue, "or later is already saved"):
+                        self.conn.execute("insert into roster_snapshot (taken_on) values (%s)", (day,))
+                finally:
+                    self.conn.execute("rollback to savepoint call")
+        self.one("insert into roster_snapshot (taken_on) values ('2020-01-08') returning id")
+
     def test_only_the_readers_sign_in_may_record(self):
         rows = [{"id": "1", "name": "Gov 1", "power": 900}]
         council = self.user("council-test@example.invalid")

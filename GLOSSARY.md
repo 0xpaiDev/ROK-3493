@@ -48,6 +48,14 @@ _Avoid_: Aliases
 The list of all Governors in the Kingdom with their stats as of one date, taken from the official Lilith stats export.
 _Avoid_: Member list, KD list
 
+**Roster job**:
+The daily run on the reader's host that saves Lilith's newest day as a Roster Snapshot, with no Council member signed in (ADR 0004).
+_Avoid_: Roster sync, cron
+
+**Lilith token**:
+The login the RoK Toolkit (Lilith's stats site, where the export lives) keeps after a sign-in. The Roster job reads Lilith's stats with it; it lasts 30 days.
+_Avoid_: pauth, cookie
+
 **Top 200**:
 The 200 highest-power Governors in the latest Roster Snapshot; the part of the Kingdom whose membership changes and growth are tracked.
 _Avoid_: Core, active members

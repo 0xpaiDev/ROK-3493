@@ -128,6 +128,21 @@ class Roster(unittest.TestCase):
         self.run_job(FakeLilith(day="2026-11-11"))
         self.assertEqual(self.mails, ["Roster job: Lilith's newest stats are from 2026-11-11"])
 
+    def test_a_null_name_or_id_is_sent_empty_never_as_none(self):
+        # The database refuses an empty name or ID; "None" would rename a Governor.
+        self.run_job(FakeLilith(members=[{**member("1", "A", 5), "name": None}, {**member("2", "B", 4), "id": None}]))
+        self.assertEqual([(r["id"], r["name"]) for r in self.sent[0][1]], [("1", ""), ("", "B")])
+
+    def test_a_reminder_that_cannot_be_mailed_still_saves(self):
+        os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
+        def broken(subject, body):
+            raise TimeoutError("smtp timed out")
+        lines = roster.run(args(), NOW, FakeLilith(day="2026-11-11"), self.send, broken)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("couldn't email it: smtp timed out", lines[0])
+        self.assertIn("Saved the 2026-11-11 Roster Snapshot", lines[2])
+        self.assertIn("couldn't email it", lines[3])
+
     def test_no_token_or_a_garbled_one_says_what_to_do(self):
         for value, message in [("", "Add LILITH_PAUTH"), ("not-a-jwt", "not a Lilith token")]:
             with self.subTest(value):

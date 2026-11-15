@@ -101,9 +101,12 @@ export function farmLinkSuggestions(governors, dismissed = []) {
   return out;
 }
 
-// Top 200: the Character IDs of the 200 highest-power Governors in a snapshot's rows.
+// Top 200: the Character IDs of the 200 highest-power Governors in a snapshot's rows. Equal power
+// goes by Character ID, compared as plain text, as record_roster_snapshot does, so the admin page
+// and the daily job agree on place 200.
 export function top200(rows) {
-  return [...rows].sort((a, b) => (b.power ?? 0) - (a.power ?? 0)).slice(0, 200).map((r) => r.id);
+  const byId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return [...rows].sort((a, b) => (b.power ?? 0) - (a.power ?? 0) || byId(a, b)).slice(0, 200).map((r) => r.id);
 }
 
 // Apply a Roster Snapshot: what a new Lilith stats export changes. Takes the Governors (with

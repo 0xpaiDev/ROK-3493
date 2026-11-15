@@ -152,7 +152,7 @@ Each one lives only in the host's `.env`. Put the new value there; the next run 
 
 ## Roster Snapshot
 
-`roster.py` saves Lilith's newest day of Kingdom Member Data as a Roster Snapshot (ADR 0004), with the same rules as the admin page's upload: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
+The Roster job, `roster.py`, saves the newest day of the Lilith stats export as a Roster Snapshot (ADR 0004), with the same rules as the admin page's upload: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
 
 ```
 .venv/bin/python roster.py              # fetch the newest day and save it
@@ -162,7 +162,7 @@ Each one lives only in the host's `.env`. Put the new value there; the next run 
 
 It emails `FORT_READER_ALERT_TO` (the mail settings above) when a run saves nothing because of an error, when the token has fewer than 5 days left, and when Lilith's newest day is 3 or more days old. `journalctl -u roster -n 50` shows the last runs; `systemctl list-timers roster.timer` shows the next one. `install.sh` installs the timer with the reader's.
 
-**The Lilith token.** The RoK Toolkit signs in with a token that lasts 30 days. Use the Reader Account, not your own game account: the token carries a Lilith session token for whichever account signed in. To get it:
+**The Lilith token.** The RoK Toolkit signs in with a token that lasts 30 days. The Reader Account is the safer choice: the token carries a Lilith session token for whichever account signed in. To get it:
 
 1. Open https://rok-game-tools-global.lilith.com/statsExport/detail?locale=en in a desktop browser and log in with the Reader Account's Lilith email.
 2. Open the developer tools (F12), Application > Local Storage > the site, and copy `state.pauth` from `rok-auth-storage`. The cookie `pauth` holds the same value.

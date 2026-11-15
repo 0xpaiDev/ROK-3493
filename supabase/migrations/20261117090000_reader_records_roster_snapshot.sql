@@ -1,6 +1,26 @@
 -- Roster ticket 01 (ADR 0004): the reader's host saves a Roster Snapshot every day through one function.
 -- Safe to run twice: supabase/tests applies it inside a rolled-back transaction.
 
+-- A Roster Snapshot is always newer than every saved one, whoever saves it. With the daily job as a
+-- second writer, the admin page's own check (against the latest snapshot when the page loaded) is
+-- not enough: an older day saved after a newer one would rewind the statuses the newer one set.
+create or replace function public.roster_snapshot_is_newest()
+returns trigger
+language plpgsql
+as $$
+begin
+  if exists (select 1 from roster_snapshot s where s.taken_on >= new.taken_on) then
+    raise exception 'A Roster Snapshot for % or later is already saved. Reload to see it.', new.taken_on
+      using errcode = '22023';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists roster_snapshot_is_newest on roster_snapshot;
+create trigger roster_snapshot_is_newest before insert on roster_snapshot
+  for each row execute function public.roster_snapshot_is_newest();
+
 -- Saves the Lilith stats for one day as a Roster Snapshot, with what it changes, all or nothing.
 -- rows: [{ id, name, power, highest_power, kill_points, resources_gathered, alliance_helps }].
 -- The rules are applyRosterSnapshot in site/kingdom.js (the admin page's upload); the cases in
@@ -69,10 +89,11 @@ begin
   where g.status = 'current'
     and not (g.status_set_by = 'council' and g.status_set_at >= ends_at)
     and g.character_id in (
-      -- The previous snapshot's Top 200: its 200 highest-power Governors (top200 in site/kingdom.js).
+      -- The previous snapshot's Top 200: its 200 highest-power Governors, equal power by Character ID
+      -- as plain text (top200 in site/kingdom.js).
       select p.character_id from roster_snapshot_row p
       where p.snapshot_id = latest.id
-      order by coalesce(p.power, 0) desc, p.character_id
+      order by coalesce(p.power, 0) desc, p.character_id collate "C"
       limit 200)
     and not exists (select 1 from roster_in r where r.character_id = g.character_id);
   get diagnostics n_inactive = row_count;

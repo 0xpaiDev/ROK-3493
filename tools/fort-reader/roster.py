@@ -1,4 +1,4 @@
-"""The daily Roster Snapshot (ADR 0004): fetch the newest day of Lilith's Kingdom Member Data and
+"""The daily Roster Snapshot (ADR 0004): fetch the newest day of the Lilith stats export (its JSON) and
 save it through record_roster_snapshot, which applies the same rules as the admin page's upload.
 
     .venv/bin/python roster.py              fetch the newest day and save it
@@ -90,7 +90,7 @@ def newest_day(token, opener=urllib.request.urlopen):
 
 
 def fetch_rows(day, token, opener=urllib.request.urlopen):
-    """One day's Kingdom Member Data as roster_snapshot_row values, Character ID as text."""
+    """One day of the Lilith stats export as roster_snapshot_row values, Character ID as text."""
     body = get("/api/kindomMember", {"start": day, "end": day, "search": "", "server_id": SERVER_ID}, token, opener)
     data = body.get("data") or []
     if not data:
@@ -99,7 +99,8 @@ def fetch_rows(day, token, opener=urllib.request.urlopen):
         raise RosterError(f"Lilith sent {len(data)} of {body['total']} Governors for {day}; the rest would read as Inactive.")
     rows = []
     for m in data:
-        row = {"id": str(m.get("id", "")).strip(), "name": str(m.get("name", "")).strip()}
+        # A null must read as missing, never as the text "None": that would rename a Governor.
+        row = {"id": str(m.get("id") or "").strip(), "name": str(m.get("name") or "").strip()}
         for column, field in FIELDS.items():
             value = m.get(field)
             if value is not None and not (isinstance(value, int) and value >= 0):
@@ -113,6 +114,15 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
     """One run. Returns the lines to print. notify(subject, body) emails."""
     notify = notify or (lambda subject, body: mail(subject, body, os.environ))
     lines = []
+
+    def note(subject, body, done):
+        # A reminder that can't be mailed must neither stop the save nor make a saved run look failed.
+        try:
+            notify(subject, body)
+            lines.append(done)
+        except Exception as e:
+            lines.append(f"{done.split(';')[0]}; couldn't email it: {e}")
+
     token = os.environ.get("LILITH_PAUTH", "").strip()
     if not token:
         raise RosterError("Add LILITH_PAUTH (the RoK Toolkit's login token) to .env.")
@@ -121,10 +131,10 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
         raise RosterError(f"The Lilith token expired on {expires:%Y-%m-%d}: put a new one in LILITH_PAUTH.")
     left = expires - now
     if left < datetime.timedelta(days=WARN_DAYS):
-        notify(f"Roster job: the Lilith token expires {expires:%Y-%m-%d}",
-               f"The token in LILITH_PAUTH stops working on {expires:%Y-%m-%d %H:%M} UTC. Log in to the RoK Toolkit, "
-               f"copy a new one into .env on the host (README: Roster Snapshot), or the daily Roster Snapshot stops.")
-        lines.append(f"Token expires {expires:%Y-%m-%d %H:%M} UTC; emailed a reminder.")
+        note(f"Roster job: the Lilith token expires {expires:%Y-%m-%d}",
+             f"The token in LILITH_PAUTH stops working on {expires:%Y-%m-%d %H:%M} UTC. Log in to the RoK Toolkit, "
+             f"copy a new one into .env on the host (README: Roster Snapshot), or the daily Roster Snapshot stops.",
+             f"Token expires {expires:%Y-%m-%d %H:%M} UTC; emailed a reminder.")
 
     day = args.day or newest_day(token, opener)
     age = (now.date() - datetime.date.fromisoformat(day)).days
@@ -140,10 +150,10 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
     else:
         lines.append(f"Nothing new: the latest Roster Snapshot is already {result.get('latest')}.")
     if not args.day and age >= STALE_DAYS:
-        notify(f"Roster job: Lilith's newest stats are from {day}",
-               f"Lilith's stats tools still have nothing newer than {day} ({age} days ago), so the roster isn't moving. "
-               f"Nothing is wrong on our side; it usually catches up by itself.")
-        lines.append(f"Lilith's newest day is {age} days old; emailed a note.")
+        note(f"Roster job: Lilith's newest stats are from {day}",
+             f"Lilith's stats tools still have nothing newer than {day} ({age} days ago), so the roster isn't moving. "
+             f"Nothing is wrong on our side; it usually catches up by itself.",
+             f"Lilith's newest day is {age} days old; emailed a note.")
     return lines
 
 

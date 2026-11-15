@@ -200,6 +200,12 @@ test("a Council status change made after the Roster Snapshot's day stands: the l
   assert.deepEqual(result.statusChanges, []);
 });
 
+test("a power tie at place 200 goes to the Character ID first as plain text, as in record_roster_snapshot", () => {
+  const strong = Array.from({ length: 199 }, (_, i) => row(String(5000 + i), 1000));
+  const result = applyRosterSnapshot({ governors: [], nameHistory: [], previous: null, snapshot: nov1(...strong, row("999", 10), row("1200", 10)) });
+  assert.deepEqual([result.top200.includes("1200"), result.top200.includes("999")], [true, false]);
+});
+
 // The shared Roster Snapshot cases: the same file runs against record_roster_snapshot in Postgres.
 const rosterCases = JSON.parse(readFileSync(new URL("./roster-snapshot-cases.json", import.meta.url), "utf8"));
 const byId = (a, b) => a[0].localeCompare(b[0]);
