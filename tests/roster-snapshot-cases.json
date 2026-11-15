@@ -1,5 +1,5 @@
 {
-  "about": "What a Roster Snapshot changes. Runs against applyRosterSnapshot in site/kingdom.js (the admin page's upload) and record_roster_snapshot in Postgres (the daily roster job), so the two can't drift apart. previous is the latest saved snapshot, a day before takenOn. The Postgres run clears the real snapshots inside its rolled-back transaction. Character IDs here are short on purpose: real ones are 8 to 9 digits, so they never collide.",
+  "about": "What a Roster Snapshot changes: the rules record_roster_snapshot applies (the Roster job is their only user). supabase/tests/test_record_roster_snapshot.py runs every case, clearing the real snapshots inside its rolled-back transaction. previous is the latest saved snapshot, a day before takenOn. Character IDs here are short on purpose: real ones are 8 to 9 digits, so they never collide.",
   "cases": [
     {
       "case": "a Top 200 Governor absent from the new snapshot becomes Inactive, not Migrated",

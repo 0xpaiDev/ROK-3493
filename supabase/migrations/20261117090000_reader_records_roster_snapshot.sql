@@ -1,30 +1,21 @@
 -- Roster ticket 01 (ADR 0004): the reader's host saves a Roster Snapshot every day through one function.
 -- Safe to run twice: supabase/tests applies it inside a rolled-back transaction.
 
--- A Roster Snapshot is always newer than every saved one, whoever saves it. With the daily job as a
--- second writer, the admin page's own check (against the latest snapshot when the page loaded) is
--- not enough: an older day saved after a newer one would rewind the statuses the newer one set.
-create or replace function public.roster_snapshot_is_newest()
-returns trigger
-language plpgsql
-as $$
-begin
-  if exists (select 1 from roster_snapshot s where s.taken_on >= new.taken_on) then
-    raise exception 'A Roster Snapshot for % or later is already saved. Reload to see it.', new.taken_on
-      using errcode = '22023';
-  end if;
-  return new;
-end;
-$$;
-
+-- The Roster job is the only writer of Roster Snapshots: the Council no longer uploads the export
+-- (Petras, 2026-11-15). Its insert and update rights go; delete stays, to remove a wrong snapshot.
+-- One writer means record_roster_snapshot's own check under its lock decides which day is newest.
 drop trigger if exists roster_snapshot_is_newest on roster_snapshot;
-create trigger roster_snapshot_is_newest before insert on roster_snapshot
-  for each row execute function public.roster_snapshot_is_newest();
+drop function if exists public.roster_snapshot_is_newest();
+drop policy if exists "council insert" on roster_snapshot;
+drop policy if exists "council update" on roster_snapshot;
+drop policy if exists "council insert" on roster_snapshot_row;
+drop policy if exists "council update" on roster_snapshot_row;
+revoke insert, update on roster_snapshot, roster_snapshot_row from authenticated;
 
 -- Saves the Lilith stats for one day as a Roster Snapshot, with what it changes, all or nothing.
 -- rows: [{ id, name, power, highest_power, kill_points, resources_gathered, alliance_helps }].
--- The rules are applyRosterSnapshot in site/kingdom.js (the admin page's upload); the cases in
--- tests/roster-snapshot-cases.json run against both:
+-- The rules, as the admin page's upload applied them until now (applyRosterSnapshot, removed); the
+-- cases in tests/roster-snapshot-cases.json pin them:
 --   * a Governor in the previous snapshot's Top 200 and absent now becomes Inactive, never Migrated;
 --   * an Inactive or Migrated Governor present again becomes Current;
 --   * a Council status change made after the snapshot's day stands (the latest event wins);

@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, applyRosterSnapshot, parseStatsExport, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, parseFortRows, namesToMatch, matchNames, governorsTwice, moveInTie, newFortNames, isLiveWeek, isClosedWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -104,7 +104,7 @@ async function showAdmin(session) {
   showFarmLinks(document.getElementById("task-farm-links"));
   showFortWeek(document.getElementById("task-fort-week"));
   showRewardPromise(document.getElementById("task-reward-promise"));
-  showRoster(document.getElementById("task-roster"), session.user.email);
+  showRoster(document.getElementById("task-roster"));
 }
 
 function soonHtml(t) {
@@ -1085,67 +1085,27 @@ async function showRewardPromise(section, message = "", startWeek = null) {
   draw();
 }
 
-// ---------- Roster Snapshot (ticket 05) ----------
-// The rules module parses the export and works out the changes; this section reads, shows and writes.
+// ---------- Roster Snapshot (ticket 05, ADR 0004) ----------
+// The Roster job saves a Roster Snapshot every day from the Lilith stats export, the only writer
+// of snapshots. The Council reads when it last did, and sets a Governor's status by hand where
+// the export gets it wrong.
 
-const SHEETJS = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/xlsx.mjs";
+// The Roster job emails from this age too: Lilith publishes each day a day or so late.
+const ROSTER_STALE_DAYS = 3;
 
 async function loadRosterState() {
-  const [governors, names, latest] = await Promise.all([
-    allRows("governor", "character_id,current_name,status,status_set_by,status_set_at"),
-    allRows("governor_name", "character_id,name"),
-    supabase.from("roster_snapshot").select("id,taken_on").order("taken_on", { ascending: false }).limit(1),
+  const [governors, latest] = await Promise.all([
+    allRows("governor", "character_id,current_name,status"),
+    supabase.from("roster_snapshot").select("taken_on").order("taken_on", { ascending: false }).limit(1),
   ]);
   if (latest.error) throw new Error(`roster_snapshot: ${latest.error.message}`);
-  const last = latest.data[0] ?? null;
-  const previous = [];
-  if (last) {
-    for (let from = 0; ; from += 1000) {
-      const { data, error } = await supabase.from("roster_snapshot_row").select("character_id,power").eq("snapshot_id", last.id).range(from, from + 999);
-      if (error) throw new Error(`roster_snapshot_row: ${error.message}`);
-      previous.push(...data.map((r) => ({ id: r.character_id, power: r.power })));
-      if (data.length < 1000) break;
-    }
-  }
   return {
-    last,
-    previous,
-    governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, status: g.status, statusSetBy: g.status_set_by, statusSetAt: g.status_set_at })),
-    nameHistory: names.map((n) => ({ id: n.character_id, name: n.name })),
+    last: latest.data[0] ?? null,
+    governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, status: g.status })),
   };
 }
 
-async function readExport(file) {
-  const XLSX = await import(SHEETJS);
-  const book = XLSX.read(await file.arrayBuffer());
-  const sheet = book.Sheets[book.SheetNames[0]];
-  return parseStatsExport(file.name, XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: "" }));
-}
-
-// The four review groups, in tile order. Each takes the changes and returns { id, name, from? } items.
-const REVIEW_GROUPS = [
-  { key: "inactive", label: "Become Inactive", hint: "In the last Top 200, missing now",
-    items: (c) => c.statusChanges.filter((s) => s.to === "inactive") },
-  { key: "back", label: "Back to Current", hint: "Inactive or Migrated before, in this export again",
-    items: (c) => c.statusChanges.filter((s) => s.to === "current") },
-  { key: "new", label: "New Governors", hint: "Never seen before",
-    items: (c) => c.newGovernors },
-  { key: "renamed", label: "Renamed", hint: "The new name joins Name History",
-    items: (c) => c.renames.map((r) => ({ id: r.id, name: r.to, from: r.from })) },
-];
-
-const STEPS = ["Upload export", "Review changes", "Save snapshot"];
-const stepsHtml = (current) => `<ol class="steps reveal" aria-label="Steps" style="--d: var(--stagger)">${STEPS.map((s, i) => {
-  const state = i < current ? ` class="done"` : i === current ? ` aria-current="step"` : "";
-  const mark = i < current
-    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12l5 5 9-10"/></svg><span class="sr-only">Done:</span>`
-    : i + 1;
-  return `<li${state}><span class="n">${mark}</span>${esc(s)}</li>`;
-}).join("")}</ol>`;
-
-const FILE_ICON = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13l6 5M15 13l-6 5"/></svg>`;
-
-async function showRoster(section, email, message = "") {
+async function showRoster(section, message = "") {
   let state;
   try {
     state = await loadRosterState();
@@ -1157,213 +1117,69 @@ async function showRoster(section, email, message = "") {
   const byId = new Map(state.governors.map((g) => [g.id, g]));
   const label = (g) => `${g.name} (${g.id})`;
   const count = (status) => state.governors.filter((g) => g.status === status).length;
-  const latest = state.last ? `Latest saved snapshot: ${esc(dayMonth(state.last.taken_on))} ${esc(state.last.taken_on.slice(0, 4))}` : "No Roster Snapshot saved yet";
+  const last = state.last?.taken_on;
+  const age = last ? Math.floor((Date.now() - Date.parse(last + "T00:00:00Z")) / 86400000) : null;
+  const stale = age === null || age >= ROSTER_STALE_DAYS;
+  setTaskStatus("roster", last ? `Latest ${dayMonth(last)}` : "No snapshot yet", stale ? "Review" : "", stale ? "review" : "");
 
-  // pending: an export that was read and reviewed but not saved yet.
-  let pending = null;
-  let msgText = message;
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <div class="reveal">
+      <div class="eyebrow">Roster Snapshot</div>
+      <h1 class="task-title">${last ? `Latest: ${esc(dayMonth(last))} ${esc(last.slice(0, 4))}` : "No Roster Snapshot saved yet"}</h1>
+      <p class="task-lede">The Roster job saves one every day from the Lilith stats export. <span class="num">${count("inactive")}</span> Inactive · <span class="num">${count("migrated")}</span> Migrated.</p>
+    </div>
+    <p class="admin-msg" role="status">${esc(message)}</p>
+    ${stale ? `<div class="note" role="note"><span>${last
+      ? `<b>Nothing newer for ${age} days.</b> Lilith may be late with its stats, or the Roster job has stopped.`
+      : `<b>The Roster job hasn't saved a snapshot yet.</b>`}</span></div>` : ""}
 
-  function draw() {
-    const p = pending;
-    setTaskStatus("roster", p ? "Export ready to save" : state.last ? `Latest ${dayMonth(state.last.taken_on)}` : "No snapshot yet", p ? "Review" : "", p ? "review" : "");
-    const groups = p ? REVIEW_GROUPS.map((g) => ({ ...g, list: g.items(p.changes) })) : [];
-    const newInTop200 = p ? p.changes.top200.filter((id) => !byId.has(id)).length : 0;
-    const body = document.createElement("div");
-    body.innerHTML = `
-      <div class="reveal">
-        <div class="eyebrow">Roster Snapshot</div>
-        <h1 class="task-title">${p ? `Review the ${esc(dayMonth(p.snapshot.takenOn))} export` : "Upload the Lilith stats export"}</h1>
-        <p class="task-lede">${latest} · <span class="num">${count("inactive")}</span> Inactive · <span class="num">${count("migrated")}</span> Migrated. Nothing changes until you press Save.</p>
-      </div>
-      ${stepsHtml(p ? 1 : 0)}
-      <p class="admin-msg" role="status">${esc(msgText)}</p>
-      ${p ? `
-        <div class="file-row reveal">
-          <span class="file-icon">${FILE_ICON}</span>
-          <span class="file-meta">
-            <b class="ell" title="${esc(p.fileName)}">${esc(p.fileName)}</b>
-            <small>Lilith stats export · dated <b class="mono">${esc(p.snapshot.takenOn)}</b> · <span class="num">${p.snapshot.rows.length}</span> Governors</small>
-          </span>
-          <label class="btn">Replace file<input type="file" class="sr-only" accept=".xlsx" data-export></label>
-        </div>
-        <div class="tiles">${groups.map((g, i) => `
-          <button type="button" class="tile g-${g.key} reveal" style="--d: calc(var(--stagger) * ${i + 2})" aria-pressed="false" data-filter="${g.key}">
-            <span class="lbl"><span class="dot"></span>${esc(g.label)}</span>
-            <b class="num">${g.list.length}</b>
-            <small>${esc(g.hint)}</small>
-          </button>`).join("")}
-        </div>
-        <div class="groups">${groups.map((g) => `
-          <section class="card group g-${g.key}" data-group="${g.key}" aria-label="${esc(g.label)}">
-            <div class="group-head">
-              <span class="dot"></span>
-              <h2>${esc(g.label)} <span class="num">${g.list.length}</span></h2>
-              <span class="hint">${esc(g.hint)}</span>
-            </div>
-            ${g.list.length ? `<ul class="gov-grid">${g.list.map((x) => `
-              <li><span class="ell" title="${esc(x.from ? `${x.from} → ${x.name}` : x.name)}">${x.from ? `<s>${esc(x.from)}</s> <span class="faint">→</span> ` : ""}${esc(x.name)}</span><span class="pid">${esc(x.id)}</span></li>`).join("")}
-            </ul>` : `<p class="none">None in this export.</p>`}
-          </section>`).join("")}
-        </div>
-        <div class="save-bar" role="region" aria-label="Unsaved Roster Snapshot">
-          <span class="pulse unsaved" aria-hidden="true"></span>
-          <span class="sum"><b>Not saved yet.</b> <span>${groups[0].list.length} become Inactive · ${groups[1].list.length} back to Current · ${p.changes.newGovernors.length} new · ${p.changes.newNames.length} new names join Name History · ${newInTop200} of the Top 200 are new.</span></span>
-          <button class="btn quiet" type="button" data-discard>Discard</button>
-          <button class="btn primary" type="button" data-save>Save Roster Snapshot</button>
-        </div>`
-      : `
-        <label class="drop reveal" style="--d: calc(var(--stagger) * 2)">
-          <span class="file-icon">${FILE_ICON}</span>
-          <b>Drop the Lilith stats export here</b>
-          <span class="muted">or <span class="linkish-text">choose a file</span></span>
-          <small>3493_YYYYMMDD_….xlsx</small>
-          <input type="file" class="sr-only" accept=".xlsx" data-export>
-        </label>`}
+    <section class="card admin-card">
+      <h2>Set a Governor's status by hand</h2>
+      <p class="muted">For a Governor the export gets wrong. The latest change wins, so a later Roster Snapshot can overrule this.</p>
+      <form id="set-status" class="fields">
+        <label class="field wide">Governor
+          <input name="gov" list="roster-governors" required placeholder="Name or Character ID" autocomplete="off">
+        </label>
+        <datalist id="roster-governors">${state.governors.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
+        <label class="field">Status
+          <select name="status"><option value="current">Current</option><option value="inactive">Inactive</option><option value="migrated">Migrated</option></select>
+        </label>
+        <button class="btn" type="submit" disabled>Save status</button>
+      </form>
+      <p class="match" aria-live="polite">Pick a Governor from the list to see its Character ID.</p>
+    </section>`;
+  section.replaceChildren(body);
 
-      <section class="card admin-card">
-        <h2>Set a Governor's status by hand</h2>
-        <p class="muted">For a Governor the export gets wrong. The latest change wins, so a later Roster Snapshot can overrule this.</p>
-        <form id="set-status" class="fields">
-          <label class="field wide">Governor
-            <input name="gov" list="roster-governors" required placeholder="Name or Character ID" autocomplete="off">
-          </label>
-          <datalist id="roster-governors">${state.governors.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
-          <label class="field">Status
-            <select name="status"><option value="current">Current</option><option value="inactive">Inactive</option><option value="migrated">Migrated</option></select>
-          </label>
-          <button class="btn" type="submit" disabled>Save status</button>
-        </form>
-        <p class="match" aria-live="polite">Pick a Governor from the list to see its Character ID.</p>
-      </section>`;
-    section.replaceChildren(body);
-    wire(body);
-  }
-
-  async function takeFile(file) {
-    if (!file) return;
-    let snapshot;
-    try {
-      snapshot = await readExport(file);
-    } catch (err) {
-      msgText = `Could not read the export: ${err.message}`;
-      return draw();
+  // The matched Governor's Character ID shows before Save is enabled.
+  const msg = body.querySelector(".admin-msg");
+  const form = body.querySelector("#set-status");
+  const match = body.querySelector(".match");
+  const save = form.querySelector("button");
+  const matched = () => byId.get(typedId(form.gov.value.trim()));
+  form.gov.addEventListener("input", () => {
+    const g = matched();
+    save.disabled = !g;
+    match.innerHTML = g
+      ? `Matched <b>${esc(g.name)}</b> <span class="pid">${esc(g.id)}</span> · now ${esc(g.status)}`
+      : form.gov.value.trim() ? "No Governor matches yet. Pick one from the list." : "Pick a Governor from the list to see its Character ID.";
+  });
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const g = matched();
+    if (!g) return;
+    const status = form.status.value;
+    save.disabled = true;
+    const { error } = await supabase.from("governor")
+      .update({ status, status_set_by: "council", status_set_at: new Date().toISOString() })
+      .eq("character_id", g.id);
+    if (error) {
+      save.disabled = false;
+      msg.textContent = `Could not save ${g.name}: ${error.message}`;
+      return;
     }
-    // An older export would rewind statuses the newer one already settled.
-    if (state.last && snapshot.takenOn <= state.last.taken_on) {
-      msgText = `This export is from ${snapshot.takenOn}; the latest Roster Snapshot is already ${state.last.taken_on}.`;
-      return draw();
-    }
-    const changes = applyRosterSnapshot({ governors: state.governors, nameHistory: state.nameHistory, previous: state.previous, snapshot });
-    pending = { fileName: file.name, snapshot, changes };
-    msgText = "";
-    draw();
-  }
-
-  function wire(body) {
-    const msg = body.querySelector(".admin-msg");
-    body.querySelectorAll("input[data-export]").forEach((input) => input.addEventListener("change", () => takeFile(input.files[0])));
-
-    const drop = body.querySelector(".drop");
-    if (drop) {
-      drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
-      drop.addEventListener("dragleave", () => drop.classList.remove("over"));
-      drop.addEventListener("drop", (e) => { e.preventDefault(); drop.classList.remove("over"); takeFile(e.dataTransfer.files[0]); });
-    }
-
-    // A tile shows only its group; pressing it again shows all four.
-    const tiles = [...body.querySelectorAll(".tile")];
-    tiles.forEach((tile) => tile.addEventListener("click", () => {
-      const on = tile.getAttribute("aria-pressed") !== "true";
-      tiles.forEach((t) => t.setAttribute("aria-pressed", String(on && t === tile)));
-      body.querySelectorAll("[data-group]").forEach((g) => (g.hidden = on && g.dataset.group !== tile.dataset.filter));
-    }));
-
-    body.querySelector("[data-discard]")?.addEventListener("click", () => {
-      pending = null;
-      msgText = "Discarded the export. Nothing was saved.";
-      draw();
-    });
-
-    body.querySelector("[data-save]")?.addEventListener("click", async (e) => {
-      const { snapshot, changes } = pending;
-      body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
-      msg.textContent = "Saving…";
-      try {
-        await saveSnapshot(snapshot, changes, email);
-        showRoster(section, email, `Saved the ${snapshot.takenOn} Roster Snapshot: ${snapshot.rows.length} Governors.`);
-      } catch (err) {
-        body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
-        msg.textContent = `Could not save: ${err.message}`;
-      }
-    });
-
-    // The matched Governor's Character ID shows before Save is enabled.
-    const form = body.querySelector("#set-status");
-    const match = body.querySelector(".match");
-    const save = form.querySelector("button");
-    const matched = () => byId.get(typedId(form.gov.value.trim()));
-    form.gov.addEventListener("input", () => {
-      const g = matched();
-      save.disabled = !g;
-      match.innerHTML = g
-        ? `Matched <b>${esc(g.name)}</b> <span class="pid">${esc(g.id)}</span> · now ${esc(g.status)}`
-        : form.gov.value.trim() ? "No Governor matches yet. Pick one from the list." : "Pick a Governor from the list to see its Character ID.";
-    });
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const g = matched();
-      if (!g) return;
-      const status = form.status.value;
-      save.disabled = true;
-      const { error } = await supabase.from("governor")
-        .update({ status, status_set_by: "council", status_set_at: new Date().toISOString() })
-        .eq("character_id", g.id);
-      if (error) {
-        save.disabled = false;
-        msg.textContent = `Could not save ${g.name}: ${error.message}`;
-        return;
-      }
-      // Reload so the counts and a later export's review see the change; an unsaved export is dropped.
-      showRoster(section, email, `${g.name} is now ${status[0].toUpperCase() + status.slice(1)}.`);
-    });
-  }
-
-  draw();
-}
-
-// The snapshot goes in first: the database refuses one on or before the latest (the daily Roster job
-// may have saved a newer day since this page loaded), and then nothing else has been written. Then
-// Governors and names, then the rows; if any of those fail the snapshot is removed again, so no half
-// snapshot is left behind. Statuses last.
-async function saveSnapshot(snapshot, changes, email) {
-  const made = await supabase.from("roster_snapshot").insert({ taken_on: snapshot.takenOn, uploaded_by: email }).select("id").single();
-  check(made, "Roster Snapshot");
-  try {
-    const people = [...changes.newGovernors.map((g) => ({ character_id: g.id, current_name: g.name })),
-                    ...changes.renames.map((r) => ({ character_id: r.id, current_name: r.to }))];
-    if (people.length) check(await supabase.from("governor").upsert(people, { onConflict: "character_id" }), "Governors");
-    if (changes.newNames.length) {
-      check(await supabase.from("governor_name").upsert(
-        changes.newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
-        { onConflict: "character_id,name", ignoreDuplicates: true }), "Name History");
-    }
-    const rows = snapshot.rows.map((r) => ({
-      snapshot_id: made.data.id, character_id: r.id, power: r.power, highest_power: r.highestPower,
-      kill_points: r.killPoints, resources_gathered: r.resources, alliance_helps: r.allianceHelps,
-    }));
-    for (let i = 0; i < rows.length; i += 500) {
-      check(await supabase.from("roster_snapshot_row").insert(rows.slice(i, i + 500)), "Roster Snapshot rows");
-    }
-  } catch (err) {
-    await supabase.from("roster_snapshot").delete().eq("id", made.data.id);
-    throw err;
-  }
-  for (const to of ["inactive", "current"]) {
-    const ids = changes.statusChanges.filter((c) => c.to === to).map((c) => c.id);
-    if (ids.length) {
-      check(await supabase.from("governor").update({ status: to, status_set_by: "snapshot", status_set_at: changes.statusSetAt }).in("character_id", ids), "Statuses");
-    }
-  }
+    showRoster(section, `${g.name} is now ${status[0].toUpperCase() + status.slice(1)}.`);
+  });
 }
 
 signOut.addEventListener("click", async () => {

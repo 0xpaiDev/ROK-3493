@@ -152,7 +152,7 @@ Each one lives only in the host's `.env`. Put the new value there; the next run 
 
 ## Roster Snapshot
 
-The Roster job, `roster.py`, saves the newest day of the Lilith stats export as a Roster Snapshot (ADR 0004), with the same rules as the admin page's upload: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
+The Roster job, `roster.py`, saves the newest day of the Lilith stats export as a Roster Snapshot (ADR 0004). It is the only writer of Roster Snapshots: the admin page no longer uploads the export. The database applies the rules: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
 
 ```
 .venv/bin/python roster.py              # fetch the newest day and save it

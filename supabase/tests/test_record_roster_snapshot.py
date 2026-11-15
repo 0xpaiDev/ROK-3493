@@ -143,18 +143,30 @@ class RosterSnapshot(unittest.TestCase):
             "select character_id, status from governor where character_id in ('999', '1200') order by 1").fetchall(),
             [("1200", "inactive"), ("999", "current")])
 
-    def test_no_snapshot_lands_on_or_before_the_latest_whoever_saves_it(self):
-        # The Council's upload inserts directly; a page opened before the job ran still holds an older day.
+    def test_the_council_may_delete_a_snapshot_but_no_longer_add_or_change_one(self):
+        # The Roster job is the only writer (ADR 0004); the Council keeps delete to remove a wrong one.
         self.record("2020-01-07", [{"id": "1", "name": "Gov 1", "power": 900}])
-        for day in ("2020-01-06", "2020-01-07"):
-            with self.subTest(day):
+        sid = self.one("select id from roster_snapshot where taken_on = '2020-01-07'")
+        council = self.user("council-test@example.invalid")
+        self.conn.execute("insert into council_member (email) values ('council-test@example.invalid')")
+        for sql, args in [("insert into roster_snapshot (taken_on) values ('2020-01-08')", ()),
+                          ("update roster_snapshot set taken_on = '2020-01-09' where id = %s", (sid,)),
+                          ("insert into roster_snapshot_row (snapshot_id, character_id, power) values (%s, '1', 5)", (sid,)),
+                          ("update roster_snapshot_row set power = 5 where snapshot_id = %s", (sid,))]:
+            with self.subTest(sql):
                 self.conn.execute("savepoint call")
                 try:
-                    with self.assertRaisesRegex(psycopg.errors.InvalidParameterValue, "or later is already saved"):
-                        self.conn.execute("insert into roster_snapshot (taken_on) values (%s)", (day,))
+                    self.conn.execute("set local role authenticated")
+                    self.conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps(council),))
+                    with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                        self.conn.execute(sql, args)
                 finally:
                     self.conn.execute("rollback to savepoint call")
-        self.one("insert into roster_snapshot (taken_on) values ('2020-01-08') returning id")
+        self.conn.execute("set local role authenticated")
+        self.conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps(council),))
+        deleted = self.conn.execute("delete from roster_snapshot where id = %s", (sid,)).rowcount
+        self.conn.execute("reset role")
+        self.assertEqual([deleted, self.one("select count(*) from roster_snapshot_row where snapshot_id = %s", (sid,))], [1, 0])
 
     def test_only_the_readers_sign_in_may_record(self):
         rows = [{"id": "1", "name": "Gov 1", "power": 900}]

@@ -23,7 +23,6 @@ Dark, calm, exact. One violet accent on near-black, with metals reserved for hon
 | Live | `--live` on `--live-wash` (`--live-edge` for a ring) | the reset pulse, the Live Week tag and "Linked" / success |
 | Notes | `--note` on `--note-wash` | Partial Week and other "how the data works" callouts |
 | Gold tags | `--gold` on `--tag-wash` | the Draft and needs ID tags, the only gold outside placings and Weekly Awards |
-| Review groups | `--inactive`, `--back`, `--new`, `--renamed` | Roster Snapshot groups (Become Inactive, Back to Current, New Governors, Renamed), as a dot plus count, never a filled card. `--back` is plain ink, not silver: metals stay with honours |
 | Elevation | `--shadow-float` | the sticky save bar and anything else that floats over content |
 | Deltas | `--up`, `--down` | week-on-week change; `--down` also edges a paste review row that blocks Save |
 
@@ -66,9 +65,6 @@ Reuse these before inventing new ones (classes in `styles.css`).
 Council admin patterns:
 
 - **Task sidebar**: one task visible at a time, each with a status line and a badge (Review / open count / Soon). The task sits in the URL hash.
-- **Steps bar**: Upload → Review → Save, with the current step in the accent.
-- **Filter tiles**: count + dot + hint; clicking filters the list below (`aria-pressed`).
-- **Change lists**: renames read `old (struck through) → new · ID`. An empty group is one line, not a blank box.
 - **Sticky save bar**: appears while anything is unsaved and summarises what Save will do; Discard is quiet and Save is primary. Nothing writes before Save.
 - **Confirm / Dismiss rows**: the decision becomes a "Linked" / "Dismissed" label with Undo. Group by Main and offer "Confirm all N".
 - **Paste review rows** `.fw-row`: rank, the name as pasted, Fort Count, a Governor picker (datalist of "Name (Character ID)"), then the Character ID or a "needs ID" tag. Tied rows get up/down arrows that move them only within the tie. A row that blocks saving gets a `--down` edge on the left. For the Live Week the paste is refused and the rows are the reader's latest reading: only its "needs ID" rows get a picker (a row the reader read two ways gets a `.muted` note instead), no tie arrows, and Save writes the picks to Name History only. A pick the next reading would not match blocks Save and says why.
