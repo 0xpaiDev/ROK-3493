@@ -36,7 +36,25 @@ Persistent=false
 WantedBy=timers.target
 EOF
 
+# The daily Roster Snapshot (README: Roster Snapshot). Lilith publishes each day at a time we don't
+# know, so it asks twice a day; a day already saved is a quiet no-op. Persistent: a run missed while
+# the host was off is made up at boot, which is harmless here.
+sed -e "s|__USER__|$(id -un)|" -e "s|__DIR__|$DIR|g" "$DIR/host/roster.service" \
+  | sudo tee /etc/systemd/system/roster.service >/dev/null
+sudo tee /etc/systemd/system/roster.timer >/dev/null <<EOF
+# Written by install.sh. Edit host/install.sh, not this.
+[Unit]
+Description=Roster job: twice a day, save Lilith's newest day as a Roster Snapshot
+
+[Timer]
+OnCalendar=*-*-* 06,18:00:00 UTC
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+EOF
+
 sudo systemctl daemon-reload
-sudo systemctl enable --now fort-reader.timer >/dev/null
-sudo systemctl restart fort-reader.timer
-systemctl list-timers fort-reader.timer --no-pager
+sudo systemctl enable --now fort-reader.timer roster.timer >/dev/null
+sudo systemctl restart fort-reader.timer roster.timer
+systemctl list-timers fort-reader.timer roster.timer --no-pager

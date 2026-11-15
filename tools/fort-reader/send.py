@@ -43,3 +43,14 @@ def send_live_week(rows, read_at):
     entries = [{"rank": r["rank"], "name": r["name"], "fort_count": r["forts"],
                 **({"names": r["names"]} if r.get("names") else {})} for r in rows]
     return _post("/rest/v1/rpc/record_live_week", {"read_at": read_at.isoformat(), "entries": entries}, token)
+
+
+def send_roster_snapshot(taken_on, rows):
+    """Saves one day's Lilith stats as a Roster Snapshot (ADR 0004), signed in as the reader.
+    taken_on: an ISO date; rows: [{id, name, power, highest_power, kill_points, resources_gathered,
+    alliance_helps}]. Returns {saved, taken_on, ...}; saved is false when that day is already saved."""
+    email, password = os.environ.get("FORT_READER_EMAIL"), os.environ.get("FORT_READER_PASSWORD")
+    if not email or not password:
+        raise SystemExit("Add FORT_READER_EMAIL and FORT_READER_PASSWORD (the reader's Supabase sign-in) to .env.")
+    token = _post("/auth/v1/token?grant_type=password", {"email": email, "password": password})["access_token"]
+    return _post("/rest/v1/rpc/record_roster_snapshot", {"taken_on": taken_on, "rows": rows}, token)

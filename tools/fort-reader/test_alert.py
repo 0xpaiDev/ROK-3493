@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from alert import after_run
+from alert import after_run, mail
 
 MAIL = {
     "FORT_READER_GMAIL": "reader@gmail.com",
@@ -88,6 +88,21 @@ class FailureAlert(unittest.TestCase):
 
     def test_without_mail_settings_a_failed_run_emails_nobody(self):
         after_run("Stopped on the login screen.", self.shot, {}, SUNDAY, smtp=FakeGmail)
+        self.assertEqual(FakeGmail.sent, [])
+
+
+class PlainNote(unittest.TestCase):
+    def setUp(self):
+        FakeGmail.sent = []
+
+    def test_a_note_goes_to_petras_only(self):
+        to = mail("Roster job: the Lilith token expires 2026-12-15", "Copy a new one.", MAIL, smtp=FakeGmail)
+        self.assertEqual(to, ["petras@example.com"])
+        self.assertEqual([FakeGmail.sent[0]["To"], FakeGmail.sent[0]["Subject"]],
+                         ["petras@example.com", "Roster job: the Lilith token expires 2026-12-15"])
+
+    def test_no_mail_settings_mails_nobody(self):
+        self.assertEqual(mail("x", "y", {}, smtp=FakeGmail), [])
         self.assertEqual(FakeGmail.sent, [])
 
 

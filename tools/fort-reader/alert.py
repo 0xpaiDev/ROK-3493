@@ -16,6 +16,22 @@ from pathlib import Path
 MAIL_SETTINGS = ("FORT_READER_GMAIL", "FORT_READER_GMAIL_APP_PASSWORD", "FORT_READER_ALERT_TO")
 
 
+def mail(subject, body, env, smtp=smtplib.SMTP_SSL):
+    """Emails FORT_READER_ALERT_TO a plain note, such as the roster job's. Returns the addresses
+    mailed, or [] when .env has no mail settings."""
+    if not all(env.get(k) for k in MAIL_SETTINGS):
+        return []
+    msg = EmailMessage()
+    msg["From"] = env["FORT_READER_GMAIL"]
+    msg["To"] = env["FORT_READER_ALERT_TO"]
+    msg["Subject"] = subject
+    msg.set_content(body)
+    with smtp("smtp.gmail.com", 465, timeout=30) as server:
+        server.login(env["FORT_READER_GMAIL"], env["FORT_READER_GMAIL_APP_PASSWORD"])
+        server.send_message(msg)
+    return [env["FORT_READER_ALERT_TO"]]
+
+
 def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
     """Email the failure and the screen the run stopped on, and return the addresses mailed:
     FORT_READER_ALERT_TO first, then any Council addresses, so more than one means the Council

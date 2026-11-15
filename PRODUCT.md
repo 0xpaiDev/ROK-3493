@@ -9,7 +9,7 @@ web
 ## Users
 
 - **Kingdom members** of the Void Legion (Rise of Kingdoms, Kingdom 3493). They open the public site from a shared link, on phone and desktop about equally, to see where they placed in the Weekly Ranking, their Fort Average, GH Event results, Weekly Award winners, and the roster. Mostly fluent in English.
-- **The Council** (the King and officers). They sign in to the admin page with a magic link to log Fort Weeks, record Weekly Awards, log GH Events, upload Roster Snapshots, and link Farms to Mains.
+- **The Council** (the King and officers). They sign in to the admin page with a magic link to log Fort Weeks, record Weekly Awards, log GH Events, set a Governor's status, and link Farms to Mains. Roster Snapshots arrive by themselves (the Roster job, ADR 0004).
 - **Outsiders** looking at the Kingdom, such as Governors considering joining. They see the same public site.
 
 ## Product Purpose
@@ -29,7 +29,7 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 ## Operating Context
 
 - The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset; the Council logs the week from the in-game ranking page and gives out Weekly Awards (King's Chests or resources) after.
-- Roster data comes from the official Lilith stats export, uploaded as a dated Roster Snapshot.
+- Roster data comes from the official Lilith stats export, saved daily as a dated Roster Snapshot by the Roster job (ADR 0004).
 - GH Events pay Golden Heads to the top 10, usually 20/10/5/4×7.
 - The link is shared in alliance chat and similar channels; visits cluster after each reset and event.
 

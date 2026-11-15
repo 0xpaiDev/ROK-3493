@@ -28,11 +28,6 @@
   --mono: "Geist Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
   --radius: 20px;
   --ease: cubic-bezier(.2, .7, .2, 1);
-  /* Status colours for Roster Snapshot review groups (never for placings) */
-  --inactive: #F28B82;
-  --new: var(--live);
-  --renamed: var(--link);
-  --back: var(--text);
   /* Washes behind Live and Note text */
   --live-wash: rgba(126, 224, 168, .12);
   --live-edge: rgba(126, 224, 168, .3);
@@ -476,7 +471,6 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .btn.quiet { background: none; border-color: transparent; color: var(--muted); }
 .btn.quiet:hover { color: var(--text); border-color: var(--line-strong); }
 .btn.sm { min-height: 36px; padding: 0 14px; }
-label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Labelled fields */
 .fields { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 14px; }
@@ -494,62 +488,6 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
 .match { margin: 10px 0 0; font-size: 13px; color: var(--faint); }
 .match b { color: var(--text); font-weight: 600; }
 
-/* Steps bar */
-.steps { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; font-size: 13px; }
-.steps li { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: var(--pill); color: var(--faint); box-shadow: inset 0 0 0 1px var(--line-2); }
-.steps .n { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font: 12px var(--mono); }
-.steps .done { color: var(--live); box-shadow: inset 0 0 0 1px var(--live-edge); }
-.steps .done .n { background: var(--live); color: var(--bg); }
-.steps [aria-current] { color: var(--text); background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent); }
-.steps [aria-current] .n { background: var(--accent); color: var(--on-metal); }
-
-/* Export drop zone and file row */
-.file-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--live-wash); color: var(--live); }
-.drop {
-  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 32px 24px; text-align: center; cursor: pointer;
-  border: 1px dashed var(--line-strong); border-radius: var(--radius-md); background: var(--surface);
-  transition: border-color var(--dur-fast), background var(--dur-fast);
-}
-.drop .file-icon { margin-bottom: 8px; }
-.drop b { font-weight: 600; }
-.drop small { font: 12px var(--mono); color: var(--faint); }
-.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-wash); }
-.drop:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
-.linkish-text { color: var(--link); font-weight: 500; }
-.file-row { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--radius-md); background: var(--surface); border: 1px solid var(--line-2); }
-.file-meta { flex: 1 1 200px; min-width: 0; display: grid; }
-.file-meta > b { font: 500 14px var(--mono); }
-.file-meta small { font-size: 13px; color: var(--muted); }
-.file-meta small b { color: var(--text); font-weight: 500; }
-
-/* Filter tiles and review groups */
-.g-inactive { --c: var(--inactive); } .g-back { --c: var(--back); } .g-new { --c: var(--new); } .g-renamed { --c: var(--renamed); }
-.dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--c); }
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
-.tile {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: 16px; cursor: pointer; text-align: left;
-  border-radius: var(--radius-md); border: 1px solid var(--line-2); background: var(--surface);
-  transition: transform var(--dur-fast), border-color var(--dur-fast);
-}
-.tile:hover { transform: translateY(-1px); border-color: var(--line-strong); }
-.tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
-.tile .lbl { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
-.tile > b { font-size: 32px; font-weight: 600; line-height: 1.1; letter-spacing: -.02em; }
-.tile small { font-size: 12px; color: var(--faint); }
-.groups { display: grid; gap: 12px; }
-.group { padding: 18px 20px; }
-.group-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
-.group-head .dot { align-self: center; }
-.group-head h2 { font: 600 16px/1.3 var(--sans); letter-spacing: 0; }
-.group-head h2 .num { color: var(--c); }
-.group-head .hint { font-size: 13px; color: var(--faint); }
-.group .none { margin: 8px 0 0 20px; font-size: 14px; color: var(--faint); }
-.gov-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 0 20px; }
-.gov-grid li { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
-.gov-grid .ell { flex: 1; min-width: 0; }
-.gov-grid .pid { flex: none; }
-.gov-grid s { color: var(--faint); }
-
 /* Sticky save bar */
 .save-bar {
   position: sticky; bottom: 16px; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px;
@@ -566,6 +504,7 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
 .progress b { font-weight: 600; }
 .progress .bar { flex: 1 1 200px; margin: 0; }
 .progress .bar i { animation: none; transform: scaleX(var(--p)); transition: transform var(--dur-slow) var(--ease); }
+.groups { display: grid; gap: 12px; }
 .main-group { padding: 0; overflow: hidden; }
 .main-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 14px 16px 14px 20px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
 .main-head .eyebrow { font-size: 11px; color: var(--faint); }
@@ -637,7 +576,6 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
   .admin-side { position: static; max-width: none; }
   .task-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .side-note { display: none; }
-  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .save-bar { padding-left: 16px; }
 }
 @media (max-width: 640px) {
@@ -645,7 +583,6 @@ label.btn:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; 
   .admin-bar > a { display: none; }
   .admin-who { max-width: 130px; font-size: 12px; }
   .save-bar .sum { font-size: 13px; }
-  .group { padding: 16px; }
   .main-head .sum { margin-left: 0; }
   .fw-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
   .fw-row .fw-gov { grid-column: 2 / 4; }
