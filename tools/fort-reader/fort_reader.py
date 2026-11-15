@@ -1,8 +1,8 @@
 """Read the in-game Fort Destroyer Rankings into Fort Week paste text.
 
-Open the ranking in Rise of Kingdoms on BlueStacks, or on the device FORT_READER_ADB names, then run:
+With Rise of Kingdoms in BlueStacks, or on the device FORT_READER_ADB names, run:
     .venv\\Scripts\\python.exe fort_reader.py
-It swipes the list to the end over ADB, reads every screen with Claude Haiku, and prints the
+It restarts the game, taps through to the Fort Destroyer Rankings, swipes the list to the end over ADB, reads every screen with Claude Haiku, and prints the
 rows for the admin page's Fort Week paste (also copied to the clipboard on Windows). The PC's mouse is not
 used, so you can keep working while it runs.
 
@@ -38,10 +38,57 @@ def load_env():
                 os.environ.setdefault(key.strip(), value.strip().strip('"'))
 
 
+class Navigator:
+    """The device as navigate.open_ranking sees it: each look screenshots the device and has
+    Haiku name the screen. The last screenshot is kept for a stopped run."""
+
+    def __init__(self, device, client):
+        from read import name_screen
+        self.device, self.client, self.name_screen = device, client, name_screen
+        self.shot = None
+
+    def look(self):
+        self.shot = self.device.screenshot()
+        screen = self.name_screen(self.client, self.shot)
+        print(f"  {time.strftime('%H:%M:%S')} {screen}")
+        return screen
+
+    def tap(self, x, y):
+        self.device.tap(x, y)
+
+    def wait(self, seconds):
+        time.sleep(seconds)
+
+    def now(self):
+        return time.monotonic()
+
+
+def open_from_closed(run_dir, device, client):
+    """Restart the game and tap through to the Fort Destroyer Rankings. A screen that needs
+    Petras (a login, an app update, a download past its limit, a screen it doesn't know) ends
+    the run with its name and a saved screenshot, before anything is read or sent."""
+    from navigate import Stopped, open_ranking
+
+    limit = float(os.environ.get("FORT_READER_LOADING_LIMIT", "600"))
+    print("Restarting the game and opening the Fort Destroyer Rankings:")
+    device.restart_game()
+    nav = Navigator(device, client)
+    try:
+        open_ranking(nav, loading_limit=limit)
+    except Stopped as stop:
+        path = run_dir / f"stopped-{stop.screen}.png"
+        if nav.shot is not None:
+            nav.shot.save(path)
+        raise SystemExit(f"Stopped on the {stop.screen} screen: {stop.reason}\n"
+                         f"Screenshot: {path}. Nothing was sent.")
+    time.sleep(2)  # let the list draw before the first screenshot
+
+
 def capture(run_dir, client, read_screen):
     import game
 
     device = game.Device()
+    open_from_closed(run_dir, device, client)
     # Check before any swiping: a swipe over the map would pan it instead.
     if not read_screen(client, device.screenshot()).is_fort_ranking:
         raise SystemExit("The Fort Destroyer Rankings panel isn't open on the device. Open it and run again.")
