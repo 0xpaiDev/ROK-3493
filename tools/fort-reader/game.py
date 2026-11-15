@@ -84,6 +84,8 @@ class Device:
                                  "On BlueStacks, check Settings > Advanced > Android Debug Bridge.")
         # Before any swipe: the swipe fractions and the screen reading assume this layout.
         self.size = screen_size(self._run("shell", "wm", "size").decode(errors="replace"))
+        # A slow device ignores quick swipes: Redroid on the Oracle A1 scrolls only at 4 s or more.
+        self.min_swipe_ms = int(env.get("FORT_READER_MIN_SWIPE_MS") or 0)
 
     def _run(self, *args, serial=True):
         cmd = [self.adb] + (["-s", self.serial] if serial else []) + list(args)
@@ -102,8 +104,10 @@ class Device:
 
     def swipe(self, from_y, to_y, ms=1200):
         """Drag the list from one height to another (fractions of the screen), slowly, so it
-        stops where the finger stops instead of flinging on."""
+        stops where the finger stops instead of flinging on. FORT_READER_MIN_SWIPE_MS stretches
+        every swipe to at least that long, for a device that ignores quicker ones."""
         w, h = self.size
+        ms = max(ms, self.min_swipe_ms)
         x = int(w * 0.62)  # the empty middle of the rows, away from names and avatars
         self._run("shell", "input", "swipe", str(x), str(int(h * from_y)), str(x), str(int(h * to_y)), str(ms))
 

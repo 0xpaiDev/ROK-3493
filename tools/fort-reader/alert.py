@@ -29,7 +29,8 @@ def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
     if started_at.weekday() == 6:  # Sunday (UTC): the final run, which closes the week
         to += [a.strip() for a in env.get("FORT_READER_ALERT_COUNCIL", "").split(",") if a.strip()]
         note = ("\nThis was Sunday's final run, which closes the Fort Week. The week keeps its last "
-                "reading; paste the full ranking on the admin page once the week has closed.\n")
+                "reading and is saved as Partial; paste the full ranking on the admin page once the "
+                "week has closed.\n")
     msg = EmailMessage()
     msg["From"] = env["FORT_READER_GMAIL"]
     msg["To"] = ", ".join(to)

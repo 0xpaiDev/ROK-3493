@@ -225,8 +225,9 @@ import { rewardItem } from "./rewards.js";
     const now = fortWeekAt(Date.now()), nowN = isoWeek(now.start);
     const total = w.entries.reduce((a, e) => a + e.fortCount, 0);
     const count = w.entries.length;
-    const partial = w.completeness === "partial";
     const live = isLive(w);
+    // The reader keeps the Live Week Partial until Sunday's final reading lands: say so only once it has closed.
+    const partial = !live && w.completeness === "partial";
     const leaders = rows.filter((r) => r.e.rank === 1);
     const lead = leaders[0];
     // The headline says which week it is and whether it is still running: "so far" for the Live Week.
@@ -389,7 +390,7 @@ import { rewardItem } from "./rewards.js";
             <div><div class="eyebrow">Weekly Ranking</div><h2>Week ${isoWeek(w.start)} · ${fmtRange(w)}</h2>${live ? `<div class="live-line">${liveTag(w)}</div>` : ""}</div>
             <span class="muted">${mains} Mains ranked</span>
           </div>
-          ${w.completeness === "partial" ? partialNote : ""}
+          ${!live && w.completeness === "partial" ? partialNote : ""}
           ${live ? liveNote : ""}
           ${state.withFarms ? farmNote : ""}
           ${rankList(rows, { deltas: !live })}

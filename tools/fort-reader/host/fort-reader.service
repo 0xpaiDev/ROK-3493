@@ -1,0 +1,18 @@
+# The nightly Fort reader run. install.sh copies this to /etc/systemd/system with __USER__ and
+# __DIR__ filled in; fort-reader.timer starts it.
+[Unit]
+Description=Fort reader: read the Fort Destroyer Rankings and send the Live Week
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+# FORT_READER_ADB for run.sh; the reader reads the rest of .env itself.
+EnvironmentFile=-__ENV__
+ExecStart=__DIR__/host/run.sh
+# Always stop Android afterwards, so it uses no CPU between runs. Its data directory keeps the login.
+ExecStopPost=/usr/bin/docker stop redroid
+# A run takes about 10 minutes on the A1. One that hangs is stopped here, before the next night's.
+TimeoutStartSec=45min
