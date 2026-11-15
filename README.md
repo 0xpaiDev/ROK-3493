@@ -10,12 +10,19 @@ The Kingdom's data lives in Supabase ([ADR 0001](docs/adr/0001-supabase-as-the-o
 The site reads it in the browser with the public key in `site/store.js`; row-level security lets
 that key read and never write.
 
-- **Schema:** `supabase/migrations/`. A schema change is a new migration file, applied in the
-  Supabase SQL editor.
-- **Updating data:** the Council admin page is on its way (kingdom-admin tickets 04–10). Until it
-  lands, edit rows in the Supabase dashboard's Table Editor.
-- **News and next week's rewards** are still hand-edited in `site/data/content.js` (set
-  `draft: false` when final).
+- **Schema:** `supabase/migrations/`. A schema change is a new migration file, applied to the
+  project with a SQL client or in the Supabase SQL editor.
+- **The Council** edits data on the admin page (`site/admin.html`, magic-link sign-in): Farm links,
+  Fort Weeks and their Weekly Awards, and the Live Week's Reward Promise.
+- **The reader** on an Oracle A1 reads the in-game Fort Destroyer Rankings every night and writes
+  the Live Week; Sunday's run closes it ([ADR 0002](docs/adr/0002-the-reader-writes-the-live-week-through-one-function.md),
+  [0003](docs/adr/0003-the-reader-runs-on-the-oracle-a1-under-redroid.md),
+  [0005](docs/adr/0005-the-reading-time-decides-whether-the-live-week-closes-complete.md)).
+  The **Roster job** on the same host saves a Roster Snapshot every day from Lilith's stats
+  ([ADR 0004](docs/adr/0004-the-reader-saves-a-daily-roster-snapshot-through-one-function.md)).
+  Both are in `tools/fort-reader/`; its README covers the host.
+- **News** and the Reward Promise card's standing intro and rules are hand-edited in
+  `site/data/content.js` (set a post's `draft: false` when final).
 
 ## Run locally
 
@@ -30,6 +37,8 @@ Then open http://localhost:5173. The site reads the live Supabase project, even 
 ```
 npm test
 ```
+
+The reader's and the database's tests are listed in `CLAUDE.md`.
 
 ## Publish
 

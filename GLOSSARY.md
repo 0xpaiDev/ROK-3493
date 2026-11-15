@@ -45,7 +45,7 @@ Every name a Governor has been seen under, kept against its Character ID.
 _Avoid_: Aliases
 
 **Roster Snapshot**:
-The list of all Governors in the Kingdom with their stats as of one date, taken from the official Lilith stats export.
+The list of all Governors in the Kingdom with their stats as of one date, taken from Lilith's official stats (the data behind the RoK Toolkit's stats export).
 _Avoid_: Member list, KD list
 
 **Roster job**:

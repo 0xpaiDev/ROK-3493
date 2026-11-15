@@ -16,7 +16,23 @@ Character ID is the only key for a Governor; names change. When a name can't be 
 
 ## Work in flight
 
-The current work line is `.scratch/kingdom-admin/`: read `STATE.md` first, then `SPEC.md` and the ticket under `issues/` that `Next:` names. Architecture decisions live in `docs/adr/`. ADR 0001 moves all data to Supabase: the site reads it through `site/store.js`, and the schema lives in `supabase/migrations/`. Only `site/data/content.js` (news, rewards) is still hand-edited.
+Work lines live under `.scratch/` (git-ignored), one folder each: `fort-reader/` (the reader and Roster job on the Oracle A1, the active line), `kingdom-admin/` (the Council admin page) and `reward-payout/` (Reward Promise, Group Score, Fill). In the line the task belongs to, read `STATE.md` first, then `SPEC.md` and the ticket under `issues/` that `Next:` names. `.scratch/pre-existing.md` collects bugs found in passing.
+
+Architecture decisions live in `docs/adr/`:
+
+- 0001: all data is in Supabase. The site reads it through `site/store.js`, the schema lives in `supabase/migrations/`, and row-level security lets only Council emails write.
+- 0002: the reader's own sign-in writes the Live Week, through `record_live_week` only.
+- 0003: the reader runs nightly on the Oracle A1 under Redroid.
+- 0004: the Roster job saves a Roster Snapshot every day through `record_roster_snapshot`, the same sign-in. It is the only writer; the admin page no longer uploads.
+- 0005: a reading taken on Sunday from 22:00 UTC closes the Live Week Complete, any earlier one leaves it Partial.
+
+Only `site/data/content.js` is hand-edited: news posts and the Reward Promise card's standing intro and rules. The promise itself is set on the admin page.
+
+## Tests
+
+- Site rules: `npm test` (Node's test runner over `tests/`).
+- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate test_alert test_roster`.
+- Database functions: `py -m unittest discover -s supabase/tests` with psycopg on `PYTHONPATH`. They run against the live project inside a rolled-back transaction. `tests/name-matching-cases.json` and `tests/roster-snapshot-cases.json` are shared by the JS and SQL tests so the two can't drift.
 
 ## Gotchas
 
@@ -24,4 +40,5 @@ The current work line is `.scratch/kingdom-admin/`: read `STATE.md` first, then 
 - Serve the site over HTTP (the `site` entry in `.claude/launch.json`); `file://` won't load the data scripts.
 - Governor names are user-controlled text: escape them wherever they reach HTML.
 - You can run SQL against Supabase yourself, including applying migrations: `.env` holds `SUPABASE_DB_URL` (session pooler). There is no psql or Supabase CLI; install `psycopg[binary]` into the scratchpad and connect with that. Never print the URL. Test writes inside a transaction you roll back.
+- The A1 is reached from WSL only: `wsl -d Ubuntu -- ssh fort-reader '<command>'`. WSL's shell expands `$(...)` and `$VAR` before ssh sends them, so send anything with substitutions as a script on stdin (`... ssh fort-reader bash -s < script.sh`). The host's address and the VM's details are in `.scratch/fort-reader/oracle-vm.md`, never in the repo. Code reaches the host only by a hand `git pull` there.
 - `gh` lives at `C:\Program Files\GitHub CLI\gh.exe` and may be missing from PATH in older shells.

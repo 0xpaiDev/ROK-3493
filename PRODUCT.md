@@ -9,7 +9,7 @@ web
 ## Users
 
 - **Kingdom members** of the Void Legion (Rise of Kingdoms, Kingdom 3493). They open the public site from a shared link, on phone and desktop about equally, to see where they placed in the Weekly Ranking, their Fort Average, GH Event results, Weekly Award winners, and the roster. Mostly fluent in English.
-- **The Council** (the King and officers). They sign in to the admin page with a magic link to log Fort Weeks, record Weekly Awards, log GH Events, set a Governor's status, and link Farms to Mains. Roster Snapshots arrive by themselves (the Roster job, ADR 0004).
+- **The Council** (the King and officers). They sign in to the admin page with a magic link to set the Live Week's Reward Promise, resolve "needs ID" rows, fill and publish Weekly Awards, paste a closed Fort Week the reader missed, set a Governor's status, and link Farms to Mains. Logging GH Events is still to come (kingdom-admin ticket 10). Roster Snapshots arrive by themselves (the Roster job, ADR 0004).
 - **Outsiders** looking at the Kingdom, such as Governors considering joining. They see the same public site.
 
 ## Product Purpose
@@ -28,15 +28,15 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 
 ## Operating Context
 
-- The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset; the Council logs the week from the in-game ranking page and gives out Weekly Awards (King's Chests or resources) after.
-- Roster data comes from the official Lilith stats export, saved daily as a dated Roster Snapshot by the Roster job (ADR 0004).
+- The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset. The reader keeps the week current from the in-game ranking every night and its Sunday run closes it (ADR 0002, 0005); the Council can still paste a closed week by hand. The Council promises rewards during the week and fills and publishes the Weekly Awards (King's Chests or resources) after.
+- Roster data comes from Lilith's official stats (the RoK Toolkit), saved daily as a dated Roster Snapshot by the Roster job (ADR 0004).
 - GH Events pay Golden Heads to the top 10, usually 20/10/5/4×7.
 - The link is shared in alliance chat and similar channels; visits cluster after each reset and event.
 
 ## Capabilities and Constraints
 
 - Plain HTML/CSS/JS in `site/`, no build step; published to GitHub Pages on every push to `main`.
-- All data lives in Supabase (ADR 0001). The public reads with the anon key; only Council emails can write, plus the reader's own sign-in, which can only replace the Live Week (ADR 0002). Only `site/data/content.js` (news, next week's rewards) is hand-edited.
+- All data lives in Supabase (ADR 0001). The public reads with the anon key; only Council emails can write, plus the reader's own sign-in, which can only replace the Live Week (ADR 0002) and save a Roster Snapshot for a new day (ADR 0004). Only `site/data/content.js` (news, the Reward Promise card's standing intro and rules) is hand-edited.
 - Public sections: Home, Fort Rankings, Events, Roster, plus a Governor popup. Council section: `admin.html`.
 - Vocabulary is fixed by `GLOSSARY.md`: Governor, Character ID, Main, Farm, Migrated, Fort Week, Fort Count, Weekly Ranking, Complete / Partial Week, Fort Average, Weekly Award, GH Event, Roster Snapshot, Top 200. UI never says "Fort Score", "player" or "alt".
 - Governor names are user-controlled and carry exotic Unicode: they must be escaped and must render without breaking layout.
@@ -44,7 +44,7 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 - Migrated Governors stay visible (greyed, tagged) rather than deleted. The roster defaults to the Top 200.
 - Kill Points and Alliance Helps are stored but not shown (the export reports 0 Kill Points).
 - A reader reads the in-game ranking and keeps the Live Week current on Fort Rankings, marked with the time of its last reading; Fort Average leaves the Live Week out until the Monday reset closes it (ADR 0002).
-- Out of scope for now: power history charts, admin entry for KvK results, structured award types.
+- Out of scope for now: power history charts, admin entry for KvK results.
 
 ## Brand Commitments
 
@@ -54,7 +54,7 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 ## Evidence on Hand
 
 - Real Kingdom data in Supabase: Fort Weeks (weeks 43 and 44 are Partial), Governors with Name History, the 20GH event, KvK history, Roster Snapshots.
-- `site/data/content.js` holds news and rewards copy that is still marked draft; reward tiers say "Reward to be announced". Do not invent reward amounts, news, or results.
+- `site/data/content.js` holds news posts that are still marked draft. Reward amounts come only from the Council's Reward Promise and Weekly Awards. Do not invent reward amounts, news, or results.
 - No testimonials or member quotes exist.
 
 ## Product Principles
