@@ -40,7 +40,7 @@ def open_ranking(game, loading_limit=600):
     """Tap from the screen on show to the Fort Destroyer Rankings, or raise Stopped.
     loading_limit: seconds the game may spend loading and downloading in all."""
     loading, since = 0.0, None  # time spent on loading screens, and when the last one was seen
-    last, taps = None, 0        # the last screen tapped, and how many times in a row
+    taps = {}                   # how many times each screen has been tapped this run
     while True:
         screen = game.look()
         # "login_failed_loading": the Login failed box over a game still loading. A BlueStacks bug:
@@ -64,10 +64,10 @@ def open_ranking(game, loading_limit=600):
         if screen not in PATH:
             raise Stopped(screen, "The reader doesn't recognise this screen, so it stopped rather "
                                   "than guess a tap. See the saved screenshot.")
-        # A slow device can miss a tap: tap again, but three times on one screen is a loop.
-        taps = taps + 1 if screen == last else 1
-        if taps > 3:
+        # A slow device can miss a tap: tap again, but a fourth tap on one screen in a run is a
+        # loop, whether the screen repeats or two screens lead back to each other.
+        taps[screen] = taps.get(screen, 0) + 1
+        if taps[screen] > 3:
             raise Stopped(screen, f"The game is stuck on {screen}: three taps didn't move it on.")
-        last = screen
         game.tap(*PATH[screen])
         game.wait(3)

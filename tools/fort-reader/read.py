@@ -4,7 +4,7 @@ import io
 from typing import Literal
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 MODEL = "claude-haiku-5-5"
 
@@ -85,20 +85,23 @@ def name_screen(client, image):
     """The name of the game screen on show, one of ScreenName (navigate.py's vocabulary)."""
     buf = io.BytesIO()
     image.resize((800, 450)).save(buf, format="PNG")  # half size: enough to name a screen, a quarter of the cost
-    response = client.messages.parse(
-        model=MODEL,
-        max_tokens=2000,
-        output_config={"effort": "low"},
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/png",
-                                             "data": base64.standard_b64encode(buf.getvalue()).decode()}},
-                {"type": "text", "text": SCREENS_PROMPT},
-            ],
-        }],
-        output_format=Named,
-    )
+    try:
+        response = client.messages.parse(
+            model=MODEL,
+            max_tokens=2000,
+            output_config={"effort": "low"},
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                                 "data": base64.standard_b64encode(buf.getvalue()).decode()}},
+                    {"type": "text", "text": SCREENS_PROMPT},
+                ],
+            }],
+            output_format=Named,
+        )
+    except ValidationError:  # a cut-off or malformed answer: treated like a screen it doesn't know
+        return "unknown"
     named = response.parsed_output
     if response.stop_reason != "end_turn" or named is None:
         return "unknown"  # an unreadable answer stops the run, like any screen it doesn't know

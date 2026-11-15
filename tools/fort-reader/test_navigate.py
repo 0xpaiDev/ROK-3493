@@ -80,6 +80,13 @@ class OpenRanking(unittest.TestCase):
         self.assertEqual((stop.exception.screen, len(game.taps)), ("city", 3))
         self.assertIn("stuck", stop.exception.reason)
 
+    def test_two_screens_whose_taps_lead_to_each_other_stop_the_run_instead_of_looping(self):
+        game = FakeGame(*["alliance", "alliance_settings"] * 50)
+        with self.assertRaises(Stopped) as stop:
+            open_ranking(game)
+        self.assertIn("stuck", stop.exception.reason)
+        self.assertLessEqual(len(game.taps), 7)
+
     def test_a_download_that_outlasts_its_limit_stops_the_run(self):
         game = FakeGame("loading")
         with self.assertRaises(Stopped) as stop:
