@@ -65,6 +65,13 @@ class FailureAlert(unittest.TestCase):
         [msg] = FakeGmail.sent
         self.assertEqual(msg["To"], "petras@example.com, council1@example.com, council2@example.com")
 
+    def test_a_failed_run_by_hand_on_sunday_morning_emails_only_petras(self):
+        # Not the final run: the week closes only on a reading from Sunday 22:00 UTC.
+        morning = datetime.datetime(2026, 11, 15, 10, 0, tzinfo=datetime.timezone.utc)
+        after_run("Stopped on the update screen.", self.shot, MAIL, morning, smtp=FakeGmail)
+        [msg] = FakeGmail.sent
+        self.assertEqual(msg["To"], "petras@example.com")
+
     def test_a_run_that_sent_its_reading_emails_nobody(self):
         after_run(None, None, MAIL, SUNDAY, smtp=FakeGmail)
         self.assertEqual(FakeGmail.sent, [])

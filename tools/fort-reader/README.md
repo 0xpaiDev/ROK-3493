@@ -58,7 +58,7 @@ Screenshots and `paste.txt` are kept under `runs/`. To re-read a run without the
 
 ## Email when a run fails
 
-With `--send`, a run that ends without sending its reading emails Petras the reason and the newest screenshot of the run (`stopped-<screen>.png` when it stopped on a screen). That covers problems found in the reading, a stop on a screen the reader won't tap past, and a crash. A run that sends its reading emails nobody, and a run without `--send` only prints. A run that started on a Sunday (UTC) is the final run that closes the Fort Week, so its failure also goes to the Council addresses.
+With `--send`, a run that ends without sending its reading emails Petras the reason and the newest screenshot of the run (`stopped-<screen>.png` when it stopped on a screen). That covers problems found in the reading, a stop on a screen the reader won't tap past, and a crash. A run that sends its reading emails nobody, and a run without `--send` only prints. A run that started on a Sunday from 22:00 UTC is the final run that closes the Fort Week (the same cutoff as `record_live_week`), so its failure also goes to the Council addresses. A run stopped at its time limit on the server emails too.
 
 The mail goes out over Gmail SMTP with an app password. In the repo's `.env`:
 
