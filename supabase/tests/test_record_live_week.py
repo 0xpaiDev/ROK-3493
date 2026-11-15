@@ -19,7 +19,8 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[2]
 # Every Live Week migration, in order: each test applies them all inside its transaction.
 MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("20261109*.sql")) + [
-    ROOT / "supabase" / "migrations" / "20261116130000_live_week_completeness_from_reading_day.sql"]
+    ROOT / "supabase" / "migrations" / "20261116130000_live_week_completeness_from_reading_day.sql",
+    ROOT / "supabase" / "migrations" / "20261116180000_live_week_match_any_spelling.sql"]
 CASES = json.loads((ROOT / "tests" / "name-matching-cases.json").read_text(encoding="utf-8"))["cases"]
 
 
@@ -85,7 +86,8 @@ class LiveWeekReading(unittest.TestCase):
     def record(self, rows, read_at=None, claims=None):
         """Calls record_live_week as the reader (or claims), with rows in in-game order, read at read_at (default now)."""
         self.as_user(claims or self.reader)
-        entries = [{"rank": i + 1, "name": r["name"], "fort_count": r["fortCount"], **({"needs_id": True} if r.get("needsId") else {})}
+        entries = [{"rank": i + 1, "name": r["name"], "fort_count": r["fortCount"], **({"needs_id": True} if r.get("needsId") else {}),
+                    **({"names": r["names"]} if r.get("names") else {})}
                    for i, r in enumerate(rows)]
         # On an error the caller rolls back to a savepoint, which also undoes the role.
         result = self.one("select record_live_week(coalesce(%s::timestamptz, now()), %s::jsonb)", (read_at, json.dumps(entries)))
@@ -190,8 +192,17 @@ class LiveWeekReading(unittest.TestCase):
         self.record([{"name": "Case Odd", "fortCount": 8}])
         self.assertEqual(self.public_week(), [("990000013", "Case Odd", 8)])
 
-    def test_a_row_the_reader_read_two_ways_stays_needs_id_even_when_its_name_matches(self):
-        # A misreading can spell another Governor's name exactly; a flagged row is never matched.
+    def test_a_row_read_two_ways_shows_the_spelling_that_matched(self):
+        self.governors([{"id": "990000015", "name": "Case ᵛøHBK"}])
+        self.record([{"name": "Case ᵞøHBK", "fortCount": 9, "names": ["Case ᵞøHBK", "Case ᵛøHBK"]}, {"name": "Case Plain", "fortCount": 1}])
+        self.assertEqual(self.public_week(), [("990000015", "Case ᵛøHBK", 9), (None, "Case Plain", 1)])
+        self.conn.execute("set local role anon")  # the admin reads the spellings with the public key
+        self.assertEqual(self.conn.execute("select read_two_ways, spellings from fort_entry where week = %s order by tie_order", (self.live,)).fetchall(),
+                         [(True, ["Case ᵞøHBK", "Case ᵛøHBK"]), (False, None)])
+        self.as_owner()
+
+    def test_a_row_an_older_reader_flagged_stays_needs_id_even_when_its_name_matches(self):
+        # The reader before names were sent flagged a row read two ways needs_id; such a row is never matched.
         self.governors([{"id": "990000014", "name": "Case CRY"}])
         self.record([{"name": "Case CRY", "fortCount": 2, "needsId": True}, {"name": "Case CRY Other", "fortCount": 1}])
         self.assertEqual(self.public_week(), [(None, "Case CRY", 2), (None, "Case CRY Other", 1)])

@@ -150,7 +150,7 @@ Each one lives only in the host's `.env`. Put the new value there; the next run 
 
 ## What it checks
 
-Rows from overlapping screens are joined by rank. The run lists problems instead of guessing: ranks with gaps, a Fort Count read two different ways, a Fort Count that rises down the list, or your pinned row disagreeing with the list. A name read two ways with one Fort Count (names in odd scripts, such as `CƦУ㋾`, read differently per screen) is not a problem: the row is kept and sent flagged, so the database leaves it "needs ID" and never matches it by either spelling. Names are copied as read; the admin page matches them against Name History and flags the rest "needs ID".
+Rows from overlapping screens are joined by rank. The run lists problems instead of guessing: ranks with gaps, a Fort Count read two different ways, a Fort Count that rises down the list, or your pinned row disagreeing with the list. A name read two ways with one Fort Count is not a problem: Haiku reads small raised letters and odd scripts differently per screen (`ᵛø` as `ᵞø`, `CƦУ㋾` as `CRY⑦`). The row is kept under the spelling read most often and sent with every spelling; the database matches it when those spellings, exactly as read, lead to one Governor, and leaves it "needs ID" when they lead to none or to two. A spelling is never folded or guessed to match. Names are copied as read; the admin page matches them against Name History and flags the rest "needs ID".
 
 Swiping the game from a script is automation, which Lilith's terms forbid. Run it on an account you can afford to lose.
 

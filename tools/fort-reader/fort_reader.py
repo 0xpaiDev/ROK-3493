@@ -247,10 +247,10 @@ def run(args, run_dir):
 
     print(f"\n{len(rows)} Governors read. {copied} to {run_dir / 'paste.txt'}.\n")
     print(text)
-    unsure = [r for r in rows if r.get("needs_id")]
+    unsure = [r for r in rows if r.get("names")]
     if unsure:
-        print("Read two ways, so sent as \"needs ID\" for the Council to resolve: "
-              + ", ".join(f'rank {r["rank"]} ({r["name"]})' for r in unsure) + ".")
+        print("Read more than one way, sent with every spelling (matched only when they lead to one Governor): "
+              + "; ".join(f'rank {r["rank"]} ({" / ".join(r["names"])})' for r in unsure) + ".")
     if problems:
         print("Check these before saving the Fort Week:")
         for p in problems:

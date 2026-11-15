@@ -2,27 +2,35 @@
 
 Every screenshot shows a slice of the ranking and slices overlap, so rows are joined by rank.
 Nothing here guesses: a Fort Count read two ways, a gap, or a Fort Count that rises is reported,
-and the Council decides. A name read two ways with one Fort Count is kept, flagged needs_id, so
-the database never matches it by either spelling: names in odd scripts read differently per screen.
+and the Council decides. A name read two ways with one Fort Count is kept with every spelling
+(names in odd scripts read differently per screen): the database matches the row only when those
+spellings lead to one Governor.
 """
 
 
 def merge_frames(frames):
     """frames: one list of rows per screenshot, each row {rank, name, forts}.
-    Returns (rows ordered by rank, problems)."""
-    by_rank, problems = {}, []
+    Returns (rows ordered by rank, problems). A row read two ways carries names: every spelling, the
+    most often read first, and name is that one."""
+    by_rank, spellings, problems = {}, {}, []
     for i, rows in enumerate(frames, start=1):
         for r in rows:
             seen = by_rank.get(r["rank"])
             if seen is None:
                 by_rank[r["rank"]] = dict(r, frame=i)
-            elif seen["forts"] == r["forts"] and seen["name"] != r["name"]:
-                seen["needs_id"] = True
-            elif seen["forts"] != r["forts"]:
+                spellings[r["rank"]] = {r["name"]: 1}
+            elif seen["forts"] == r["forts"]:
+                counts = spellings[r["rank"]]
+                counts[r["name"]] = counts.get(r["name"], 0) + 1
+            else:
                 problems.append(
                     f'Rank {r["rank"]} read as "{seen["name"]} {seen["forts"]}" in screenshot '
                     f'{seen["frame"]} but "{r["name"]} {r["forts"]}" in screenshot {i}.'
                 )
+    for rank, counts in spellings.items():
+        if len(counts) > 1:
+            names = sorted(counts, key=lambda n: -counts[n])  # stable: ties keep the order first read
+            by_rank[rank].update(name=names[0], names=names)
     rows = [by_rank[k] for k in sorted(by_rank)]
     return rows, problems + check_ranking(rows)
 
@@ -52,7 +60,8 @@ def check_pinned(pinned, rows):
     hit = next((r for r in rows if r["rank"] == pinned["rank"]), None)
     if hit is None:
         return [f'Your own row (rank {pinned["rank"]}) never appeared in the list.']
-    if (hit["name"], hit["forts"]) != (pinned["name"], pinned["forts"]):
+    # The pin and the list are read on the same screens, so any spelling the list was read as will do.
+    if pinned["name"] not in hit.get("names", [hit["name"]]) or hit["forts"] != pinned["forts"]:
         return [
             f'Your own row reads "{pinned["name"]} {pinned["forts"]}" at the top but '
             f'"{hit["name"]} {hit["forts"]}" in the list.'

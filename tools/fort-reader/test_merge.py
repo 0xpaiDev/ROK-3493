@@ -21,10 +21,15 @@ class MergeFrames(unittest.TestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("Rank 2", problems[0])
 
-    def test_a_name_read_two_ways_with_one_fort_count_is_kept_as_needs_id(self):
-        rows, problems = merge_frames([[row(1, "A", 10), row(2, "CRɣ㋳", 2)], [row(2, "CRУ", 2)]])
+    def test_a_name_read_two_ways_with_one_fort_count_keeps_every_spelling(self):
+        rows, problems = merge_frames([[row(1, "A", 10), row(2, "CRɣ㋳", 2)], [row(1, "A", 10), row(2, "CRУ", 2)]])
         self.assertEqual(problems, [])
-        self.assertEqual([(r["rank"], r["forts"], r.get("needs_id", False)) for r in rows], [(1, 10, False), (2, 2, True)])
+        self.assertEqual([(r["rank"], r["name"], r["forts"], r.get("names")) for r in rows],
+                         [(1, "A", 10, None), (2, "CRɣ㋳", 2, ["CRɣ㋳", "CRУ"])])
+
+    def test_the_spelling_read_most_often_leads(self):
+        rows, _ = merge_frames([[row(1, "ᵞøHBK777", 9)], [row(1, "ᵛøHBK777", 9)], [row(1, "ᵛøHBK777", 9)]])
+        self.assertEqual((rows[0]["name"], rows[0]["names"]), ("ᵛøHBK777", ["ᵛøHBK777", "ᵞøHBK777"]))
 
     def test_a_skipped_screen_shows_as_missing_ranks(self):
         _, problems = merge_frames([[row(1, "A", 10), row(2, "B", 9)], [row(5, "E", 6)]])
@@ -45,6 +50,11 @@ class Pinned(unittest.TestCase):
         self.assertEqual(check_pinned(row(2, "CƦУ㋾", 9), rows), [])
         self.assertEqual(len(check_pinned(row(2, "CƦУ㋾", 8), rows)), 1)
         self.assertEqual(len(check_pinned(row(7, "CƦУ㋾", 1), rows)), 1)
+
+    def test_a_pin_read_in_any_spelling_of_its_row_agrees(self):
+        rows, _ = merge_frames([[row(1, "ᵞøFarm", 9)], [row(1, "ᵛøFarm", 9)], [row(1, "ᵛøFarm", 9)]])
+        self.assertEqual(check_pinned(row(1, "ᵞøFarm", 9), rows), [])
+        self.assertEqual(len(check_pinned(row(1, "Someone", 9), rows)), 1)
 
 
 class PasteText(unittest.TestCase):

@@ -1,5 +1,5 @@
 {
-  "about": "The exact name-matching rule, stated once. tests/kingdom.test.js runs these against matchNames and supabase/tests/test_record_live_week.py runs them against record_live_week. Governors are { id, name } with name as the current name; nameHistory is { id, name }; ids is the Character ID each row gets, in row order, or null for \"needs ID\". Names and IDs are made up so they never meet real Governors. A case with \"liveOnly\": true holds only for the reader's Live Week rule (record_live_week and liveReadingIds), not for a pasted week, where the Council picks instead.",
+  "about": "The exact name-matching rule, stated once. tests/kingdom.test.js runs these against matchNames and supabase/tests/test_record_live_week.py runs them against record_live_week. Governors are { id, name } with name as the current name; nameHistory is { id, name }; ids is the Character ID each row gets, in row order, or null for \"needs ID\". Names and IDs are made up so they never meet real Governors. A case with \"liveOnly\": true holds only for the reader's Live Week rule (record_live_week and liveReadingIds), not for a pasted week, where the Council picks instead. A live row may carry names: every spelling the reader saw for it; it matches when those spellings, exactly, lead to one Governor.",
   "cases": [
     {
       "case": "a renamed Governor is matched through Name History",
@@ -149,7 +149,7 @@
       ]
     },
     {
-      "case": "a row the reader read two ways stays \"needs ID\" even when its name matches",
+      "case": "a row an older reader flagged needsId stays \"needs ID\" even when its name matches",
       "liveOnly": true,
       "governors": [
         {
@@ -166,6 +166,87 @@
         }
       ],
       "ids": [
+        null
+      ]
+    },
+    {
+      "case": "a row read two ways matches when its spellings lead to one Governor",
+      "liveOnly": true,
+      "governors": [
+        {
+          "id": "990000022",
+          "name": "Case ᵛøHBK"
+        }
+      ],
+      "nameHistory": [],
+      "rows": [
+        {
+          "name": "Case ᵞøHBK",
+          "fortCount": 9,
+          "names": [
+            "Case ᵞøHBK",
+            "Case ᵛøHBK"
+          ]
+        }
+      ],
+      "ids": [
+        "990000022"
+      ]
+    },
+    {
+      "case": "a row read two ways whose spellings lead to two Governors stays \"needs ID\"",
+      "liveOnly": true,
+      "governors": [
+        {
+          "id": "990000023",
+          "name": "Case Farm1"
+        },
+        {
+          "id": "990000024",
+          "name": "Case Farm2"
+        }
+      ],
+      "nameHistory": [],
+      "rows": [
+        {
+          "name": "Case Farm1",
+          "fortCount": 7,
+          "names": [
+            "Case Farm1",
+            "Case Farm2"
+          ]
+        }
+      ],
+      "ids": [
+        null
+      ]
+    },
+    {
+      "case": "a row read two ways that shares a spelling with another row stays \"needs ID\"",
+      "liveOnly": true,
+      "governors": [
+        {
+          "id": "990000025",
+          "name": "Case Twin"
+        }
+      ],
+      "nameHistory": [],
+      "rows": [
+        {
+          "name": "Case Twin",
+          "fortCount": 7
+        },
+        {
+          "name": "Case Twln",
+          "fortCount": 5,
+          "names": [
+            "Case Twln",
+            "Case Twin"
+          ]
+        }
+      ],
+      "ids": [
+        null,
         null
       ]
     },
