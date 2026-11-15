@@ -167,11 +167,48 @@ def main():
     args = ap.parse_args()
 
     load_env()
+    started_at = datetime.datetime.now(datetime.timezone.utc)
+    run_dir = Path(args.source) if args.source else HERE / "runs" / started_at.strftime("%Y-%m-%d_%H%M%S")
+    failure = None
+    try:
+        run(args, run_dir)
+    except KeyboardInterrupt:
+        raise  # stopped by hand: nobody to tell
+    except SystemExit as e:
+        if e.code not in (None, 0):
+            failure = str(e.code)
+        raise
+    except Exception as e:
+        failure = f"The reader crashed: {type(e).__name__}: {e}"
+        raise
+    finally:
+        if args.send:  # the scheduled run: nobody is watching the console
+            alert_after_run(failure, run_dir, started_at)
+
+
+def alert_after_run(failure, run_dir, started_at):
+    """Email the failure with the newest screenshot of the run (stopped-<screen>.png when the
+    run stopped on a screen). A failed email is printed, never raised over the run's own failure."""
+    import smtplib
+    from alert import MAIL_SETTINGS, after_run
+    if failure and not all(os.environ.get(k) for k in MAIL_SETTINGS):
+        print("No mail settings in .env, so nobody was emailed about this failure.")
+        return
+    shots = sorted(run_dir.glob("*.png"), key=lambda p: p.stat().st_mtime) if run_dir.is_dir() else []
+    try:
+        mailed = after_run(failure, shots[-1] if shots else None, os.environ, started_at)
+    except (smtplib.SMTPException, OSError) as e:
+        print(f"Couldn't email the failure: {e}")
+        return
+    if mailed:
+        print("Emailed the failure" + (", Council included (Sunday's final run)." if len(mailed) > 1 else "."))
+
+
+def run(args, run_dir):
     from read import make_client, read_screen
     client = make_client()
 
     if args.source:
-        run_dir = Path(args.source)
         shots = [Image.open(p) for p in sorted(run_dir.glob("screen-*.png"))]
         if not shots:
             raise SystemExit(f"No screen-*.png files in {run_dir}.")
@@ -180,7 +217,6 @@ def main():
             print(f"  reading screen {i}/{len(shots)}", end="\r")
             screens.append(read_screen(client, shot))
     else:
-        run_dir = HERE / "runs" / time.strftime("%Y-%m-%d_%H%M%S")
         run_dir.mkdir(parents=True)
         screens = capture(run_dir, client, read_screen)
 
@@ -218,7 +254,9 @@ def main():
     if args.send:
         # A reading with problems is not sent: a stale "as of" time is better than a wrong ranking.
         if problems or not rows:
-            raise SystemExit("Not sent to the Live Week: fix the problems above, or paste the week by hand once it closes.")
+            found = "\n".join(f"  - {p}" for p in problems) if problems else "  - No Governors were read."
+            raise SystemExit("Not sent to the Live Week: the run found problems. Fix them, or paste the "
+                             f"week by hand once it closes.\n{found}")
         from send import send_live_week
         # The reading is as of its first screenshot, not of when it is sent: the database refuses
         # screenshots from a week that has closed, such as an old run read again with --from.

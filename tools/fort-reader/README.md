@@ -56,6 +56,25 @@ Needs `FORT_READER_EMAIL` and `FORT_READER_PASSWORD` in the repo's `.env`: a Sup
 
 Screenshots and `paste.txt` are kept under `runs/`. To re-read a run without the game: `fort_reader.py --from runs\<folder>`.
 
+## Email when a run fails
+
+With `--send`, a run that ends without sending its reading emails Petras the reason and the newest screenshot of the run (`stopped-<screen>.png` when it stopped on a screen). That covers problems found in the reading, a stop on a screen the reader won't tap past, and a crash. A run that sends its reading emails nobody, and a run without `--send` only prints. A run that started on a Sunday (UTC) is the final run that closes the Fort Week, so its failure also goes to the Council addresses.
+
+The mail goes out over Gmail SMTP with an app password. In the repo's `.env`:
+
+```
+FORT_READER_GMAIL=<the Gmail address that sends the alert>
+FORT_READER_GMAIL_APP_PASSWORD=<its 16-letter app password>
+FORT_READER_ALERT_TO=<Petras's address>
+FORT_READER_ALERT_COUNCIL=<Council addresses, comma-separated>
+```
+
+Without the first three, the reader runs as before and prints the failure only. The Council addresses live here because Council emails in the database are private and the reader's sign-in can't read them.
+
+**Create the app password.** The sending Gmail account needs 2-Step Verification on. Signed in as that account, open https://myaccount.google.com/apppasswords, name it `fort-reader` and copy the 16 letters into `FORT_READER_GMAIL_APP_PASSWORD`. Google shows it once. It goes only in `.env`, never in the repo or a chat.
+
+**Revoke or rotate it.** On the same page, delete `fort-reader`; the next failed run then prints `Couldn't email the failure` and carries on. To rotate, create a new one, put it in `.env`, then delete the old one. Turning off 2-Step Verification or changing the account password also revokes every app password.
+
 ## What it checks
 
 Rows from overlapping screens are joined by rank. The run lists problems instead of guessing: ranks with gaps, a Fort Count read two different ways, a Fort Count that rises down the list, or your pinned row disagreeing with the list. A name read two ways with one Fort Count (names in odd scripts, such as `CƦУ㋾`, read differently per screen) is not a problem: the row is kept and sent flagged, so the database leaves it "needs ID" and never matches it by either spelling. Names are copied as read; the admin page matches them against Name History and flags the rest "needs ID".
