@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # The Roster job saves every Roster Snapshot through one database function
@@ -18,7 +18,8 @@ The Roster job is the only writer of Roster Snapshots. The admin page's upload i
 ## Consequences
 
 - The Roster Snapshot rules live only in SQL now. `tests/roster-snapshot-cases.json` pins them. `top200` stays in `site/kingdom.js` for the site's Top 200 flag, with the same tie-break as the function: equal power goes by Character ID as plain text.
-- Anyone holding the reader's sign-in can now also save a Roster Snapshot, but only for a day newer than the latest one and not in the future. A wrong one is fixed by deleting it on the database and running the job again.
+- Anyone holding the reader's sign-in can now also save a Roster Snapshot, but only for a day newer than the latest one and not in the future. The rows are theirs to choose, so they can rename any Governor, flip statuses, add Governors and add names to Name History. Those writes are permanent: unlike the Live Week, no later run overwrites them. A made-up name in Name History is the dangerous one, since `record_live_week` matches against it and could tie a Fort Count to the wrong Character ID.
+- Deleting a snapshot removes only its rows. Everything else the function wrote that day stays. Running the job again afterwards corrects statuses and current names from Lilith's real data. It does not remove Name History rows or Governors that the bad day added. To clean those up by hand, delete the `governor_name` rows dated that day (`first_seen`) that Lilith's real data doesn't show, then the Governors that only that day introduced and nothing else refers to. A day from Lilith itself needs none of this. Its names come keyed by Character ID, so they are true, and a day with missing rows only marks Governors Inactive until the next run marks them Current again. Making the cleanup automatic, by having each Name History row record the snapshot that added it, was considered on 2026-11-15 and not built.
 - When the job stops (an expired token, Lilith down, the host off), no Roster Snapshot is saved until it runs again. The admin page shows the latest day and flags it after 3 days; the job emails Petras on any failure. A missed day is not made up: the next run saves the newest day.
 - The Lilith token lasts 30 days and sits in the host's `.env`. Its payload carries a Lilith session token for the account that signed in, so the Reader Account is the safer source. The first token is from Petras's own account, his choice on 2026-11-15. Until the reader can refresh it from the game's notice board, someone signs in to the RoK Toolkit once a month and copies it over. The job emails five days before it expires.
 - The job keeps only the columns `roster_snapshot_row` has. Deaths and per-tier kills stay at Lilith.
