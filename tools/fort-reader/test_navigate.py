@@ -32,6 +32,12 @@ class OpenRanking(unittest.TestCase):
         open_ranking(game)
         self.assertEqual(game.taps, [(1540, 820), (1160, 840), (90, 490), (1170, 380), (400, 690)])
 
+    def test_tap_to_start_on_the_title_screen_is_tapped_and_the_game_carries_on_to_the_ranking(self):
+        game = FakeGame("loading", "tap_to_start", "loading", "city", "alliance", "alliance_settings",
+                        "alliance_rankings", "fort_ranking")
+        open_ranking(game)
+        self.assertEqual(game.taps[0], (800, 755))
+
     def test_a_login_screen_stops_the_run_without_a_tap(self):
         game = FakeGame("loading", "login")
         with self.assertRaises(Stopped) as stop:
