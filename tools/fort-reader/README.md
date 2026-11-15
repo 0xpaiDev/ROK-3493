@@ -28,7 +28,8 @@ Every run force-stops the game, starts it again, and has Haiku name each screen 
 
 | Screen | Tap | What it is |
 |---|---|---|
-| loading | none, waits 5 s | black screen, title art with a progress bar, a spinner over the city |
+| loading | none, waits 5 s | black screen, the publishers' logos, title art with a progress bar or nothing over it yet, a spinner over the city |
+| tap_to_start | Tap to Start (800, 755) | title art with "Tap to Start" and no progress bar. Redroid waits here for a tap; BlueStacks goes past it by itself |
 | login_failed_loading | none, waits 5 s | "Network disconnected / Login failed ... REGISTER_AND_LOGING" over the loading screen. A BlueStacks bug: CONFIRM pressed now restarts into the same box, so the reader waits for the city to load behind it |
 | login_failed | CONFIRM (800, 588) | the same box over the city; CONFIRM restarts the game, and this time it loads |
 | city_bar_closed | menu button (1540, 820) | city with the bottom bar folded away |

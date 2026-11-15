@@ -61,7 +61,8 @@ SCREENS_PROMPT = """This is a screenshot of the Rise of Kingdoms game on a phone
 - login_failed: that same "NETWORK DISCONNECTED" box, but over the city view (buildings, the top bar with resources).
 - update: any prompt asking to update or download a new version of the app.
 - login: a sign-in or account screen asking for an email, password, Lilith account, Google or Facebook login, or to pick an account.
-- loading: an all-black or blank screen (the game is starting), or the game's loading screen: the title artwork with a progress bar or "Loading ..." / "Downloading ..." text, "Tap to Start", or a spinner over a dimmed city with no box.
+- loading: an all-black or blank screen (the game is starting), the publishers' logos on a plain background (such as LILITH GAMES and LEGOU GAMES), or the game's loading screen: the title artwork (the Rise of Kingdoms logo over a scene) with a progress bar, with "Loading ..." / "Downloading ..." text, or with nothing over it yet, or a spinner over a dimmed city with no box.
+- tap_to_start: the title artwork with "Tap to Start" near the bottom and no progress bar.
 - fort_ranking: a panel titled "FORT DESTROYER RANKINGS".
 - alliance_rankings: a panel titled "RANKINGS" with tiles such as Individual Power, Killing Machine and Fort Destroyer.
 - alliance_settings: a panel titled "SETTINGS" with icons Alliance Log, Settings, Alliance List, Rankings, Approval, Recruit Plaza, Quit Alliance.
@@ -73,7 +74,7 @@ SCREENS_PROMPT = """This is a screenshot of the Rise of Kingdoms game on a phone
 When in doubt, answer unknown.
 """
 
-ScreenName = Literal["login_failed_loading", "login_failed", "update", "login", "loading", "fort_ranking", "alliance_rankings",
+ScreenName = Literal["login_failed_loading", "login_failed", "update", "login", "loading", "tap_to_start", "fort_ranking", "alliance_rankings",
                   "alliance_settings", "alliance", "city", "city_bar_closed", "unknown"]
 
 

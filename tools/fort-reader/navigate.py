@@ -13,6 +13,8 @@ PATH = {
     "alliance": (90, 490),             # the gear tab on the window's left edge
     "alliance_settings": (1170, 380),  # Rankings, top right ("Quit Alliance" is lower down: never near it)
     "alliance_rankings": (400, 690),   # the Fort Destroyer tile, bottom left
+    "tap_to_start": (800, 755),        # the title screen once loaded: BlueStacks goes past it by itself,
+                                       # Redroid on the A1 waits there for a tap
     # Known popups, closed on the way.
     "login_failed": (800, 588),        # "Network disconnected / Login failed ... REGISTER_AND_LOGING" over
                                        # the city: CONFIRM restarts the game, which then carries on
