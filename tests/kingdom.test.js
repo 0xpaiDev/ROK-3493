@@ -73,9 +73,12 @@ test("a Farm marker can be a number or F plus a number, and case is ignored", ()
   assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId]), [["2", "1"], ["4", "3"]]);
 });
 
-test("FKK10 is not suggested as a Farm of FKK1, nor ZARAHHH of ZARAH", () => {
-  const governors = [gov("1", "FKK1"), gov("2", "FKK10"), gov("3", "ZARAH"), gov("4", "ZARAHHH")];
-  assert.deepEqual(farmLinkSuggestions(governors), []);
+test("FKK1 and FKK10 are both Farms of FKK CATHAY, not one of the other; ZARAHHH is not a Farm of ZARAH", () => {
+  const governors = [
+    { ...gov("149673994", "FKK CATHAY"), power: 124.2e6 }, { ...gov("151514913", "FKK1"), power: 32.4e6 },
+    { ...gov("211854507", "FKK10"), power: 11.0e6 }, gov("3", "ZARAH"), gov("4", "ZARAHHH"),
+  ];
+  assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId]), [["151514913", "149673994"], ["211854507", "149673994"]]);
 });
 
 test("a Farm-shaped name is never suggested as a Main", () => {
@@ -94,9 +97,81 @@ test("a dismissed pair is not suggested again; other pairs still are", () => {
   assert.deepEqual(farmLinkSuggestions(governors, dismissed).map((s) => [s.farmId, s.mainId]), [["2", "1"]]);
 });
 
-test("a suggestion says why: the Main's name plus the Farm marker", () => {
+test("a suggestion says which rule found it: here the Farm marker", () => {
   const [s] = farmLinkSuggestions([gov("1", "RuTHLess"), gov("2", "RuThLesS F1")]);
-  assert.equal(s.reason, "RuTHLess + F1");
+  assert.equal(s.reason, 'Farm marker "f1"');
+});
+
+// Ticket 14: wider rules. Each Governor carries its power from the latest Roster Snapshot;
+// in a suggested group the highest-power account is the Main.
+const pgov = (id, name, power) => ({ id, name, kind: "main", mainId: null, power });
+const pairs = (list) => list.map((s) => [s.farmId, s.mainId]).sort();
+
+test("normalising drops alliance tags and symbols, folds full-width letters and ignores case", () => {
+  const governors = [
+    pgov("75711209", "㋛ BiL ㋛", 91.8e6), pgov("92372523", "屮 BiL", 55.0e6), pgov("193098374", "ᵛø cciell", 50.6e6),
+    pgov("210712263", "cciell f4", 23.9e6), pgov("14025937", "ＫＭＢ f1", 16.1e6), pgov("3", "kmb", 1e6),
+  ];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["210712263", "193098374"], ["3", "14025937"], ["92372523", "75711209"]]);
+});
+
+test("names identical after normalising are one group, its highest-power account the Main", () => {
+  const governors = [pgov("41810399", "ᵛøDarkBlacK", 40.4e6), pgov("57027433", "ᵛøDarkBlack", 66.7e6), pgov("99299244", "ᵛøDarkBlaCK", 24.8e6)];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["41810399", "57027433"], ["99299244", "57027433"]]);
+});
+
+test("the highest-power account is the Main even when its name looks like a Farm; no power never beats power", () => {
+  const governors = [pgov("14025937", "ＫＭＢ f1", 16.1e6), pgov("11139139", "ＫＭＢ f2", 7.5e6), pgov("1", "KMB", 2.0e6), pgov("2", "KMB 9", null)];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["1", "14025937"], ["11139139", "14025937"], ["2", "14025937"]]);
+});
+
+test("a Farm marker counts anywhere in the name: farm, frm, mini, clone, glued or spaced", () => {
+  const governors = [
+    pgov("191044511", "ᵛøENES", 63.8e6), pgov("144398884", "Enesfarm7", 25.4e6), pgov("169805414", "Enes farm 3", 1.2e6),
+    pgov("184760438", "OzamisFarm", 12.2e6), pgov("189020883", "Ozamis Frm", 10.7e6),
+    pgov("179508915", "YEEEE", 84.7e6), pgov("182254461", "Mini YEEEE", 11.9e6),
+    pgov("179452862", "azuretf", 6.8e6), pgov("229803024", "azuretf clone1", 1.6e6),
+  ];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [
+    ["144398884", "191044511"], ["169805414", "191044511"], ["182254461", "179508915"], ["189020883", "184760438"], ["229803024", "179452862"],
+  ]);
+});
+
+test("a letter series ending in F is one group under the account its root starts", () => {
+  const governors = [pgov("88693430", "Årtåigē", 101.1e6), pgov("125745217", "Årt・AF", 32.2e6), pgov("88787836", "Årt・BF", 30.7e6), pgov("129680423", "Årt・GF", 6.3e6)];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["125745217", "88693430"], ["129680423", "88693430"], ["88787836", "88693430"]]);
+});
+
+test("a Farm's root of at least 4 letters inside another name joins it; a shorter root does not", () => {
+  const governors = [
+    pgov("164080955", "LordLorenzoniˢ", 91.3e6), pgov("175047993", "MiniLorenzoniˢ", 44.0e6), pgov("175050757", "FarmLorenzoni1", 33.5e6),
+    pgov("81275271", "ᵛø HelloCake", 83.7e6), pgov("205406316", "cake f1", 12.8e6),
+    pgov("78067532", "BiL F1", 12.6e6), pgov("179538837", "big bill", 4.7e6),
+  ];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["175047993", "164080955"], ["175050757", "164080955"], ["205406316", "81275271"]]);
+});
+
+test("a name another Governor once went by, plus a Farm marker, is that Governor's Farm", () => {
+  const governors = [pgov("8787605", "ᵛø wahab", 63.9e6), pgov("25007784", "Mr Wahab F2", 32.0e6)];
+  const history = [{ id: "8787605", name: "Mr Wahab" }, { id: "8787605", name: "ᵛø wahab" }];
+  const [s, ...rest] = farmLinkSuggestions(governors, [], history);
+  assert.deepEqual([s.farmId, s.mainId, s.reason, rest.length], ["25007784", "8787605", 'Was "Mr Wahab"', 0]);
+});
+
+test("the overlap counts a Farm's own former name too, after it was renamed", () => {
+  const governors = [pgov("8787605", "ᵛø wahab", 64.8e6), pgov("25007784", "ᵛøwahab   ii", 33.6e6)];
+  const history = [{ id: "8787605", name: "Mr Wahab" }, { id: "25007784", name: "Mr Wahab F2" }];
+  const [s, ...rest] = farmLinkSuggestions(governors, [], history);
+  assert.deepEqual([s.farmId, s.mainId, s.reason, rest.length], ["25007784", "8787605", 'Was "Mr Wahab F2"', 0]);
+});
+
+test("default names never pair, in any language", () => {
+  const governors = [
+    pgov("179509850", "Governor179509850", 3e6), pgov("179488756", "Governor179488756", 2e6),
+    pgov("179451054", "Правитель179451054", 1e6), pgov("179503686", "Правитель179503686", 1e6),
+    pgov("179484037", "執政官179484037", 1e6), pgov("179484038", "執政官179484038", 1e6),
+  ];
+  assert.deepEqual(farmLinkSuggestions(governors), []);
 });
 
 // Top 200: the rules that use it (who becomes Inactive) live in record_roster_snapshot and run

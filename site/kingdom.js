@@ -78,27 +78,104 @@ export function findInRanking(ranked, nameHistory, query) {
   return ranked.filter((e) => e.id?.includes(q) || [e.name, ...names(e.id)].some((n) => n.toLowerCase().includes(q)));
 }
 
-// Farm link suggestions: candidate Farm→Main pairs where one Governor's name is a Main's
-// name with a Farm marker added. Suggestions only; nothing is linked without the Council.
-const FARM_MARKER = /^(farm|f)?\s*\d*$/;
-// A name that already ends like a Farm ("Enes farm", "cciell f4") is not offered as a Main.
-const FARM_SHAPED = /(farm|\sf)\s*\d*$/i;
+// Farm link suggestions: candidate Farm→Main pairs from similar names. Governors are
+// { id, name, kind, mainId, power }, power from the latest Roster Snapshot. Related names form a
+// group, and every other account in a group is suggested as a Farm of its highest-power account.
+// Suggestions only; nothing is linked without the Council. Pairs are always Character IDs.
 
-export function farmLinkSuggestions(governors, dismissed = []) {
+// Alliance tags and decorative symbols, stripped before NFKC (which would turn ᴰᵁ into "du").
+const NAME_TAGS = ["ᵛø", "vø", "93๛", "ღ", "ᴰᵁ", "ᴴᴸ", "ᵀʳ", "ᴬˢʰ"];
+const NAME_SYMBOLS = /[乄亗㋛屮メ侍ˢ㋾・]/gu;
+
+// Rule 1: NFKC, lowercase, tags and symbols out, spaces collapsed.
+function normaliseName(name) {
+  let s = name;
+  for (const t of NAME_TAGS) s = s.split(t).join(" ");
+  s = s.replace(NAME_SYMBOLS, " ").normalize("NFKC").replace(NAME_SYMBOLS, " ").toLowerCase();
+  return s.replace(/\s+/g, " ").trim();
+}
+
+const letters = (s) => (s.match(/\p{L}/gu) ?? []).length;
+const compact = (s) => s.replace(/\s/g, "");
+
+// What makes a name look like a Farm: its root (the name without the Farm signal), the rule and a label.
+// Rule 3: farm (and farmm, farme, farmer, frm), mini, clone anywhere; fm at the end; F plus a number,
+// spaced or glued, or a lone spaced F; pc plus a number. A number right after a marker goes with it.
+const FARM_MARKER = /(?:farmer|farm+e?|frm|mini|clone)\s*\d*|pc\s*\d+|fm\s*\d*$|(?<=\s|^)f\s*\d*(?=\s|$)|(?<=\p{L})f\d+(?=\s|$)/gu;
+function farmSignal(s) {
+  const marked = s.replace(FARM_MARKER, " ");
+  if (marked !== s) return { root: compact(marked).replace(/\d+$/, ""), label: `Farm marker "${s.match(FARM_MARKER).map((m) => m.trim()).join(" ")}"` };
+  // Rule 4: a last word of one letter and F (Årt・AF … Årt・GF).
+  const series = s.match(/^(.*\S)\s+\p{L}f$/u);
+  if (series) return { root: compact(series[1]), label: `Letter series on "${series[1]}"`, series: true };
+  const num = s.match(/^(.*\p{L}.*?)\s*(\d+)$/u);
+  if (num) return { root: compact(num[1]), label: `Numbered series on "${num[1]}"`, series: true };
+  return null;
+}
+
+// Rule 8: the game's default name, a word and digits (Governor179509850, Thống đốc…, 執政官…). It is
+// the Governor's own Character ID in every language seen, so that counts too; it says nothing of the person.
+const DEFAULT_NAME = /^(governor|thống đốc|vali|правитель)\s*\d+$/u;
+const isDefaultName = (g) => DEFAULT_NAME.test(normaliseName(g.name)) || (/^\D+\d+$/u.test(g.name) && g.name.endsWith(g.id));
+
+// history is Name History, [{ id, name }].
+export function farmLinkSuggestions(governors, dismissed = [], history = []) {
   const gone = new Set(dismissed.map((d) => d.farmId + ">" + d.mainId));
-  const out = [];
-  for (const farm of governors) {
-    for (const main of governors) {
-      if (farm === main || gone.has(farm.id + ">" + main.id) || farm.kind === "farm" || main.kind === "farm" || FARM_SHAPED.test(main.name)) continue;
-      const name = farm.name.toLowerCase(), base = main.name.toLowerCase();
-      if (!name.startsWith(base)) continue;
-      const rest = name.slice(base.length);
-      // A digit glued onto a name ending in a digit continues the number (FKK1 → FKK10).
-      if (/\d$/.test(base) && /^\d/.test(rest)) continue;
-      if (rest.trim() && FARM_MARKER.test(rest.trim())) out.push({ farmId: farm.id, mainId: main.id, reason: `${main.name} + ${farm.name.slice(base.length).trim()}` });
+  const people = governors
+    .filter((g) => g.kind !== "farm" && !isDefaultName(g))
+    .map((g) => {
+      const s = normaliseName(g.name);
+      const signal = farmSignal(s);
+      const c = compact(s);
+      const was = new Map(history.filter((h) => h.id === g.id).map((h) => [compact(normaliseName(h.name)), h.name]));
+      was.delete(c);
+      // What a former name joins on: itself, or its root when it looked like a Farm ("Mr Wahab F2" → mrwahab).
+      const wasKeys = [...was].flatMap(([k, name]) => [[k, name], [farmSignal(normaliseName(name))?.root, name]]);
+      return { ...g, c, was, wasKeys, signal: signal && letters(signal.root) >= 3 ? signal : null };
+    });
+
+  // Edges between related names; a group is everything they join.
+  const edges = [];
+  for (const a of people) {
+    for (const b of people) {
+      if (a === b) continue;
+      // Rule 7: a name b once went by, alone or with a Farm signal (ᵛø wahab was "Mr Wahab" → Mr Wahab F2),
+      // or a former name of a's that b goes or went by (ᵛøwahab ii was "Mr Wahab F2").
+      const former = b.was.get(a.c) ?? (a.signal && b.was.get(a.signal.root)) ?? a.wasKeys.find(([k]) => k && (k === b.c || b.was.has(k)))?.[1];
+      if (former) edges.push([a, b, `Was "${former}"`]);
+      else if (a.c === b.c && a.id < b.id) edges.push([a, b, "Same name"]);
+      else if (a.signal && (b.c === a.signal.root || b.signal?.root === a.signal.root)) edges.push([a, b, a.signal.label]);
+      // Rules 4 and 5: a series root also joins the account whose name starts with it (FKK1 → FKK CATHAY).
+      else if (a.signal?.series && !b.signal && b.c.startsWith(a.signal.root)) edges.push([a, b, a.signal.label]);
+      // Rule 6: a root of at least 4 letters inside another name (FarmLorenzoni1 → LordLorenzoniˢ).
+      else if (a.signal && letters(a.signal.root) >= 4 && b.c.includes(a.signal.root)) edges.push([a, b, `"${a.signal.root}" is in ${b.name}`]);
     }
   }
-  return out;
+  const parent = new Map(people.map((p) => [p.id, p.id]));
+  const find = (id) => (parent.get(id) === id ? id : find(parent.get(id)));
+  for (const [a, b] of edges) parent.set(find(a.id), find(b.id));
+
+  // The Main: the highest power, and no power on record ranks below any. Among equals a name that
+  // does not look like a Farm goes first, then the lowest Character ID.
+  const groups = new Map();
+  for (const p of people) {
+    const r = find(p.id);
+    if (!groups.has(r)) groups.set(r, []);
+    groups.get(r).push(p);
+  }
+  const mainOf = new Map();
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const [main] = [...list].sort((x, y) => (y.power ?? -1) - (x.power ?? -1) || !!x.signal - !!y.signal || (x.id < y.id ? -1 : 1));
+    for (const p of list) if (p !== main) mainOf.set(p.id, main);
+  }
+
+  // Each Farm's reason: the rule that tied it to its Main, else the one that put it in the group.
+  const reasonOf = (farm, main) =>
+    (edges.find(([a, b]) => a === farm && b === main) ?? edges.find(([a]) => a === farm) ?? edges.find(([, b]) => b === farm))[2];
+  return people
+    .filter((p) => mainOf.has(p.id) && !gone.has(p.id + ">" + mainOf.get(p.id).id))
+    .map((p) => ({ farmId: p.id, mainId: mainOf.get(p.id).id, reason: reasonOf(p, mainOf.get(p.id)) }));
 }
 
 // Top 200: the Character IDs of the 200 highest-power Governors in a snapshot's rows. Equal power
