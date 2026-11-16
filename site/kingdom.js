@@ -105,6 +105,10 @@ const FARM_MARKER = /(?:farmer|farm+e?|frm|mini|clone)\s*\d*|pc\s*\d+|fm\s*\d*$|
 function farmSignal(s) {
   const marked = s.replace(FARM_MARKER, " ");
   if (marked !== s) return { root: compact(marked).replace(/\d+$/, ""), label: `Farm marker "${s.match(FARM_MARKER).map((m) => m.trim()).join(" ")}"` };
+  // Rule 9: a resource word ending the name, glued or spaced, letters repeated or not (Eren stoneee,
+  // J4KUFOOD); "inf" only as its own word.
+  const resource = s.match(/^(.*\p{L}.*?)(?:\s*(fo+d+|go+l+d+|sto+n+e+|wo+d+|co+r+n+)|\s+(inf))\s*\d*$/u);
+  if (resource) return { root: compact(resource[1]), label: `Resource word "${resource[2] ?? resource[3]}"` };
   // Rule 4: a last word of one letter and F (Årt・AF … Årt・GF).
   const series = s.match(/^(.*\S)\s+\p{L}f$/u);
   if (series) return { root: compact(series[1]), label: `Letter series on "${series[1]}"`, series: true };

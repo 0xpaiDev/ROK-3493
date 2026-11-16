@@ -165,6 +165,17 @@ test("the overlap counts a Farm's own former name too, after it was renamed", ()
   assert.deepEqual([s.farmId, s.mainId, s.reason, rest.length], ["25007784", "8787605", 'Was "Mr Wahab F2"', 0]);
 });
 
+test("a resource word after the root marks a Farm, however many letters it repeats", () => {
+  const governors = [
+    pgov("154551867", "ᵛø EREN", 78.9e6), pgov("153935494", "Eren cornnn", 7.6e6), pgov("155440734", "Eren stonee", 4.0e6),
+    pgov("154636856", "Eren gold", 3.6e6), pgov("191571674", "Eren inf", 37.1e6),
+    pgov("177745552", "ᵛø J4KU", 74.3e6), pgov("178893621", "J4KUFOOD", 4.8e6),
+  ];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [
+    ["153935494", "154551867"], ["154636856", "154551867"], ["155440734", "154551867"], ["178893621", "177745552"], ["191571674", "154551867"],
+  ]);
+});
+
 test("default names never pair, in any language", () => {
   const governors = [
     pgov("179509850", "Governor179509850", 3e6), pgov("179488756", "Governor179488756", 2e6),
