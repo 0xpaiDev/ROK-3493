@@ -41,8 +41,12 @@ begin
       using errcode = '22023';
   end if;
   update fort_entry e set character_id = pick_governor.character_id where e.id = entry;
-  insert into governor_name (character_id, name, first_seen) values (pick_governor.character_id, row_name, pick_governor.week)
-  on conflict do nothing;
+  -- A name another row of the week also carries belongs to two Governors: under one of them alone in Name
+  -- History, the reader would hand the other's later rows to it. The row is set; the name stays out.
+  if not exists (select 1 from fort_entry e where e.week = pick_governor.week and e.name = row_name and e.id <> entry) then
+    insert into governor_name (character_id, name, first_seen) values (pick_governor.character_id, row_name, pick_governor.week)
+    on conflict do nothing;
+  end if;
 end;
 $$;
 

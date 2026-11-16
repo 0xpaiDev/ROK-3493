@@ -180,7 +180,10 @@ export function governorsTwice(rows) {
 const NO_PICKS = `Pick a Governor for a "needs ID" row first.`;
 export function checkPicks({ week, rows, picks, nameHistory, governors, liveWeek, now }) {
   const seen = seenPairs(nameHistory);
-  const newNames = picks.map((p) => ({ id: p.id, name: rows[p.row].name, firstSeen: week })).filter((n) => !isSeen(seen, n));
+  // A name on two rows belongs to two Governors: under one of them alone, the reader would hand it the other's rows.
+  const onTwoRows = (name) => rows.filter((r) => r.name === name).length > 1;
+  const newNames = picks.map((p) => ({ id: p.id, name: rows[p.row].name, firstSeen: week }))
+    .filter((n) => !isSeen(seen, n) && !onTwoRows(n.name));
   // The week the page's reading was loaded for, or the one now in progress: they differ once the reset passes.
   const live = isFortWeekStart(week) && (week === liveWeek || isLiveWeek(week, now));
   const nameOf = (id) => governors.find((g) => g.id === id)?.name ?? id;

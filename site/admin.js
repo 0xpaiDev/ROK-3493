@@ -489,8 +489,8 @@ async function showFortWeek(section, message = "", startWeek = null) {
         <div class="eyebrow">Fort Week</div>
         <h1 class="task-title">${isMonday ? `Resolve the ${live ? "Live Week" : "week"} of ${esc(dayMonth(week))}` : "Resolve a Fort Week"}</h1>
         <p class="task-lede">The reader reads every Fort Week. Pick the Governor for each "needs ID" row it could not match; nothing changes until you press Save. ${live
-          ? "On the Live Week a Pick goes into Name History, and the reader's next reading matches the name."
-          : "On a closed week a Pick sets the row's Character ID and adds its name to Name History."}</p>
+          ? "On the Live Week a Pick goes into Name History, and the reader's next reading matches the name. After Sunday's closing reading no reading follows: Pick the row again once the week closes."
+          : "On a closed week a Pick sets the row's Character ID and adds its name to Name History, unless another row that week has the same name."}</p>
       </div>
       <p class="admin-msg" role="status">${esc(msgText)}</p>
 
@@ -528,7 +528,6 @@ async function showFortWeek(section, message = "", startWeek = null) {
             ${rows[i].id == null ? `<label class="field fw-gov"><span class="sr-only">Governor for row ${i + 1}, ${esc(r.name)}</span>
               <input list="fw-governors" data-row="${i}" value="${g ? esc(label(g)) : ""}" placeholder="Pick a Governor" autocomplete="off">
             </label>` : `<span class="fw-gov"></span>`}
-            <span class="row-actions"></span>
           </li>`;
         }).join("")}
         </ol>

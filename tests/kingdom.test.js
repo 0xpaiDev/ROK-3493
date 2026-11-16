@@ -269,6 +269,13 @@ test("a Live Week Pick the next reading would not match is refused; on a closed 
   assert.equal(picksOn("2026-11-09", [{ row: 2, id: "8" }], held).problem, null);
 });
 
+test("a closed-week Pick on a name another row of the week also carries sets the row but adds no name", () => {
+  // Two Governors read as "Twin": Name History under one of them would hand the other's later rows to it.
+  const twins = [...readRows, { id: null, name: "Odd", fortCount: 2 }];
+  const out = picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: twins });
+  assert.deepEqual([out.problem, out.newNames], [null, []]);
+});
+
 test("a Pick under a name the Governor already has in Name History adds no name", () => {
   const held = { nameHistory: [{ id: "8", name: "Other" }, { id: "7", name: "Other" }] };
   assert.deepEqual(picksOn("2026-11-09", [{ row: 2, id: "8" }, { row: 1, id: "9" }], held).newNames, [{ id: "9", name: "Odd", firstSeen: "2026-11-09" }]);
