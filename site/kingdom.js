@@ -144,29 +144,16 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
 const seenPairs = (nameHistory) => new Set(nameHistory.map((n) => n.id + "|" + n.name));
 const isSeen = (seen, r) => seen.has(r.id + "|" + r.name);
 
-// The names a pasted Fort Week is matched against: Name History { character_id, name } plus each
-// Governor's current name { id, name }, which counts as seen before a Roster Snapshot adds it.
+// The names a reading is matched against: Name History { character_id, name } plus each Governor's
+// current name { id, name }, which counts as seen before a Roster Snapshot adds it.
 export function namesToMatch(governors, nameHistory) {
   return [...nameHistory.map((n) => ({ id: n.character_id, name: n.name })), ...governors];
 }
 
-// Name matching for a pasted Fort Week. Takes rows { name, fortCount } and Name History { id, name }.
-// Returns each row with the Character ID its name has been seen under, or id null ("needs ID").
-// A name seen under more than one Character ID is never guessed between, and a name pasted twice
-// leaves every row with it "needs ID": the rows stay apart until the Council picks each Governor.
-export function matchNames(rows, nameHistory) {
-  const idsOf = (name) => new Set(nameHistory.filter((n) => n.name === name).map((n) => n.id));
-  const pastedTwice = (name) => rows.filter((r) => r.name === name).length > 1;
-  return rows.map((r) => {
-    const ids = idsOf(r.name);
-    return { ...r, id: ids.size === 1 && !pastedTwice(r.name) ? [...ids][0] : null };
-  });
-}
-
 // The Character IDs record_live_week gives a reading's rows (supabase/migrations, the newest Live Week one):
-// matchNames, except a row the reader read more than one way (names, every spelling) matches when those
-// spellings lead to exactly one Governor; a row flagged needsId (an older reader) is never matched; and
-// two rows whose names lead to one Governor both stay "needs ID".
+// a row whose spellings (names, or else its name) lead to exactly one Governor in Name History gets that
+// Character ID; a name seen under more than one is never guessed between. A name on two rows, a row flagged
+// needsId (an older reader), and two rows whose names lead to one Governor all stay "needs ID".
 // Rows { name, fortCount, names?, needsId? } in reading order.
 export function liveReadingIds(rows, nameHistory) {
   const spellings = (r) => r.names ?? [r.name];
@@ -179,39 +166,38 @@ export function liveReadingIds(rows, nameHistory) {
   return ids.map((id) => (id != null && ids.filter((other) => other === id).length > 1 ? null : id));
 }
 
-// Pasted Fort Week rows: one Governor per line, the name then its Fort Count as the last number
-// on the line (spaces or a tab between, thousands commas allowed). Blank lines are skipped.
-export function parseFortRows(text) {
-  return text.split(/\r?\n/).flatMap((line, i) => {
-    if (!line.trim()) return [];
-    const m = line.trim().match(/^(.*\S)\s+([\d,]+)$/);
-    if (!m) throw new Error(`Line ${i + 1} has no Fort Count at the end: "${line.trim()}".`);
-    return [{ name: m[1], fortCount: Number(m[2].replace(/,/g, "")) }];
-  });
-}
-
 // The Character IDs on more than one row of a Fort Week. A week holds each Governor once, so these
-// block saving. "needs ID" rows have no Character ID yet and never count as the same Governor.
+// block a Pick. "needs ID" rows have no Character ID yet and never count as the same Governor.
 export function governorsTwice(rows) {
   const ids = rows.map((r) => r.id).filter((id) => id != null);
   return [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
 }
 
-// Tie order: rows in ranking order; the row at index moves one place up (step -1) or down (+1),
-// only past a row with the same Fort Count. The resulting order is the Council's tie order.
-export function moveInTie(rows, index, step) {
-  const other = index + step;
-  if (rows[other]?.fortCount !== rows[index].fortCount) return rows;
-  const out = [...rows];
-  [out[index], out[other]] = [out[other], out[index]];
-  return out;
-}
-
-// Names a saved Fort Week adds to Name History: a pasted name on a row with a Character ID that the
-// Governor was not yet seen under (the Council picked it). firstSeen is the Fort Week's Monday.
-export function newFortNames(rows, nameHistory, week) {
+// Picks on a read Fort Week (ADR 0006): the Council's choice of Governor for a "needs ID" row, [{ row, id }]
+// with row an index into rows; rows are the week's read rows { id, name, fortCount, names?, needsId? }. Returns whether the page treats the week as the Live Week, why the Picks can't
+// be saved (a sentence for the Council, or null), whether the only reason is that there are none yet, and the
+// names they add to Name History, { id, name, firstSeen } with firstSeen the week's Monday.
+const NO_PICKS = `Pick a Governor for a "needs ID" row first.`;
+export function checkPicks({ week, rows, picks, nameHistory, governors, liveWeek, now }) {
   const seen = seenPairs(nameHistory);
-  return rows.filter((r) => r.id != null && !isSeen(seen, r)).map((r) => ({ id: r.id, name: r.name, firstSeen: week }));
+  const newNames = picks.map((p) => ({ id: p.id, name: rows[p.row].name, firstSeen: week })).filter((n) => !isSeen(seen, n));
+  // The week the page's reading was loaded for, or the one now in progress: they differ once the reset passes.
+  const live = isFortWeekStart(week) && (week === liveWeek || isLiveWeek(week, now));
+  const nameOf = (id) => governors.find((g) => g.id === id)?.name ?? id;
+  const picked = rows.map((r, i) => ({ ...r, id: picks.find((p) => p.row === i)?.id ?? r.id }));
+  const twice = governorsTwice(picked);
+  // On the Live Week a Pick only helps if the reader's next reading would match it, by record_live_week's rule.
+  const next = live ? liveReadingIds(rows, [...nameHistory, ...newNames]) : [];
+  const slips = live ? picks.filter((p) => next[p.row] !== p.id).map((p) => rows[p.row].name) : [];
+  const problem = !isFortWeekStart(week) ? `${week || "The date"} is not a Monday. A Fort Week starts on Monday.`
+    // A Live Week reading from before the reset is not the week the reader now writes.
+    : live && !isLiveWeek(liveWeek, now) ? "The Monday reset has passed since this page loaded, so its reading is out of date. Reload the page."
+    : twice.length ? `${twice.map(nameOf).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
+    : slips.length ? `${slips.join(", ")} would still be "needs ID" at the next reading: ${slips.length === 1 ? "its name is" : "their names are"} on two rows or already ${slips.length === 1 ? "belongs" : "belong"} to another Governor. Clear the Pick and Pick it again once the week closes.`
+    : !picks.length ? NO_PICKS
+    : null;
+  const nothingYet = problem === NO_PICKS;
+  return { live, problem, nothingYet, newNames };
 }
 
 // Weekly Awards: { week, id, place, award, note, items }, a Fort Week's Monday and the Main's Character ID.

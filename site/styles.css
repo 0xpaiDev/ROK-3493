@@ -529,7 +529,6 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .farm-list .of { flex: 1 1 200px; }
 
 /* Fort Week */
-.field.fw-text { flex: 1 1 100%; }
 .fw-rows { list-style: none; margin: 12px 0 0; padding: 0; }
 .fw-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto minmax(180px, 1.2fr) 80px; align-items: center; gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .fw-row.clash { box-shadow: inset 2px 0 0 var(--down); }

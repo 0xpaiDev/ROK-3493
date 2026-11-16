@@ -18,7 +18,7 @@ The final run therefore lands between 22:00 UTC and the Monday reset. `install.s
 
 ## Consequences
 
-- When Sunday's run fails, the week keeps its last reading and is saved as Partial. The failure email reaches Petras and the Council. The Council can paste the week once it has closed. The admin page refuses a paste while the week is still the Live Week.
+- When Sunday's run fails, the week keeps its last reading and is saved as Partial. The failure email reaches Petras and the Council. Nobody pastes the week: the reader gets fixed, and the week stays Partial (ADR 0006).
 - A failed weekday run changes nothing but leaves the "as of" time stale.
 - The rule lives in SQL and the run window in `install.sh`. Changing either alone breaks the other: a run time before 22:00 would close no week Complete, and one after 23:50 risks being refused.
 - The site shows a week's Partial tag only after the week has closed.
