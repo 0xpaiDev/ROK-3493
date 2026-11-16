@@ -195,9 +195,14 @@ test("F glued after a letter, pc plus a number and a closing fm are Farm markers
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["2", "1"], ["4", "3"], ["6", "5"]]);
 });
 
-test("a numbered series off a shared root goes to the root's account: acmong1/2/3/52", () => {
-  const governors = [pgov("10", "acmong", 50e6), pgov("11", "acmong1", 9e6), pgov("12", "acmong2", 8e6), pgov("13", "acmong3", 7e6), pgov("14", "acmong52", 6e6)];
-  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["11", "10"], ["12", "10"], ["13", "10"], ["14", "10"]]);
+test("a numbered series off a shared root is one Main's: acmong2 over Acmong1, Ac mong, acmong52 and acmong3", () => {
+  const governors = [
+    pgov("179695312", "acmong2", 14.9e6), pgov("179872374", "Acmong1", 11.5e6), pgov("181458933", "Ac mong", 11.4e6),
+    pgov("200523736", "acmong52", 2.2e6), pgov("200551343", "acmong3", 2.1e6),
+  ];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [
+    ["179872374", "179695312"], ["181458933", "179695312"], ["200523736", "179695312"], ["200551343", "179695312"],
+  ]);
 });
 
 test("a Main with its own Farm is not swept under a stronger name only one of its Farms resembles", () => {

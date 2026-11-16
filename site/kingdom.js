@@ -145,7 +145,7 @@ export function farmLinkSuggestions(governors, dismissed = [], history = []) {
     // A name of only tags, symbols or digits says nothing of the person, so it never pairs.
     .filter((p) => letters(p.c) > 0);
 
-  // Edges between related names; a group is everything they join.
+  // Edges between directly related names.
   const edges = [];
   for (const a of people) {
     for (const b of people) {
