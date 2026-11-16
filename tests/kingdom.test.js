@@ -274,6 +274,9 @@ test("a closed-week Pick on a name another row of the week also carries sets the
   const twins = [...readRows, { id: null, name: "Odd", fortCount: 2 }];
   const out = picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: twins });
   assert.deepEqual([out.problem, out.newNames], [null, []]);
+  // Another row read more than one way, one spelling the Picked name: the same two Governors behind it.
+  const misread = [...readRows, { id: null, name: "0dd", fortCount: 2, names: ["0dd", "Odd"] }];
+  assert.deepEqual(picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: misread }).newNames, []);
 });
 
 test("a Pick under a name the Governor already has in Name History adds no name", () => {

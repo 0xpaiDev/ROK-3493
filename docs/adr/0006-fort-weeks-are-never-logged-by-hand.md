@@ -6,7 +6,7 @@ status: accepted
 
 The reader reads every Fort Week (ADRs 0002, 0003, 0005), so the admin page's pasted Fort Week is no longer used. It goes, along with its tie arrows and its Complete/Partial choice. The Council's only Fort Week task is the Pick: choosing the Governor for a "needs ID" row the reader could not match, on the Live Week or on a closed week.
 
-A Pick on the Live Week adds the name to Name History and nothing else, because only the reader writes the Live Week (ADR 0002). A Pick on a closed week also sets that row's Character ID, since no later reading comes. It goes through one Council-only function that writes the row and Name History in one transaction, and refuses the Live Week and a Governor who already has a row that week.
+A Pick on the Live Week adds the name to Name History and nothing else, because only the reader writes the Live Week (ADR 0002). A Pick on a closed week also sets that row's Character ID, since no later reading comes. It goes through one Council-only function that writes the row and Name History in one transaction, and refuses the Live Week and a Governor who already has a row that week. A name another row of the week has, or was also read as, stays out of Name History: it may belong to two Governors, and under one of them alone the reader would hand the other's later rows to it.
 
 ## Considered options
 

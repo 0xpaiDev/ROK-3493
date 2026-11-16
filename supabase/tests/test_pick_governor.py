@@ -91,6 +91,14 @@ class ClosedWeekPick(unittest.TestCase):
         self.assertEqual(self.public("select character_id from fort_entry where id = %s", (self.odd,)), [("990000102",)])
         self.assertEqual(self.public("select name from governor_name where character_id = '990000102'"), [])
 
+    def test_a_pick_on_a_name_another_row_was_also_read_as_adds_no_name(self):
+        # A row read more than one way, one spelling the Picked row's name: two Governors may be behind it.
+        self.conn.execute("insert into fort_entry (week, name, fort_count, spellings) values (%s, 'Case 0dd', 2, %s)",
+                          (WEEK, ["Case 0dd", "Case Odd"]))
+        self.pick(WEEK, self.odd, "990000102")
+        self.assertEqual(self.public("select character_id from fort_entry where id = %s", (self.odd,)), [("990000102",)])
+        self.assertEqual(self.public("select name from governor_name where character_id = '990000102'"), [])
+
     def refused(self, error, message, week, entry, cid, claims=None):
         """Asserts the Pick is refused with error and message, and changes no row nor Name History."""
         snapshot = "select md5(string_agg(t::text, '|' order by t::text)) from {} t"

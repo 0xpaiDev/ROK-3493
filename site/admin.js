@@ -490,7 +490,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
         <h1 class="task-title">${isMonday ? `Resolve the ${live ? "Live Week" : "week"} of ${esc(dayMonth(week))}` : "Resolve a Fort Week"}</h1>
         <p class="task-lede">The reader reads every Fort Week. Pick the Governor for each "needs ID" row it could not match; nothing changes until you press Save. ${live
           ? "On the Live Week a Pick goes into Name History, and the reader's next reading matches the name. After Sunday's closing reading no reading follows: Pick the row again once the week closes."
-          : "On a closed week a Pick sets the row's Character ID and adds its name to Name History, unless another row that week has the same name."}</p>
+          : "On a closed week a Pick sets the row's Character ID and adds its name to Name History, unless another row that week has or was read as the same name."}</p>
       </div>
       <p class="admin-msg" role="status">${esc(msgText)}</p>
 

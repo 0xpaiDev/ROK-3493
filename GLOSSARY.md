@@ -45,7 +45,7 @@ Every name a Governor has been seen under, kept against its Character ID.
 _Avoid_: Aliases
 
 **Pick**:
-The Council's choice of Governor for a "needs ID" row the reader could not match. On the Live Week it only adds the row's name to Name History, so the reader's next reading matches it, and a Pick that reading would not match is refused. On a closed Fort Week it also sets the row's Character ID, since no later reading comes.
+The Council's choice of Governor for a "needs ID" row the reader could not match. On the Live Week it only adds the row's name to Name History, so the reader's next reading matches it, and a Pick that reading would not match is refused. On a closed Fort Week it also sets the row's Character ID, since no later reading comes. A name another row of that week has, or was also read as, stays out of Name History.
 _Avoid_: Assign, link
 
 **Roster Snapshot**:
