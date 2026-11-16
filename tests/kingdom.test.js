@@ -181,8 +181,55 @@ test("default names never pair, in any language", () => {
     pgov("179509850", "Governor179509850", 3e6), pgov("179488756", "Governor179488756", 2e6),
     pgov("179451054", "Правитель179451054", 1e6), pgov("179503686", "Правитель179503686", 1e6),
     pgov("179484037", "執政官179484037", 1e6), pgov("179484038", "執政官179484038", 1e6),
+    pgov("179509851", "Thống đốc179509851", 1e6), pgov("179509852", "Thống đốc179509852", 1e6),
+    pgov("179509853", "Vali179509853", 1e6), pgov("179509854", "Vali179509854", 1e6),
   ];
   assert.deepEqual(farmLinkSuggestions(governors), []);
+});
+
+test("F glued after a letter, pc plus a number and a closing fm are Farm markers too", () => {
+  const governors = [
+    pgov("1", "Stormblessed", 80e6), pgov("2", "StormblessedF1", 10e6), pgov("3", "JADE", 70e6), pgov("4", "JADE pc2", 5e6),
+    pgov("5", "Rhaegar", 60e6), pgov("6", "Rhaegar fm", 4e6),
+  ];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["2", "1"], ["4", "3"], ["6", "5"]]);
+});
+
+test("a numbered series off a shared root goes to the root's account: acmong1/2/3/52", () => {
+  const governors = [pgov("10", "acmong", 50e6), pgov("11", "acmong1", 9e6), pgov("12", "acmong2", 8e6), pgov("13", "acmong3", 7e6), pgov("14", "acmong52", 6e6)];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["11", "10"], ["12", "10"], ["13", "10"], ["14", "10"]]);
+});
+
+test("a Main with its own Farm is not swept under a stronger name only one of its Farms resembles", () => {
+  const governors = [pgov("1", "Alexander", 100e6), pgov("2", "Alex F1", 5e6), pgov("3", "Alexis", 50e6), pgov("4", "Alexis farm", 2e6)];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["2", "1"], ["4", "3"]]);
+});
+
+test("after a Dismiss the Farm is offered to the next related account, with that pair's own reason", () => {
+  const governors = [pgov("1", "Lord Lorenzoni", 100e6), pgov("2", "Lorenzo", 50e6), pgov("3", "Lorenzo F1", 5e6)];
+  assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId, s.reason]), [["3", "1", '"lorenzo" is in Lord Lorenzoni']]);
+  assert.deepEqual(farmLinkSuggestions(governors, [{ farmId: "3", mainId: "1" }]).map((s) => [s.farmId, s.mainId, s.reason]), [["3", "2", 'Farm marker "f1"']]);
+});
+
+test("a Farm of a suggested Farm goes on to that one's Main, and says through whom", () => {
+  const governors = [pgov("1", "Allfather", 100e6), pgov("2", "Odin", 50e6), pgov("3", "Odin F2", 5e6)];
+  const history = [{ id: "2", name: "Allfather F1" }];
+  assert.deepEqual(farmLinkSuggestions(governors, [], history).map((s) => [s.farmId, s.mainId, s.reason]), [
+    ["2", "1", 'Was "Allfather F1"'], ["3", "1", 'Via Odin: Farm marker "f2"'],
+  ]);
+});
+
+test("a Main of linked Farms is never suggested as a Farm itself", () => {
+  const governors = [pgov("1", "Kami", 100e6), { ...pgov("2", "Kami F1", 5e6), kind: "farm", mainId: "1" }, pgov("3", "Kami 2", 200e6)];
+  assert.deepEqual(farmLinkSuggestions(governors), []);
+});
+
+test("names with no letters left after normalising never pair", () => {
+  assert.deepEqual(farmLinkSuggestions([pgov("1", "乄", 3e6), pgov("2", "ᵛø", 2e6), pgov("3", "・", 1e6)]), []);
+});
+
+test("a former name's root needs 3 letters, as a current name's does", () => {
+  assert.deepEqual(farmLinkSuggestions([pgov("1", "Bob", 100e6), pgov("2", "Al", 5e6)], [], [{ id: "1", name: "Al F2" }]), []);
 });
 
 // Top 200: the rules that use it (who becomes Inactive) live in record_roster_snapshot and run

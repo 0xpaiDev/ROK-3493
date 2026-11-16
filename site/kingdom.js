@@ -79,8 +79,8 @@ export function findInRanking(ranked, nameHistory, query) {
 }
 
 // Farm link suggestions: candidate Farm→Main pairs from similar names. Governors are
-// { id, name, kind, mainId, power }, power from the latest Roster Snapshot. Related names form a
-// group, and every other account in a group is suggested as a Farm of its highest-power account.
+// { id, name, kind, mainId, power }, power from the latest Roster Snapshot. Each account is
+// suggested as a Farm of the highest-power account its name is directly related to.
 // Suggestions only; nothing is linked without the Council. Pairs are always Character IDs.
 
 // Alliance tags and decorative symbols, stripped before NFKC (which would turn ᴰᵁ into "du").
@@ -133,10 +133,17 @@ export function farmLinkSuggestions(governors, dismissed = [], history = []) {
       const c = compact(s);
       const was = new Map(history.filter((h) => h.id === g.id).map((h) => [compact(normaliseName(h.name)), h.name]));
       was.delete(c);
-      // What a former name joins on: itself, or its root when it looked like a Farm ("Mr Wahab F2" → mrwahab).
-      const wasKeys = [...was].flatMap(([k, name]) => [[k, name], [farmSignal(normaliseName(name))?.root, name]]);
+      // What a former name joins on: itself, or its root of at least 3 letters when it looked like a
+      // Farm ("Mr Wahab F2" → mrwahab).
+      const rootOf = (name) => {
+        const root = farmSignal(normaliseName(name))?.root;
+        return root && letters(root) >= 3 ? root : null;
+      };
+      const wasKeys = [...was].flatMap(([k, name]) => [[k, name], [rootOf(name), name]]);
       return { ...g, c, was, wasKeys, signal: signal && letters(signal.root) >= 3 ? signal : null };
-    });
+    })
+    // A name of only tags, symbols or digits says nothing of the person, so it never pairs.
+    .filter((p) => letters(p.c) > 0);
 
   // Edges between related names; a group is everything they join.
   const edges = [];
@@ -155,31 +162,38 @@ export function farmLinkSuggestions(governors, dismissed = [], history = []) {
       else if (a.signal && letters(a.signal.root) >= 4 && b.c.includes(a.signal.root)) edges.push([a, b, `"${a.signal.root}" is in ${b.name}`]);
     }
   }
-  const parent = new Map(people.map((p) => [p.id, p.id]));
-  const find = (id) => (parent.get(id) === id ? id : find(parent.get(id)));
-  for (const [a, b] of edges) parent.set(find(a.id), find(b.id));
+  // Rank: the highest power, and no power on record ranks below any. Among equals a name that
+  // does not look like a Farm goes first, then the lowest Character ID. Negative: x outranks y.
+  const rank = (x, y) => (y.power ?? -1) - (x.power ?? -1) || !!x.signal - !!y.signal || (x.id < y.id ? -1 : 1);
+  // The reason two names are related, from the rule that joined them directly.
+  const reasonBetween = (p, q) => (edges.find(([a, b]) => a === p && b === q) ?? edges.find(([a, b]) => a === q && b === p))[2];
 
-  // The Main: the highest power, and no power on record ranks below any. Among equals a name that
-  // does not look like a Farm goes first, then the lowest Character ID.
-  const groups = new Map();
+  // A Governor's Main is the highest-ranked account it is directly related to, when that one
+  // outranks it. Names are never chained through a third account, so a real Main is not swept
+  // under a stronger, unrelated name. A dismissed pair is left out before choosing, so the next
+  // related account is offered instead; a Governor that is already a Main of linked Farms stays one.
+  const hasFarms = new Set(governors.filter((g) => g.kind === "farm" && g.mainId).map((g) => g.mainId));
+  const step = new Map();
   for (const p of people) {
-    const r = find(p.id);
-    if (!groups.has(r)) groups.set(r, []);
-    groups.get(r).push(p);
-  }
-  const mainOf = new Map();
-  for (const list of groups.values()) {
-    if (list.length < 2) continue;
-    const [main] = [...list].sort((x, y) => (y.power ?? -1) - (x.power ?? -1) || !!x.signal - !!y.signal || (x.id < y.id ? -1 : 1));
-    for (const p of list) if (p !== main) mainOf.set(p.id, main);
+    if (hasFarms.has(p.id)) continue;
+    const near = edges.flatMap(([a, b]) => (a === p ? [b] : b === p ? [a] : []));
+    const [best] = near.filter((q) => rank(q, p) < 0 && !gone.has(p.id + ">" + q.id)).sort(rank);
+    if (best) step.set(p.id, best);
   }
 
-  // Each Farm's reason: the rule that tied it to its Main, else the one that put it in the group.
-  const reasonOf = (farm, main) =>
-    (edges.find(([a, b]) => a === farm && b === main) ?? edges.find(([a]) => a === farm) ?? edges.find(([, b]) => b === farm))[2];
-  return people
-    .filter((p) => mainOf.has(p.id) && !gone.has(p.id + ">" + mainOf.get(p.id).id))
-    .map((p) => ({ farmId: p.id, mainId: mainOf.get(p.id).id, reason: reasonOf(p, mainOf.get(p.id)) }));
+  // When that account is itself suggested as a Farm, the suggestion goes on to its Main, so the
+  // Council never links a Farm to a Farm. Ranks only rise along the way, so it ends.
+  const suggestions = [];
+  for (const p of people) {
+    const near = step.get(p.id);
+    if (!near) continue;
+    let main = near;
+    while (step.has(main.id)) main = step.get(main.id);
+    if (gone.has(p.id + ">" + main.id)) continue;
+    const why = reasonBetween(p, near);
+    suggestions.push({ farmId: p.id, mainId: main.id, reason: main === near ? why : `Via ${near.name}: ${why}` });
+  }
+  return suggestions;
 }
 
 // Top 200: the Character IDs of the 200 highest-power Governors in a snapshot's rows. Equal power
