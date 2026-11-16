@@ -265,7 +265,10 @@ test("a Live Week Pick the next reading would not match is refused; on a closed 
   // Pick for 9 the next reading still finds more than one Governor. "Odd" Picked for 9 would stick.
   const held = { nameHistory: [{ id: "1", name: "Known" }, { id: "8", name: "Other" }, { id: "7", name: "Other" }] };
   assert.equal(picksOn("2026-11-16", [{ row: 1, id: "9" }, { row: 2, id: "8" }], held).problem,
-    'Other would still be "needs ID" at the next reading: its name is on two rows or already belongs to another Governor. Clear the Pick and Pick it again once the week closes.');
+    'Other would still be "needs ID" at the next reading: its name is on another row, as written or as read, or already belongs to another Governor. Clear the Pick and Pick it again once the week closes.');
+  // A name another row was only read as: the next reading could not tell the two apart either.
+  const misread = [...readRows, { id: null, name: "0dd", fortCount: 2, names: ["0dd", "Odd"] }];
+  assert.match(picksOn("2026-11-16", [{ row: 1, id: "9" }], { rows: misread }).problem, /^Odd would still be "needs ID"/);
   assert.equal(picksOn("2026-11-09", [{ row: 2, id: "8" }], held).problem, null);
 });
 

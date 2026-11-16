@@ -197,7 +197,7 @@ export function checkPicks({ week, rows, picks, nameHistory, governors, liveWeek
     // A Live Week reading from before the reset is not the week the reader now writes.
     : live && !isLiveWeek(liveWeek, now) ? "The Monday reset has passed since this page loaded, so its reading is out of date. Reload the page."
     : twice.length ? `${twice.map(nameOf).join(", ")} ${twice.length === 1 ? "is" : "are"} on more than one row. A Governor appears once per Fort Week.`
-    : slips.length ? `${slips.join(", ")} would still be "needs ID" at the next reading: ${slips.length === 1 ? "its name is" : "their names are"} on two rows or already ${slips.length === 1 ? "belongs" : "belong"} to another Governor. Clear the Pick and Pick it again once the week closes.`
+    : slips.length ? `${slips.join(", ")} would still be "needs ID" at the next reading: ${slips.length === 1 ? "its name is" : "their names are"} on another row, as written or as read, or already ${slips.length === 1 ? "belongs" : "belong"} to another Governor. Clear the Pick and Pick it again once the week closes.`
     : !picks.length ? NO_PICKS
     : null;
   const nothingYet = problem === NO_PICKS;
