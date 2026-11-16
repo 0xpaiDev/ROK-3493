@@ -116,6 +116,23 @@ class LiveWeekReading(unittest.TestCase):
                 finally:
                     self.conn.execute("rollback to savepoint case_start")
 
+    def test_shared_pick_cases(self):
+        # The Council's Picks go into Name History, then the reader reads the same rows again: each row
+        # gets its nextIds entry. checkPicks in site/kingdom.js refuses exactly the Picks that don't stick.
+        for c in (c for c in CASES if "picks" in c):
+            with self.subTest(c["case"]):
+                self.conn.execute("savepoint case_start")
+                try:
+                    self.governors(c["governors"], c["nameHistory"])
+                    self.record(c["rows"])
+                    for p in c["picks"]:
+                        self.conn.execute("insert into governor_name (character_id, name) values (%s, %s) on conflict do nothing",
+                                          (p["id"], c["rows"][p["row"]]["name"]))
+                    self.record(c["rows"])
+                    self.assertEqual([r[0] for r in self.public_week()], c["nextIds"])
+                finally:
+                    self.conn.execute("rollback to savepoint case_start")
+
     def test_only_the_readers_sign_in_may_record_the_live_week(self):
         council = self.user("council-test@example.invalid")
         self.conn.execute("insert into council_member (email) values ('council-test@example.invalid')")

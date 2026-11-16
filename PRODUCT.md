@@ -9,7 +9,7 @@ web
 ## Users
 
 - **Kingdom members** of the Void Legion (Rise of Kingdoms, Kingdom 3493). They open the public site from a shared link, on phone and desktop about equally, to see where they placed in the Weekly Ranking, their Fort Average, GH Event results, Weekly Award winners, and the roster. Mostly fluent in English.
-- **The Council** (the King and officers). They sign in to the admin page with a magic link to set the Live Week's Reward Promise, resolve "needs ID" rows, fill and publish Weekly Awards, paste a closed Fort Week the reader missed, set a Governor's status, and link Farms to Mains. Logging GH Events is still to come (kingdom-admin ticket 10). Roster Snapshots arrive by themselves (the Roster job, ADR 0004).
+- **The Council** (the King and officers). They sign in to the admin page with a magic link to set the Live Week's Reward Promise, Pick the Governor for "needs ID" rows on any read Fort Week, fill and publish Weekly Awards, set a Governor's status, and link Farms to Mains. Logging GH Events is still to come (kingdom-admin ticket 10). Roster Snapshots arrive by themselves (the Roster job, ADR 0004).
 - **Outsiders** looking at the Kingdom, such as Governors considering joining. They see the same public site.
 
 ## Product Purpose
@@ -28,7 +28,7 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 
 ## Operating Context
 
-- The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset. The reader keeps the week current from the in-game ranking every night and its Sunday run closes it (ADR 0002, 0005); the Council can still paste a closed week by hand. The Council promises rewards during the week and fills and publishes the Weekly Awards (King's Chests or resources) after.
+- The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset. The reader keeps the week current from the in-game ranking every night and its Sunday run closes it (ADR 0002, 0005). Nobody logs a Fort Week by hand (ADR 0006). The Council promises rewards during the week and fills and publishes the Weekly Awards (King's Chests or resources) after.
 - Roster data comes from Lilith's official stats (the RoK Toolkit), saved daily as a dated Roster Snapshot by the Roster job (ADR 0004).
 - GH Events pay Golden Heads to the top 10, usually 20/10/5/4×7.
 - The link is shared in alliance chat and similar channels; visits cluster after each reset and event.
@@ -63,7 +63,7 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 2. **Fair before flattering.** Rankings and averages show what the data can vouch for; the rules behind them should be easy to find.
 3. **Recognition is public.** Placing well and receiving a Weekly Award should be something a member wants to share.
 4. **One glance after reset.** A member opening the link on any device finds their own standing quickly.
-5. **The Council's work stays light.** Admin tasks are paste, check, confirm; never a spreadsheet.
+5. **The Council's work stays light.** Admin tasks are pick, check, confirm; never a spreadsheet.
 
 ## Accessibility & Inclusion
 

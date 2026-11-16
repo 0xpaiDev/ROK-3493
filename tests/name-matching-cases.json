@@ -1,5 +1,5 @@
 {
-  "about": "The exact name-matching rule, stated once. tests/kingdom.test.js runs these against matchNames and supabase/tests/test_record_live_week.py runs them against record_live_week. Governors are { id, name } with name as the current name; nameHistory is { id, name }; ids is the Character ID each row gets, in row order, or null for \"needs ID\". Names and IDs are made up so they never meet real Governors. A case with \"liveOnly\": true holds only for the reader's Live Week rule (record_live_week and liveReadingIds), not for a pasted week, where the Council picks instead. A live row may carry names: every spelling the reader saw for it; it matches when those spellings, exactly, lead to one Governor.",
+  "about": "The exact name-matching rule, stated once: the reader's. tests/kingdom.test.js runs these against liveReadingIds and checkPicks, and supabase/tests/test_record_live_week.py runs them against record_live_week. Governors are { id, name } with name as the current name; nameHistory is { id, name }; ids is the Character ID each row gets, in row order, or null for \"needs ID\". Names and IDs are made up so they never meet real Governors. A row may carry names: every spelling the reader saw for it; it matches when those spellings, exactly, lead to one Governor. A case may carry picks, [{ row, id }]: Council Picks on the Live Week, each adding its row's name to Name History under id. nextIds is then the Character ID each row gets at the next reading of the same rows; checkPicks refuses exactly the Picks whose nextIds entry is not their id.",
   "cases": [
     {
       "case": "a renamed Governor is matched through Name History",
@@ -61,6 +61,15 @@
       ],
       "ids": [
         null
+      ],
+      "picks": [
+        {
+          "row": 0,
+          "id": "990000003"
+        }
+      ],
+      "nextIds": [
+        "990000003"
       ]
     },
     {
@@ -93,6 +102,15 @@
       ],
       "ids": [
         null
+      ],
+      "picks": [
+        {
+          "row": 0,
+          "id": "990000004"
+        }
+      ],
+      "nextIds": [
+        null
       ]
     },
     {
@@ -115,6 +133,16 @@
         }
       ],
       "ids": [
+        null,
+        null
+      ],
+      "picks": [
+        {
+          "row": 0,
+          "id": "990000006"
+        }
+      ],
+      "nextIds": [
         null,
         null
       ]
@@ -150,7 +178,6 @@
     },
     {
       "case": "a row an older reader flagged needsId stays \"needs ID\" even when its name matches",
-      "liveOnly": true,
       "governors": [
         {
           "id": "990000020",
@@ -171,7 +198,6 @@
     },
     {
       "case": "a row read two ways matches when its spellings lead to one Governor",
-      "liveOnly": true,
       "governors": [
         {
           "id": "990000022",
@@ -195,7 +221,6 @@
     },
     {
       "case": "a row read two ways whose spellings lead to two Governors stays \"needs ID\"",
-      "liveOnly": true,
       "governors": [
         {
           "id": "990000023",
@@ -219,11 +244,19 @@
       ],
       "ids": [
         null
+      ],
+      "picks": [
+        {
+          "row": 0,
+          "id": "990000023"
+        }
+      ],
+      "nextIds": [
+        null
       ]
     },
     {
       "case": "a row read two ways that shares a spelling with another row stays \"needs ID\"",
-      "liveOnly": true,
       "governors": [
         {
           "id": "990000025",
@@ -252,7 +285,6 @@
     },
     {
       "case": "two rows whose names lead to one Governor both stay \"needs ID\"",
-      "liveOnly": true,
       "governors": [
         {
           "id": "990000021",

@@ -529,16 +529,13 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .farm-list .of { flex: 1 1 200px; }
 
 /* Fort Week */
-.field.fw-text { flex: 1 1 100%; }
 .fw-rows { list-style: none; margin: 12px 0 0; padding: 0; }
-.fw-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto minmax(180px, 1.2fr) 80px; align-items: center; gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.fw-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto minmax(180px, 1.2fr); align-items: center; gap: 8px 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .fw-row.clash { box-shadow: inset 2px 0 0 var(--down); }
 .fw-row .pos { font: 14px var(--mono); color: var(--faint); text-align: center; }
 .fw-row .who { display: grid; gap: 2px; min-width: 0; }
 .fw-row .name { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 500; }
 .fw-row .count { min-width: 40px; text-align: right; font-weight: 600; }
-.fw-row .row-actions { justify-content: flex-end; }
-.btn.icon { width: 36px; padding: 0; justify-content: center; }
 
 /* Weekly Awards on the Fort Week screen: flat rows like the Farm list, the place in its metal */
 .field.narrow { flex: 0 1 96px; }
@@ -586,9 +583,6 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
   .main-head .sum { margin-left: 0; }
   .fw-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
   .fw-row .fw-gov { grid-column: 2 / 4; }
-  .fw-row .row-actions { grid-column: 2 / 4; justify-content: flex-start; }
-  .fw-row .row-actions:empty { display: none; }
-  .btn.icon { width: 44px; min-height: 44px; }
 }
 
 /* ---------- Motion ---------- */

@@ -25,6 +25,7 @@ Architecture decisions live in `docs/adr/`:
 - 0003: the reader runs nightly on the Oracle A1 under Redroid.
 - 0004: the Roster job saves a Roster Snapshot every day through `record_roster_snapshot`, the same sign-in. It is the only writer; the admin page no longer uploads.
 - 0005: a reading taken on Sunday from 22:00 UTC closes the Live Week Complete, any earlier one leaves it Partial.
+- 0006: Fort Weeks are never logged by hand. The Council only Picks Governors for "needs ID" rows; a closed-week Pick sets the row through one function.
 
 Only `site/data/content.js` is hand-edited: news posts and the Reward Promise card's standing intro and rules. The promise itself is set on the admin page.
 

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, matchNames, parseFortRows, governorsTwice, moveInTie, newFortNames, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -161,51 +161,9 @@ test("a needs-ID entry never collects the unlinked Farms", () => {
   assert.deepEqual(rows.map((r) => [r.id, r.farms.map((f) => f.id)]), [["a", []], [null, []], ["u", []]]);
 });
 
-// Name matching for a pasted Fort Week.
-const pasted = (name, fortCount) => ({ name, fortCount });
-
-test("a renamed Governor is matched through Name History", () => {
-  const history = [{ id: "111", name: "OldName" }, { id: "111", name: "NewName" }];
-  assert.deepEqual(matchNames([pasted("OldName", 12)], history), [{ name: "OldName", fortCount: 12, id: "111" }]);
-});
-
-test('an unknown name is left as "needs ID"', () => {
-  assert.equal(matchNames([pasted("Stranger", 5)], [{ id: "111", name: "Known" }])[0].id, null);
-});
-
-test('a name seen under two Character IDs is left as "needs ID", never guessed', () => {
-  const history = [{ id: "111", name: "Twin" }, { id: "222", name: "Twin" }];
-  assert.equal(matchNames([pasted("Twin", 9)], history)[0].id, null);
-});
-
-test('rows with the same pasted name stay separate rows, each "needs ID"', () => {
-  const out = matchNames([pasted("Echo", 30), pasted("Echo", 20)], [{ id: "111", name: "Echo" }]);
-  assert.deepEqual(out, [{ name: "Echo", fortCount: 30, id: null }, { name: "Echo", fortCount: 20, id: null }]);
-});
-
-test("each pasted line gives a name and its Fort Count", () => {
-  assert.deepEqual(parseFortRows("vøDarkBlaCK 42\nFKK 10\t1,204\n\n"), [pasted("vøDarkBlaCK", 42), pasted("FKK 10", 1204)]);
-});
-
-test("a pasted line without a Fort Count is refused with its line number", () => {
-  assert.throws(() => parseFortRows("Alpha 12\nBravo\n"), { message: 'Line 2 has no Fort Count at the end: "Bravo".' });
-});
-
 test("a Governor appearing twice in one Fort Week is caught; needs-ID rows are not", () => {
   const rows = [{ name: "A", fortCount: 9, id: "111" }, { name: "A2", fortCount: 4, id: "111" }, { name: "X", fortCount: 3, id: null }, { name: "X", fortCount: 2, id: null }];
   assert.deepEqual(governorsTwice(rows), ["111"]);
-});
-
-test("the Council moves a Governor within its tie, and never past a different Fort Count", () => {
-  const rows = [entry("a", 20), entry("b", 10), entry("c", 10)];
-  assert.deepEqual(moveInTie(rows, 2, -1).map((e) => e.id), ["a", "c", "b"]);
-  assert.deepEqual(moveInTie(rows, 1, -1).map((e) => e.id), ["a", "b", "c"]);
-});
-
-test("a name the Council picked a Governor for joins Name History; known names and needs-ID rows do not", () => {
-  const rows = [{ name: "Odd Name", fortCount: 9, id: "111" }, { name: "Known", fortCount: 8, id: "222" }, { name: "X", fortCount: 3, id: null }];
-  const history = [{ id: "111", name: "Real" }, { id: "222", name: "Known" }];
-  assert.deepEqual(newFortNames(rows, history, "2026-11-02"), [{ id: "111", name: "Odd Name", firstSeen: "2026-11-02" }]);
 });
 
 test("a Fort Week starts on a Monday; any other day or a malformed date is refused", () => {
@@ -213,12 +171,6 @@ test("a Fort Week starts on a Monday; any other day or a malformed date is refus
   assert.equal(isFortWeekStart("2026-11-03"), false);
   assert.equal(isFortWeekStart("2026-11-2"), false);
   assert.equal(isFortWeekStart(""), false);
-});
-
-test("a Governor's current name matches a pasted row before any Roster Snapshot adds it to Name History", () => {
-  const seen = namesToMatch([{ id: "222", name: "Fresh" }], [{ character_id: "111", name: "OldName" }]);
-  const out = matchNames([{ name: "Fresh", fortCount: 7 }, { name: "OldName", fortCount: 5 }], seen);
-  assert.deepEqual(out.map((r) => r.id), ["222", "111"]);
 });
 
 // The Live Week: the Fort Week the moment falls in, until the Monday reset closes it.
@@ -237,8 +189,15 @@ const shared = JSON.parse(readFileSync(new URL("./name-matching-cases.json", imp
 for (const c of shared.cases) {
   test(`shared matching case: ${c.case}`, () => {
     const seen = namesToMatch(c.governors, c.nameHistory.map((n) => ({ character_id: n.id, name: n.name })));
-    if (!c.liveOnly) assert.deepEqual(matchNames(c.rows, seen).map((r) => r.id), c.ids);
     assert.deepEqual(liveReadingIds(c.rows, seen), c.ids);
+  });
+  // record_live_week gives nextIds once the Picks are in Name History; checkPicks must refuse exactly the
+  // Picks that would not stick.
+  if (c.picks) test(`shared Pick case: ${c.case}`, () => {
+    const seen = namesToMatch(c.governors, c.nameHistory.map((n) => ({ character_id: n.id, name: n.name })));
+    const rows = c.rows.map((r, i) => ({ ...r, id: c.ids[i] }));
+    const refused = c.picks.filter((p) => checkPicks({ week: "2026-11-16", rows, picks: [p], nameHistory: seen, governors: c.governors, liveWeek: "2026-11-16", now: tue17 }).problem);
+    assert.deepEqual(refused, c.picks.filter((p) => c.nextIds[p.row] !== p.id));
   });
 }
 
@@ -255,6 +214,77 @@ test("a Council pick sticks at the next reading only for a name one row holds an
   // A row read two ways: a pick for one of its spellings matches it, unless another spelling is someone else's.
   assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, names: ["Odd", "Οdd"] }], pick("Odd", "9")), ["9"]);
   assert.deepEqual(liveReadingIds([{ name: "Odd", fortCount: 5, names: ["Odd", "Known"] }], pick("Odd", "9")), [null]);
+});
+
+// Picks: the Council's choice of Governor for a "needs ID" row of a read Fort Week. On Tuesday 17 Nov
+// the Live Week is the week of 16 Nov and the week of 9 Nov is closed.
+const tue17 = new Date("2026-11-17T12:00:00Z");
+const readRows = [{ id: "1", name: "Known", fortCount: 9 }, { id: null, name: "Odd", fortCount: 5 }, { id: null, name: "Other", fortCount: 3 }];
+const picksOn = (week, picks, extra = {}) => checkPicks({ week, rows: readRows, picks, nameHistory: [{ id: "1", name: "Known" }],
+  governors: [gov("1", "Known"), gov("9", "Real Nine"), gov("8", "Real Eight")], liveWeek: "2026-11-16", now: tue17, ...extra });
+
+test("a Pick puts the row's name into Name History under the picked Governor, on a closed week or the Live Week", () => {
+  assert.deepEqual(picksOn("2026-11-09", [{ row: 1, id: "9" }]),
+    { live: false, problem: null, nothingYet: false, newNames: [{ id: "9", name: "Odd", firstSeen: "2026-11-09" }] });
+  assert.deepEqual(picksOn("2026-11-16", [{ row: 1, id: "9" }]),
+    { live: true, problem: null, nothingYet: false, newNames: [{ id: "9", name: "Odd", firstSeen: "2026-11-16" }] });
+});
+
+test("with no Picks there is nothing to save yet, on a closed week or the Live Week", () => {
+  for (const week of ["2026-11-09", "2026-11-16"]) {
+    const out = picksOn(week, []);
+    assert.deepEqual([out.problem, out.nothingYet, out.newNames], ['Pick a Governor for a "needs ID" row first.', true, []]);
+  }
+});
+
+test("the page treats the week its reading was loaded for as the Live Week, and the week now in progress too", () => {
+  assert.deepEqual([picksOn("2026-11-16", []).live, picksOn("2026-11-09", []).live], [true, false]);
+  // Loaded on Sunday 15 Nov, still open on Tuesday: both weeks are live here, and the reset has passed.
+  assert.deepEqual([picksOn("2026-11-09", [], { liveWeek: "2026-11-09" }).live, picksOn("2026-11-16", [], { liveWeek: "2026-11-09" }).live], [true, true]);
+});
+
+test("a Pick is refused on a date that is not a Monday", () => {
+  assert.equal(picksOn("2026-11-10", [{ row: 1, id: "9" }]).problem, "2026-11-10 is not a Monday. A Fort Week starts on Monday.");
+});
+
+test("a Live Week Pick is refused once the Monday reset has passed since the page loaded", () => {
+  const out = picksOn("2026-11-09", [{ row: 1, id: "9" }], { liveWeek: "2026-11-09" });
+  assert.deepEqual([out.problem, out.nothingYet], ["The Monday reset has passed since this page loaded, so its reading is out of date. Reload the page.", false]);
+});
+
+test("a Pick for a Governor already on the week, or the same Governor Picked twice, is refused on either week", () => {
+  for (const week of ["2026-11-09", "2026-11-16"]) {
+    assert.equal(picksOn(week, [{ row: 1, id: "1" }]).problem, "Known is on more than one row. A Governor appears once per Fort Week.");
+    const twice = picksOn(week, [{ row: 1, id: "9" }, { row: 2, id: "9" }]);
+    assert.deepEqual([twice.problem, twice.nothingYet], ["Real Nine is on more than one row. A Governor appears once per Fort Week.", false]);
+  }
+});
+
+test("a Live Week Pick the next reading would not match is refused; on a closed week the same Pick goes through", () => {
+  // "Other" is already a name of Governor 8 and Governor 7, so the reading could not match it, and after a
+  // Pick for 9 the next reading still finds more than one Governor. "Odd" Picked for 9 would stick.
+  const held = { nameHistory: [{ id: "1", name: "Known" }, { id: "8", name: "Other" }, { id: "7", name: "Other" }] };
+  assert.equal(picksOn("2026-11-16", [{ row: 1, id: "9" }, { row: 2, id: "8" }], held).problem,
+    'Other would still be "needs ID" at the next reading: its name is on another row, as written or as read, or already belongs to another Governor. Clear the Pick and Pick it again once the week closes.');
+  // A name another row was only read as: the next reading could not tell the two apart either.
+  const misread = [...readRows, { id: null, name: "0dd", fortCount: 2, names: ["0dd", "Odd"] }];
+  assert.match(picksOn("2026-11-16", [{ row: 1, id: "9" }], { rows: misread }).problem, /^Odd would still be "needs ID"/);
+  assert.equal(picksOn("2026-11-09", [{ row: 2, id: "8" }], held).problem, null);
+});
+
+test("a closed-week Pick on a name another row of the week also carries sets the row but adds no name", () => {
+  // Two Governors read as "Twin": Name History under one of them would hand the other's later rows to it.
+  const twins = [...readRows, { id: null, name: "Odd", fortCount: 2 }];
+  const out = picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: twins });
+  assert.deepEqual([out.problem, out.newNames], [null, []]);
+  // Another row read more than one way, one spelling the Picked name: the same two Governors behind it.
+  const misread = [...readRows, { id: null, name: "0dd", fortCount: 2, names: ["0dd", "Odd"] }];
+  assert.deepEqual(picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: misread }).newNames, []);
+});
+
+test("a Pick under a name the Governor already has in Name History adds no name", () => {
+  const held = { nameHistory: [{ id: "8", name: "Other" }, { id: "7", name: "Other" }] };
+  assert.deepEqual(picksOn("2026-11-09", [{ row: 2, id: "8" }, { row: 1, id: "9" }], held).newNames, [{ id: "9", name: "Odd", firstSeen: "2026-11-09" }]);
 });
 
 // Weekly Awards: { week, id, place, award, note }. Governors carry their kind.
