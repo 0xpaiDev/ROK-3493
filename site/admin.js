@@ -142,10 +142,10 @@ function setTaskStatus(id, meta, badge = "", kind = "") {
   b.className = "badge" + (kind ? " " + kind : "");
 }
 
-async function allRows(table, columns) {
+async function allRows(table, columns, where = (q) => q) {
   const out = [];
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from(table).select(columns).range(from, from + 999);
+    const { data, error } = await where(supabase.from(table).select(columns)).range(from, from + 999);
     if (error) throw new Error(`${table}: ${error.message}`);
     out.push(...data);
     if (data.length < 1000) return out;
@@ -162,14 +162,22 @@ let farmShowAll = false;
 let farmBarFrom = 0;
 
 async function showFarmLinks(section, message = "") {
-  let governors, dismissed;
+  let governors, dismissed, history;
   try {
-    const [g, d] = await Promise.all([
+    // Power from the latest Roster Snapshot decides which account in a group is the Main.
+    const latest = await supabase.from("roster_snapshot").select("id").order("taken_on", { ascending: false }).limit(1);
+    if (latest.error) throw new Error(`roster_snapshot: ${latest.error.message}`);
+    const snapshotId = latest.data[0]?.id;
+    const [g, d, n, p] = await Promise.all([
       allRows("governor", "character_id,current_name,kind,main_character_id"),
       allRows("farm_link_dismissal", "farm_character_id,main_character_id"),
+      allRows("governor_name", "character_id,name"),
+      snapshotId == null ? [] : allRows("roster_snapshot_row", "character_id,power", (q) => q.eq("snapshot_id", snapshotId)),
     ]);
-    governors = g.map((r) => ({ id: r.character_id, name: r.current_name, kind: r.kind, mainId: r.main_character_id }));
+    const power = new Map(p.map((r) => [r.character_id, r.power]));
+    governors = g.map((r) => ({ id: r.character_id, name: r.current_name, kind: r.kind, mainId: r.main_character_id, power: power.get(r.character_id) ?? null }));
     dismissed = d.map((r) => ({ farmId: r.farm_character_id, mainId: r.main_character_id }));
+    history = n.map((r) => ({ id: r.character_id, name: r.name }));
   } catch (e) {
     section.innerHTML = `<div class="eyebrow">Farm links</div><p class="admin-msg" role="status">Could not load the Governors: ${esc(e.message)}</p>`;
     setTaskStatus("farm-links", "Could not load");
@@ -185,7 +193,7 @@ async function showFarmLinks(section, message = "") {
 
   // Open suggestions plus this page-load's decisions. A decision whose pair is open again
   // (undone elsewhere, say with Make Main) is dropped.
-  const open = farmLinkSuggestions(governors, dismissed);
+  const open = farmLinkSuggestions(governors, dismissed, history);
   const openKeys = new Set(open.map(key));
   for (const k of farmDecisions.keys()) if (openKeys.has(k)) farmDecisions.delete(k);
   const items = [...open.map((s) => ({ ...s, state: null })), ...farmDecisions.values()];
@@ -216,11 +224,6 @@ async function showFarmLinks(section, message = "") {
   const progress = items.length ? (linked + dismissedNow) / items.length : 0;
   setTaskStatus("farm-links", `${farms.length} Farms`, open.length ? String(open.length) : "");
 
-  // The reason reads "<Main> + F1"; under its Main only the marker is news.
-  const marker = (s) => {
-    const m = nameOf(s.mainId);
-    return s.reason.startsWith(m) ? s.reason.slice(m.length).trim() : s.reason;
-  };
   const groupHtml = (g, gi) => {
     const openHere = g.list.filter((s) => !s.state).length;
     const linkedHere = g.list.filter((s) => s.state === "linked").length;
@@ -238,7 +241,7 @@ async function showFarmLinks(section, message = "") {
         <li class="farm-row${s.state ? " " + s.state : ""}">
           <svg class="link-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 3v10a4 4 0 0 0 4 4h9M15 13l4 4-4 4"/></svg>
           <span class="who">${gov(s.farmId, nameOf(s.farmId))}</span>
-          <span class="why" title="Why it was suggested">${esc(marker(s))}</span>
+          <span class="why" title="The rule that suggested it">${esc(s.reason)}</span>
           <span class="row-actions">${s.state
             ? `<span class="state ${s.state}">${s.state === "linked" ? "Linked" : "Dismissed"}</span>
                <button class="btn quiet sm" type="button" data-undo="${esc(key(s))}">Undo</button>`
@@ -256,7 +259,7 @@ async function showFarmLinks(section, message = "") {
     <div class="reveal">
       <div class="eyebrow">Farm links</div>
       <h1 class="task-title">Link Farms to their Mains</h1>
-      <p class="task-lede">Suggested from similar names, grouped by Main. Nothing links until you confirm. A linked Farm is credited under its Main, never added to its total.</p>
+      <p class="task-lede">Suggested from similar names and Name History, grouped by Main: the highest-power account in each group. Each row says which rule found it. Nothing links until you confirm. A linked Farm is credited under its Main, never added to its total.</p>
     </div>
     <p class="admin-msg" role="status">${esc(message)}</p>
     ${items.length ? `
