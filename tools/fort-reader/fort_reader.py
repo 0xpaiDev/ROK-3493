@@ -29,6 +29,8 @@ from merge import check_pinned, merge_frames, paste_text
 HERE = Path(__file__).resolve().parent
 SWIPE = (0.80, 0.40)  # each step drags the list up ~3.5 of its ~6 visible rows: 2+ rows overlap,
                       # so a row cut off at the edge of one screen is whole on the next
+SWIPE_BACK = (0.45, 0.65)  # drags the list down ~2 rows, to bring back a row a step went past
+SETTLE_LOOKS = 3  # looks, about a second apart, before a swipe counts as ignored
 MAX_SCREENS = 40
 
 
@@ -106,36 +108,78 @@ def capture(run_dir, client, read_screen):
     if not read_screen(client, shot).is_fort_ranking:
         stopped(run_dir, shot, "fort_ranking", "the reader opened the Fort Destroyer Rankings, "
                 "but the screen doesn't read as that panel.")
+    return scroll_and_read(device, lambda shot: read_screen(client, shot), run_dir, game.list_changed)
+
+
+def swipe_and_settle(device, swipe, before, changed, sleep):
+    """Swipe once, then return the screenshot once the list has stopped moving, or None if it never
+    moved. Redroid on the A1 can draw a swipe a second or more after ADB returns. Swiping again on
+    that early look lands both swipes, and the double step carried ranks 24 and 52 past the top
+    unread on 2026-11-15."""
+    device.swipe(*swipe)
+    for _ in range(SETTLE_LOOKS):
+        shot = device.screenshot()
+        if changed(before, shot):
+            for _ in range(SETTLE_LOOKS):  # still gliding: wait until two looks agree
+                sleep(0.5)
+                again = device.screenshot()
+                if not changed(shot, again):
+                    break
+                shot = again
+            return shot
+        sleep(1)
+    return None
+
+
+def skipped_rows(previous, screen):
+    """Does this screen start below the rank after the previous screen's last row?"""
+    if not previous.rows or not screen.rows:
+        return False
+    return min(r.rank for r in screen.rows) > max(r.rank for r in previous.rows) + 1
+
+
+def scroll_and_read(device, read, run_dir, changed, sleep=time.sleep):
+    """Swipe the open ranking from the top to its end, reading each screen. Returns the Screens,
+    plus "limit" or "no-zeros" when the end of the list is in doubt."""
     # Back to the top: swipe down until the list stops moving.
     before = device.screenshot()
     for _ in range(MAX_SCREENS):
         device.swipe(0.35, 0.90, ms=400)
         after = device.screenshot()
-        if not game.list_changed(before, after):
+        if not changed(before, after):
             break
         before = after
     shots, screens = [], []
     ended_without_zeros = False
     while len(shots) < MAX_SCREENS:
-        shot = device.screenshot()
         if shots:
             for _ in range(3):  # a swipe is now and then ignored: retry before calling it the end
-                device.swipe(*SWIPE)
-                shot = device.screenshot()
-                if game.list_changed(shots[-1], shot):
+                shot = swipe_and_settle(device, SWIPE, shots[-1], changed, sleep)
+                if shot is not None:
                     break
             else:
                 ended_without_zeros = True
                 break  # the list stopped moving: we're at the end
-        screen = read_screen(client, shot)
-        for _ in range(3):  # the first screen must show rank 1; the list can stop short of the top
-            if shots or any(r.rank == 1 for r in screen.rows):
-                break
-            device.swipe(0.35, 0.90, ms=600)
-            time.sleep(1)
+            screen = read(shot)
+            for _ in range(3):  # a step too long carried a row past the top unread: back up to it
+                if not skipped_rows(screens[-1], screen):
+                    break
+                back = swipe_and_settle(device, SWIPE_BACK, shot, changed, sleep)
+                if back is None:
+                    break  # the merge check reports the gap
+                shot, screen = back, read(back)
+        else:
             shot = device.screenshot()
-            screen = read_screen(client, shot)
-        shot.save(run_dir / f"screen-{len(shots) + 1:02d}.png")
+            screen = read(shot)
+            for _ in range(3):  # the first screen must show rank 1; the list can stop short of the top
+                if any(r.rank == 1 for r in screen.rows):
+                    break
+                device.swipe(0.35, 0.90, ms=600)
+                sleep(1)
+                shot = device.screenshot()
+                screen = read(shot)
+        if run_dir is not None:
+            shot.save(run_dir / f"screen-{len(shots) + 1:02d}.png")
         shots.append(shot)
         screens.append(screen)
         print(f"  screen {len(shots)} read", end="\r")

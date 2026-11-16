@@ -31,7 +31,7 @@ Only `site/data/content.js` is hand-edited: news posts and the Reward Promise ca
 ## Tests
 
 - Site rules: `npm test` (Node's test runner over `tests/`).
-- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate test_alert test_roster`.
+- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_capture test_merge test_game test_navigate test_alert test_roster`.
 - Database functions: `py -m unittest discover -s supabase/tests` with psycopg on `PYTHONPATH`. They run against the live project inside a rolled-back transaction. `tests/name-matching-cases.json` and `tests/roster-snapshot-cases.json` are shared by the JS and SQL tests so the two can't drift.
 
 ## Gotchas

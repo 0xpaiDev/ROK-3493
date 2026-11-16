@@ -176,4 +176,4 @@ Rows from overlapping screens are joined by rank. The run lists problems instead
 
 Swiping the game from a script is automation, which Lilith's terms forbid. Run it on an account you can afford to lose.
 
-Tests: `.venv\Scripts\python.exe -m unittest test_merge test_game test_navigate test_alert test_roster`
+Tests: `.venv\Scripts\python.exe -m unittest test_capture test_merge test_game test_navigate test_alert test_roster`
