@@ -51,15 +51,31 @@ class Navigator:
         from read import name_screen
         self.device, self.client, self.name_screen = device, client, name_screen
         self.shot = None
+        self.attempt = 0
+
+    def restart(self):
+        self.attempt += 1
+        print(f"Restarting the game and opening the Fort Destroyer Rankings (attempt {self.attempt}):")
+        self._device_call(self.device.restart_game)
+        time.sleep(5)  # the game takes a moment to come to the front: until then the launcher shows
 
     def look(self):
-        self.shot = self.device.screenshot()
-        screen = self.name_screen(self.client, self.shot)
+        self.shot = self._device_call(self.device.screenshot)
+        screen = self._device_call(self.name_screen, self.client, self.shot)
         print(f"  {time.strftime('%H:%M:%S')} {screen}")
         return screen
 
     def tap(self, x, y):
-        self.device.tap(x, y)
+        self._device_call(self.device.tap, x, y)
+
+    def _device_call(self, f, *args):
+        """No network for Haiku, or ADB lost the device: a Stopped on the last screen seen, so the
+        run starts over from a closed game like after any other stop."""
+        from navigate import Stopped
+        try:
+            return f(*args)
+        except (anthropic.APIError, subprocess.SubprocessError) as e:
+            raise Stopped("last", f"the run failed while opening the ranking ({e}).") from e
 
     def wait(self, seconds):
         time.sleep(seconds)
@@ -78,23 +94,26 @@ def stopped(run_dir, shot, screen, reason):
 
 
 def open_from_closed(run_dir, device, client):
-    """Restart the game and tap through to the Fort Destroyer Rankings. A screen that needs
-    Petras (a login, an app update, a download past its limit, a screen it doesn't know) ends
-    the run with its name and a saved screenshot, before anything is read or sent."""
-    from navigate import Stopped, open_ranking
+    """Restart the game and tap through to the Fort Destroyer Rankings, starting over once from a
+    closed game if the way there stops (FORT_READER_ATTEMPTS, 2 by default). A screen that needs
+    Petras (a login, an app update), or a stop on the last attempt, ends the run with its name and a
+    saved screenshot, before anything is read or sent."""
+    import navigate
 
     limit = float(os.environ.get("FORT_READER_LOADING_LIMIT", "600"))
-    print("Restarting the game and opening the Fort Destroyer Rankings:")
-    device.restart_game()
-    time.sleep(5)  # the game takes a moment to come to the front: until then the launcher shows
+    attempts = int(os.environ.get("FORT_READER_ATTEMPTS", "2"))
     nav = Navigator(device, client)
+
+    def failed(stop):
+        # Kept, so the email of a run whose next attempt stops too shows how the first one ended.
+        if nav.shot is not None:
+            nav.shot.save(run_dir / f"attempt-{nav.attempt}-stopped-{stop.screen}.png")
+        print(f"  Stopped on the {stop.screen} screen: {stop.reason} Starting over.")
+
     try:
-        open_ranking(nav, loading_limit=limit)
-    except Stopped as stop:
+        navigate.open_from_closed(nav, attempts=attempts, loading_limit=limit, failed=failed)
+    except navigate.Stopped as stop:
         stopped(run_dir, nav.shot, stop.screen, stop.reason)
-    except (anthropic.APIError, subprocess.SubprocessError) as e:
-        # No network for Haiku, or ADB lost the device: the last screen seen is still worth keeping.
-        stopped(run_dir, nav.shot, "last", f"the run failed while opening the ranking ({e}).")
     time.sleep(2)  # let the list draw before the first screenshot
 
 

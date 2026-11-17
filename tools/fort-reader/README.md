@@ -39,12 +39,13 @@ Every run force-stops the game, starts it again, and has Haiku name each screen 
 | alliance_rankings | Fort Destroyer (400, 690) | the Rankings tiles |
 | fort_ranking | done | the Fort Destroyer Rankings |
 
-The run stops, saves `stopped-<screen>.png` in its `runs\` folder and sends nothing when it meets:
+The way there gets `FORT_READER_ATTEMPTS` tries in all (default 2): any stop below except login and update closes the game and starts over, keeping the first try's screen as `attempt-1-stopped-<screen>.png`. The run stops, saves `stopped-<screen>.png` in its `runs\` folder and sends nothing when the last try meets:
 
 - **login**: log the Reader Account in by hand.
 - **update**: install the new game version by hand.
 - **loading** for longer than `FORT_READER_LOADING_LIMIT` seconds in all (default 600): a large download or no network.
-- **unknown**: any screen not in the table, such as a new popup. Close it by hand and, if it comes back, add it to `navigate.PATH`.
+- **unknown** for 6 looks in a row (about 30 s; a screen in passing, like the city dimmed while the game restarts, is waited out): any screen not in the table, such as a new popup. Close it by hand and, if it comes back, add it to `navigate.PATH`.
+- **a lost device or no network for Haiku** (stops as **last**).
 - **the same screen tapped three times** without moving on, such as a "Login failed" box over the city that keeps coming back (the account is open somewhere else).
 
 It never guesses a tap and never types a password. Starting the game from closed takes about 1 to 2 minutes on BlueStacks.
