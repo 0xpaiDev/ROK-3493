@@ -149,7 +149,8 @@ begin
     select x.n, (x.v ->> 'entry')::bigint as entry, x.v ->> 'character_id' as character_id,
            e.id as found, e.name, e.character_id as row_id,
            count(*) over (partition by x.v ->> 'character_id') as times,
-           count(*) over (partition by x.v ->> 'entry') as row_times
+           -- Counted on the cast, as the rows are matched: "042" and 42 are one row.
+           count(*) over (partition by (x.v ->> 'entry')::bigint) as row_times
     from jsonb_array_elements(picks) with ordinality as x(v, n)
     left join fort_entry e on e.id = (x.v ->> 'entry')::bigint and e.week = pick_governor.week
     order by x.n

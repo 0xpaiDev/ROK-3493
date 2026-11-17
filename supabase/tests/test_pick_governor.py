@@ -146,10 +146,11 @@ class Pick(unittest.TestCase):
 
     def test_two_picks_for_one_row_are_refused(self):
         # Two Governors Picked for one row would both get its name in Name History.
-        for label, ids in {"two Governors": ("990000102", "990000103"), "one Governor twice": ("990000102", "990000102")}.items():
+        for label, second in {"two Governors": (self.odd, "990000103"), "one Governor twice": (self.odd, "990000102"),
+                              "the row's id written another way": (f"0{self.odd}", "990000103")}.items():
             with self.subTest(label):
                 self.refused(psycopg.errors.InvalidParameterValue, '"Case Odd" is Picked more than once', WEEK,
-                             [(self.odd, ids[0]), (self.odd, ids[1])])
+                             [(self.odd, "990000102"), second])
 
     def test_a_pick_on_a_row_of_another_week_is_refused(self):
         row = self.entry(CASE_WEEK, None, "Case Elsewhere", 1)
