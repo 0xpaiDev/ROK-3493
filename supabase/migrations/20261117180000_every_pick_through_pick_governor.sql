@@ -148,13 +148,18 @@ begin
   for p in
     select x.n, (x.v ->> 'entry')::bigint as entry, x.v ->> 'character_id' as character_id,
            e.id as found, e.name, e.character_id as row_id,
-           count(*) over (partition by x.v ->> 'character_id') as times
+           count(*) over (partition by x.v ->> 'character_id') as times,
+           count(*) over (partition by x.v ->> 'entry') as row_times
     from jsonb_array_elements(picks) with ordinality as x(v, n)
     left join fort_entry e on e.id = (x.v ->> 'entry')::bigint and e.week = pick_governor.week
     order by x.n
   loop
     if p.found is null then
       raise exception 'The week of % has no row %. Reload the page.', week, p.entry using errcode = '22023';
+    end if;
+    -- Two Governors Picked for one row would both get its name in Name History.
+    if p.row_times > 1 then
+      raise exception 'Row "%" is Picked more than once. A row gets one Governor.', p.name using errcode = '22023';
     end if;
     if p.row_id is not null then
       raise exception 'Row "%" already has Character ID %. A Pick resolves a "needs ID" row only.', p.name, p.row_id
@@ -174,6 +179,8 @@ begin
   join fort_entry e on e.id = (x ->> 'entry')::bigint
   where not exists (select 1 from fort_entry o where o.week = pick_governor.week and o.id <> e.id
                     and e.name = any(coalesce(o.spellings, array[o.name])))
+    -- A Governor's current name already counts as seen (live_week_matches, checkPicks): nothing to add.
+    and not exists (select 1 from governor g where g.character_id = x ->> 'character_id' and g.current_name = e.name)
   on conflict do nothing;
 
   if week = live_week then

@@ -144,6 +144,13 @@ class Pick(unittest.TestCase):
         self.refused(psycopg.errors.InvalidParameterValue, "Case Real is on more than one row", WEEK,
                      [(self.odd, "990000102"), (self.other, "990000102")])
 
+    def test_two_picks_for_one_row_are_refused(self):
+        # Two Governors Picked for one row would both get its name in Name History.
+        for label, ids in {"two Governors": ("990000102", "990000103"), "one Governor twice": ("990000102", "990000102")}.items():
+            with self.subTest(label):
+                self.refused(psycopg.errors.InvalidParameterValue, '"Case Odd" is Picked more than once', WEEK,
+                             [(self.odd, ids[0]), (self.odd, ids[1])])
+
     def test_a_pick_on_a_row_of_another_week_is_refused(self):
         row = self.entry(CASE_WEEK, None, "Case Elsewhere", 1)
         self.refused(psycopg.errors.InvalidParameterValue, "Reload the page", WEEK, [(row, "990000102")])
