@@ -389,7 +389,7 @@ const check = ({ error }, what) => { if (error) throw new Error(`${what}: ${erro
 
 // ---------- Fort Week (tickets 08, 17) ----------
 // The reader reads every Fort Week (ADR 0006). The Council Picks the Governor for each "needs ID" row it could not
-// match; checkPicks in the rules module decides whether the Picks can be saved, and this section reads, shows and writes.
+// match; checkPicks in the rules module says before Save what pick_governor will refuse, and this section reads, shows and writes.
 
 async function loadFortWeekState() {
   const [governors, names, weeks, entries, awards] = await Promise.all([
@@ -417,7 +417,7 @@ async function loadFortWeekState() {
 }
 
 // A read Fort Week's rows in ranking order: Fort Count, then the reading's order. `entry` is the row's own id, which a
-// closed-week Pick names. A row read more than one way carries its spellings (names); one an older reader flagged
+// Pick names. A row read more than one way carries its spellings (names); one an older reader flagged
 // without them is needsId, which the next reading never matches.
 async function loadWeekRows(week) {
   const res = await supabase.from("fort_entry").select("id,character_id,name,fort_count,spellings,read_two_ways").eq("week", week)
@@ -447,7 +447,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
   let loadError = "";
   let picks = []; // the Council's Picks, [{ row, id }], row an index into rows
   let msgText = message;
-  // One rule decides whether the Picks can be saved: drawing asks it, and so does Save at click time.
+  // The page's preflight: drawing asks it, and so does Save at click time. pick_governor is what refuses.
   const judge = (now = Date.now()) => checkPicks({ week, rows: rows ?? [], picks, nameHistory: state.nameHistory,
     governors: state.governors, liveWeek: state.liveWeek, now });
 
@@ -794,45 +794,23 @@ async function showFortWeek(section, message = "", startWeek = null) {
       const w = week, saving = picks, read = rows;
       body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = true));
       msg.textContent = "Saving…";
-      if (live) {
-        // Only the reader writes the Live Week (ADR 0002): its Picks go into Name History and nothing else.
-        try {
-          check(await saveNames(newNames), "Name History");
-          showFortWeek(section, `Added ${newNames.length} ${newNames.length === 1 ? "name" : "names"} to Name History. The reader's next reading of the Live Week matches ${newNames.length === 1 ? "it" : "them"}.`, w);
-        } catch (err) {
-          body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
-          msg.textContent = `Could not save: ${err.message}`;
-        }
+      // Every Pick goes through pick_governor in one call, so they save together or not at all. It decides from
+      // the clock whether the week is the Live Week; on the Live Week the Picks go into Name History only (ADR 0002).
+      const awarded = !live && published(w).length > 0;
+      const { error } = await supabase.rpc("pick_governor", { week: w, picks: saving.map((p) => ({ entry: read[p.row].entry, character_id: p.id })) });
+      if (error) {
+        body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
+        msg.textContent = `Could not save: ${error.message} Nothing changed.`;
         return;
       }
-      // A closed week: each Pick sets its row and adds its name to Name History in one call (pick_governor).
-      const awarded = published(w).length > 0;
-      let done = 0;
-      for (const p of saving) {
-        const { error } = await supabase.rpc("pick_governor", { week: w, entry: read[p.row].entry, character_id: p.id });
-        if (error) {
-          const why = `Could not save the Pick for ${read[p.row].name}: ${error.message}`;
-          if (!done) {
-            body.querySelectorAll(".save-bar button").forEach((x) => (x.disabled = false));
-            msg.textContent = `${why} Nothing changed.`;
-          } else showFortWeek(section, `${why} The ${done} ${done === 1 ? "Pick" : "Picks"} before it ${done === 1 ? "was" : "were"} saved.`, w);
-          return;
-        }
-        done++;
-      }
-      showFortWeek(section, `Saved ${done} ${done === 1 ? "Pick" : "Picks"} for the week of ${dayMonth(w)}. ${done === 1 ? "It is" : "They are"} on Fort Rankings now.${awarded
+      const n = saving.length;
+      if (live) showFortWeek(section, `Saved ${n} ${n === 1 ? "Pick" : "Picks"}. ${newNames.length} ${newNames.length === 1 ? "name went" : "names went"} into Name History; the reader's next reading of the Live Week matches ${n === 1 ? "it" : "them"}.`, w);
+      else showFortWeek(section, `Saved ${n} ${n === 1 ? "Pick" : "Picks"} for the week of ${dayMonth(w)}. ${n === 1 ? "It is" : "They are"} on Fort Rankings now.${awarded
         ? " The ranking changed and this week's Weekly Awards are published: check them, and run Fill again if a paid place moved." : ""}`, w);
     });
   }
 
   loadRows();
-}
-
-// Adds the names of Live Week Picks to Name History; a name already there is left alone.
-function saveNames(newNames) {
-  return supabase.from("governor_name").upsert(
-    newNames.map((n) => ({ character_id: n.id, name: n.name, first_seen: n.firstSeen })),
-    { onConflict: "character_id,name", ignoreDuplicates: true });
 }
 
 // ---------- Reward Promise (ticket 16) ----------

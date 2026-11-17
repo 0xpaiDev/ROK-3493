@@ -245,7 +245,7 @@ export function namesToMatch(governors, nameHistory) {
   return [...nameHistory.map((n) => ({ id: n.character_id, name: n.name })), ...governors];
 }
 
-// The Character IDs record_live_week gives a reading's rows (supabase/migrations, the newest Live Week one):
+// The Character IDs record_live_week gives a reading's rows (live_week_matches in supabase/migrations):
 // a row whose spellings (names, or else its name) lead to exactly one Governor in Name History gets that
 // Character ID; a name seen under more than one is never guessed between. A name on two rows, a row flagged
 // needsId (an older reader), and two rows whose names lead to one Governor all stay "needs ID".
@@ -269,9 +269,11 @@ export function governorsTwice(rows) {
 }
 
 // Picks on a read Fort Week (ADR 0006): the Council's choice of Governor for a "needs ID" row, [{ row, id }]
-// with row an index into rows; rows are the week's read rows { id, name, fortCount, names?, needsId? }. Returns whether the page treats the week as the Live Week, why the Picks can't
-// be saved (a sentence for the Council, or null), whether the only reason is that there are none yet, and the
-// names they add to Name History, { id, name, firstSeen } with firstSeen the week's Monday.
+// with row an index into rows; rows are the week's read rows { id, name, fortCount, names?, needsId? }. The page's
+// preflight: pick_governor refuses the same Picks (tests/pick-cases.json and the shared name-matching cases keep
+// the two together). Returns whether the page treats the week as the Live Week, why the Picks can't be saved (a
+// sentence for the Council, or null), whether the only reason is that there are none yet, and the names they add
+// to Name History, { id, name, firstSeen } with firstSeen the week's Monday.
 const NO_PICKS = `Pick a Governor for a "needs ID" row first.`;
 export function checkPicks({ week, rows, picks, nameHistory, governors, liveWeek, now }) {
   const seen = seenPairs(nameHistory);

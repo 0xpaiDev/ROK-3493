@@ -1,0 +1,49 @@
+{
+  "about": "Picks on a closed Fort Week, stated once. tests/kingdom.test.js runs these against checkPicks's newNames, and supabase/tests/test_pick_governor.py runs them against pick_governor. Governors are { id, name } with name as the current name; nameHistory is { id, name }. rows are the week's read rows in ranking order, { name, fortCount, id, names? }, id null for \"needs ID\" and names every spelling the reader saw for a row read more than one way. picks are the Council's Picks, [{ row, id }] with row an index into rows. newNames is what the Picks add to Name History, [{ id, name }], each first seen the week's Monday. A name another row of the week carries, or was also read as, stays out. Names and IDs are made up so they never meet real Governors.",
+  "cases": [
+    {
+      "case": "a Pick adds the row's name under the picked Governor",
+      "governors": [{ "id": "990000201", "name": "Case Known" }, { "id": "990000202", "name": "Case Real" }],
+      "nameHistory": [],
+      "rows": [
+        { "name": "Case Known", "fortCount": 9, "id": "990000201" },
+        { "name": "Case Odd", "fortCount": 5, "id": null }
+      ],
+      "picks": [{ "row": 1, "id": "990000202" }],
+      "newNames": [{ "id": "990000202", "name": "Case Odd" }]
+    },
+    {
+      "case": "a name another row of the week also carries stays out",
+      "governors": [{ "id": "990000202", "name": "Case Real" }],
+      "nameHistory": [],
+      "rows": [
+        { "name": "Case Odd", "fortCount": 5, "id": null },
+        { "name": "Case Odd", "fortCount": 2, "id": null }
+      ],
+      "picks": [{ "row": 0, "id": "990000202" }],
+      "newNames": []
+    },
+    {
+      "case": "a name another row was also read as stays out",
+      "governors": [{ "id": "990000202", "name": "Case Real" }],
+      "nameHistory": [],
+      "rows": [
+        { "name": "Case Odd", "fortCount": 5, "id": null },
+        { "name": "Case 0dd", "fortCount": 2, "id": null, "names": ["Case 0dd", "Case Odd"] }
+      ],
+      "picks": [{ "row": 0, "id": "990000202" }],
+      "newNames": []
+    },
+    {
+      "case": "a name the Governor already has in Name History is not added again",
+      "governors": [{ "id": "990000202", "name": "Case Real" }, { "id": "990000203", "name": "Case Third" }],
+      "nameHistory": [{ "id": "990000202", "name": "Case Odd" }, { "id": "990000203", "name": "Case Odd" }],
+      "rows": [
+        { "name": "Case Odd", "fortCount": 5, "id": null },
+        { "name": "Case Other", "fortCount": 3, "id": null }
+      ],
+      "picks": [{ "row": 0, "id": "990000202" }, { "row": 1, "id": "990000203" }],
+      "newNames": [{ "id": "990000203", "name": "Case Other" }]
+    }
+  ]
+}

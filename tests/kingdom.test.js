@@ -410,20 +410,15 @@ test("a Live Week Pick the next reading would not match is refused; on a closed 
   assert.equal(picksOn("2026-11-09", [{ row: 2, id: "8" }], held).problem, null);
 });
 
-test("a closed-week Pick on a name another row of the week also carries sets the row but adds no name", () => {
-  // Two Governors read as "Twin": Name History under one of them would hand the other's later rows to it.
-  const twins = [...readRows, { id: null, name: "Odd", fortCount: 2 }];
-  const out = picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: twins });
-  assert.deepEqual([out.problem, out.newNames], [null, []]);
-  // Another row read more than one way, one spelling the Picked name: the same two Governors behind it.
-  const misread = [...readRows, { id: null, name: "0dd", fortCount: 2, names: ["0dd", "Odd"] }];
-  assert.deepEqual(picksOn("2026-11-09", [{ row: 1, id: "9" }], { rows: misread }).newNames, []);
-});
-
-test("a Pick under a name the Governor already has in Name History adds no name", () => {
-  const held = { nameHistory: [{ id: "8", name: "Other" }, { id: "7", name: "Other" }] };
-  assert.deepEqual(picksOn("2026-11-09", [{ row: 2, id: "8" }, { row: 1, id: "9" }], held).newNames, [{ id: "9", name: "Odd", firstSeen: "2026-11-09" }]);
-});
+// The shared closed-week Pick cases: the same file runs against pick_governor in Postgres.
+const pickCases = JSON.parse(readFileSync(new URL("./pick-cases.json", import.meta.url), "utf8"));
+for (const c of pickCases.cases) {
+  test(`shared closed-week Pick case: ${c.case}`, () => {
+    const out = checkPicks({ week: "2026-11-09", rows: c.rows, picks: c.picks, nameHistory: [...c.nameHistory, ...c.governors],
+      governors: c.governors, liveWeek: "2026-11-16", now: tue17 });
+    assert.deepEqual([out.problem, out.newNames], [null, c.newNames.map((n) => ({ ...n, firstSeen: "2026-11-09" }))]);
+  });
+}
 
 // Weekly Awards: { week, id, place, award, note }. Governors carry their kind.
 const award = (id, place = 1, week = "2026-11-02", text = "Legendary King's Chest") => ({ week, id, place, award: text, note: "" });
