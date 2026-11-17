@@ -17,10 +17,12 @@ from pathlib import Path
 import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
-# Every Live Week migration, in order: each test applies them all inside its transaction.
+# Every Live Week and Pick migration, in order: each test applies them all inside its transaction.
 MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("20261109*.sql")) + [
     ROOT / "supabase" / "migrations" / "20261116130000_live_week_completeness_from_reading_day.sql",
-    ROOT / "supabase" / "migrations" / "20261116180000_live_week_match_any_spelling.sql"]
+    ROOT / "supabase" / "migrations" / "20261116180000_live_week_match_any_spelling.sql",
+    ROOT / "supabase" / "migrations" / "20261117100000_pick_governor.sql",
+    ROOT / "supabase" / "migrations" / "20261117180000_every_pick_through_pick_governor.sql"]
 CASES = json.loads((ROOT / "tests" / "name-matching-cases.json").read_text(encoding="utf-8"))["cases"]
 
 
@@ -117,17 +119,29 @@ class LiveWeekReading(unittest.TestCase):
                     self.conn.execute("rollback to savepoint case_start")
 
     def test_shared_pick_cases(self):
-        # The Council's Picks go into Name History, then the reader reads the same rows again: each row
-        # gets its nextIds entry. checkPicks in site/kingdom.js refuses exactly the Picks that don't stick.
+        # The Council's Picks go through pick_governor, then the reader reads the same rows again: each row gets
+        # its nextIds entry. pick_governor refuses, and saves nothing, when a Pick would not stick; checkPicks in
+        # site/kingdom.js refuses the same Picks before Save is pressed.
+        council = self.user("council-test@example.invalid")
+        self.conn.execute("insert into council_member (email) values ('council-test@example.invalid')")
         for c in (c for c in CASES if "picks" in c):
             with self.subTest(c["case"]):
                 self.conn.execute("savepoint case_start")
                 try:
                     self.governors(c["governors"], c["nameHistory"])
                     self.record(c["rows"])
-                    for p in c["picks"]:
-                        self.conn.execute("insert into governor_name (character_id, name) values (%s, %s) on conflict do nothing",
-                                          (p["id"], c["rows"][p["row"]]["name"]))
+                    entries = [r[0] for r in self.conn.execute(
+                        "select id from fort_entry where week = %s order by tie_order", (self.live,)).fetchall()]
+                    picks = json.dumps([{"entry": entries[p["row"]], "character_id": p["id"]} for p in c["picks"]])
+                    self.as_user(council)
+                    if all(c["nextIds"][p["row"]] == p["id"] for p in c["picks"]):
+                        self.conn.execute("select pick_governor(%s, %s::jsonb)", (self.live, picks))
+                    else:
+                        self.conn.execute("savepoint call")
+                        with self.assertRaisesRegex(psycopg.errors.InvalidParameterValue, "would still be \"needs ID\""):
+                            self.conn.execute("select pick_governor(%s, %s::jsonb)", (self.live, picks))
+                        self.conn.execute("rollback to savepoint call")
+                    self.as_owner()
                     self.record(c["rows"])
                     self.assertEqual([r[0] for r in self.public_week()], c["nextIds"])
                 finally:
