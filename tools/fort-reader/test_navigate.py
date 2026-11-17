@@ -1,6 +1,6 @@
 import unittest
 
-from navigate import Stopped, open_ranking
+from navigate import Stopped, open_from_closed, open_ranking
 
 
 class FakeGame:
@@ -11,6 +11,10 @@ class FakeGame:
         self.screens = list(screens)
         self.taps = []
         self.clock = 0.0
+        self.restarts = 0
+
+    def restart(self):
+        self.restarts += 1
 
     def look(self):
         return self.screens.pop(0) if len(self.screens) > 1 else self.screens[0]
@@ -58,6 +62,13 @@ class OpenRanking(unittest.TestCase):
             open_ranking(game)
         self.assertEqual((stop.exception.screen, game.taps), ("unknown", [(1160, 840)]))
         self.assertIn("doesn't recognise", stop.exception.reason)
+
+    def test_a_screen_it_doesnt_recognise_for_a_moment_is_waited_out_without_a_tap(self):
+        # 2026-11-16 23:47: after CONFIRM on "Login failed" the city dims while the game restarts.
+        game = FakeGame("login_failed", "unknown", "unknown", "loading", "city", "alliance",
+                        "alliance_settings", "alliance_rankings", "fort_ranking")
+        open_ranking(game)
+        self.assertEqual(game.taps[:2], [(800, 588), (1160, 840)])
 
     def test_the_login_failed_box_is_confirmed_and_the_game_carries_on_to_the_ranking(self):
         game = FakeGame("login_failed", "loading", "city", "alliance", "alliance_settings",
@@ -110,6 +121,29 @@ class OpenRanking(unittest.TestCase):
         game = FakeGame(*["loading"] * 100, "city", "alliance", "alliance_settings",
                         "alliance_rankings", "fort_ranking")
         open_ranking(game, loading_limit=600)  # 100 looks, 5 s apart: under 10 minutes
+
+
+class OpenFromClosed(unittest.TestCase):
+    def test_a_run_that_stops_on_a_screen_it_doesnt_know_starts_over_from_a_closed_game(self):
+        game = FakeGame("city", *["unknown"] * 6, "city", "alliance", "alliance_settings",
+                        "alliance_rankings", "fort_ranking")
+        failed = []
+        open_from_closed(game, attempts=2, failed=failed.append)
+        self.assertEqual(game.restarts, 2)
+        self.assertEqual([f.screen for f in failed], ["unknown"])
+
+    def test_a_login_screen_stops_at_once_rather_than_trying_again(self):
+        game = FakeGame("login")
+        with self.assertRaises(Stopped) as stop:
+            open_from_closed(game, attempts=3)
+        self.assertEqual((stop.exception.screen, game.restarts), ("login", 1))
+
+    def test_the_last_attempt_stopping_stops_the_run(self):
+        game = FakeGame("unknown")
+        failed = []
+        with self.assertRaises(Stopped) as stop:
+            open_from_closed(game, attempts=2, failed=failed.append)
+        self.assertEqual((stop.exception.screen, game.restarts, len(failed)), ("unknown", 2, 1))
 
 
 if __name__ == "__main__":

@@ -29,6 +29,10 @@ STOPS = {
 }
 
 
+# Looks, 5 s apart, at a screen the reader doesn't know before it stops on it.
+UNKNOWN_LOOKS = 6
+
+
 class Stopped(Exception):
     """The run ends here: screen is the name of the screen it stopped on."""
 
@@ -43,6 +47,7 @@ def open_ranking(game, loading_limit=600):
     loading_limit: seconds the game may spend loading and downloading in all."""
     loading, since = 0.0, None  # time spent on loading screens, and when the last one was seen
     taps = {}                   # how many times each screen has been tapped this run
+    unknown = 0                 # looks in a row at a screen without a tap
     while True:
         screen = game.look()
         # "login_failed_loading": the Login failed box over a game still loading. A BlueStacks bug:
@@ -64,8 +69,15 @@ def open_ranking(game, loading_limit=600):
         if screen in STOPS:
             raise Stopped(screen, STOPS[screen])
         if screen not in PATH:
-            raise Stopped(screen, "The reader doesn't recognise this screen, so it stopped rather "
-                                  "than guess a tap. See the saved screenshot.")
+            # A screen in passing (the city dimmed while CONFIRM restarts the game, a fade between
+            # windows) reads as unknown for a moment: look again, never tap, and stop only when it stays.
+            unknown += 1
+            if unknown >= UNKNOWN_LOOKS:
+                raise Stopped(screen, "The reader doesn't recognise this screen, so it stopped rather "
+                                      "than guess a tap. See the saved screenshot.")
+            game.wait(5)
+            continue
+        unknown = 0
         # A slow device can miss a tap: tap again, but a fourth tap on one screen in a run is a
         # loop, whether the screen repeats or two screens lead back to each other.
         taps[screen] = taps.get(screen, 0) + 1
@@ -75,3 +87,18 @@ def open_ranking(game, loading_limit=600):
             taps = {"login_failed": taps["login_failed"]}
         game.tap(*PATH[screen])
         game.wait(3)
+
+
+def open_from_closed(game, attempts=2, loading_limit=600, failed=lambda stop: None):
+    """Restart the game (game.restart()) and open the ranking; a run that stops on its way starts
+    over from a closed game, up to attempts times in all. A screen that needs Petras (login,
+    update) stops at once: another attempt would only find it again. failed(stop) is told of
+    each attempt given up on, so its screen can be kept; the last attempt's Stopped is raised."""
+    for attempt in range(1, attempts + 1):
+        game.restart()
+        try:
+            return open_ranking(game, loading_limit=loading_limit)
+        except Stopped as stop:
+            if stop.screen in STOPS or attempt == attempts:
+                raise
+            failed(stop)
