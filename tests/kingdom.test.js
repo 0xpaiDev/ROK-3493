@@ -272,7 +272,7 @@ test("with Farms shown, a Main with 30 forts and two Farms of 10 has a Group Sco
   ]);
 });
 
-test("Mains tied on the Group Score keep the Council's order", () => {
+test("Mains tied on the Group Score keep the stored order", () => {
   const governors = [main("a"), main("b"), farm("f", "b")];
   const rows = mainsRanking([entry("b", 25), entry("a", 30), entry("f", 10)], governors, { withFarms: true });
   assert.deepEqual(rows.map((r) => [r.id, r.rank, r.groupScore]), [["b", 1, 30], ["a", 1, 30]]);
@@ -584,7 +584,7 @@ test("Fill gives the Main at each promised place that tier's items", () => {
   assert.deepEqual(skipped, []);
 });
 
-test("Fill gives Mains tied on forts consecutive places in the Council's tie order", () => {
+test("Fill gives Mains tied on forts consecutive places in the stored order", () => {
   const governors = [main("a"), main("b"), main("c")];
   const ranking = mainsRanking([entry("b", 30), entry("a", 30), entry("c", 20)], governors);
   const { awards } = fillWeeklyAwards(promise("2026-11-02", tier(1, gold(5)), tier(2, gold(3)), tier(3, gold(1))), ranking);

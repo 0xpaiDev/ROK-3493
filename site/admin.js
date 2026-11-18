@@ -654,7 +654,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
       msg.textContent = "Filling…";
       let promises, entries;
       try {
-        // The week's rows in the Council's order: Fort Count, then tie order, as the public ranking shows them.
+        // The week's rows in stored order: Fort Count, then tie order, as the public ranking shows them.
         const res = await supabase.from("fort_entry").select("character_id,name,fort_count").eq("week", w)
           .order("fort_count", { ascending: false }).order("tie_order").order("id");
         check(res, "Fort Week rows");
