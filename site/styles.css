@@ -651,7 +651,6 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
   .row { grid-template-columns: 30px minmax(0, 1fr) 48px; gap: 10px; padding: 14px 12px; }
   .row.with-delta { grid-template-columns: 30px minmax(0, 1fr) 48px 48px; }
   .row .go { display: none; }
-  .row .tag.tie .long { display: none; }
   .table-wrap { margin: 0 -20px; padding: 0 20px; }
   .kv div { padding: 10px 12px; }
   .kv b { font-size: 16px; }

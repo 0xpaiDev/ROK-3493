@@ -221,8 +221,7 @@ export function mainsRanking(entries, governors, { withFarms = false } = {}) {
     .filter((g) => g.kind !== "farm" && !ranked.has(g.id) && farmsOf(g.id).length)
     .map((g) => ({ id: g.id, name: g.name, fortCount: 0 }));
   // A Main's Group Score is its own Fort Count plus half of each Farm's; the Mains rank on it.
-  // Its fortCount stays its own. Entry order stays the tie-break, so Mains tied on the Group Score
-  // keep the Council's order.
+  // Its fortCount stays its own. Mains tied on the Group Score share a rank and keep the stored order.
   const scored = [...entries.filter((e) => !farmOf.has(e.id)), ...idle].map((m) => {
     const farms = farmsOf(m.id);
     return { ...m, own: m.fortCount, groupScore: m.fortCount + farms.reduce((a, f) => a + f.fortCount, 0) / 2, farms };

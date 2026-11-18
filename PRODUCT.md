@@ -1,7 +1,5 @@
 # Product
 
-<!-- impeccable:product-schema 1 -->
-
 ## Platform
 
 web
@@ -17,18 +15,18 @@ web
 The site is the Kingdom's public record of the weekly Fort grind and its events. It does three jobs at once:
 
 1. **Recognition.** Members see their grind acknowledged in public, which drives the weekly Fort push.
-2. **Fair bookkeeping.** The Council gets a trustworthy record (Mains ranked apart from Farms, Fort Average counting only weeks the data can vouch for, ties ordered by the Council) to decide Weekly Awards from.
+2. **Fair bookkeeping.** The Council gets a trustworthy record (Mains ranked apart from Farms, Fort Average counting only weeks the data can vouch for) to decide Weekly Awards from.
 3. **Recruitment.** Outsiders see an organised, active Kingdom.
 
 Success: members check it after each Fort Week without asking an officer, and the Council updates it from the admin page with no spreadsheet or script.
 
 ## Positioning
 
-A Kingdom-specific record built on the Kingdom's own rules. Character ID is the only identity key, so renamed Governors keep their history and two Governors are never merged by a guessed name. Farms are credited under their Main but never added to its total. Complete and Partial Weeks are treated differently, so old incomplete logs never punish anyone. A generic stats tracker or a shared spreadsheet does none of this.
+A Kingdom-specific record built on the Kingdom's own rules. Character ID is the only identity key, so renamed Governors keep their history and two Governors are never merged by a guessed name. Farms are never ranked as Mains, and count toward a Main only through its Group Score. Complete and Partial Weeks are treated differently, so old incomplete logs never punish anyone. A generic stats tracker or a shared spreadsheet does none of this.
 
 ## Operating Context
 
-- The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset. The reader keeps the week current from the in-game ranking every night and its Sunday run closes it (ADR 0002, 0005). Nobody logs a Fort Week by hand (ADR 0006). The Council promises rewards during the week and fills and publishes the Weekly Awards (King's Chests or resources) after.
+- The Fort Week runs Monday 00:00 UTC to the next Monday. Rankings close at reset. The reader keeps the week current from the in-game ranking every night, and its Sunday run lets the week close Complete (ADR 0002, 0005). Nobody logs a Fort Week by hand (ADR 0006). The Council promises rewards during the week and fills and publishes the Weekly Awards (King's Chests or resources) after.
 - Roster data comes from Lilith's official stats (the RoK Toolkit), saved daily as a dated Roster Snapshot by the Roster job (ADR 0004).
 - GH Events pay Golden Heads to the top 10, usually 20/10/5/4×7.
 - The link is shared in alliance chat and similar channels; visits cluster after each reset and event.
@@ -38,9 +36,9 @@ A Kingdom-specific record built on the Kingdom's own rules. Character ID is the 
 - Plain HTML/CSS/JS in `site/`, no build step; published to GitHub Pages on every push to `main`.
 - All data lives in Supabase (ADR 0001). The public reads with the anon key; only Council emails can write, plus the reader's own sign-in, which can only replace the Live Week (ADR 0002) and save a Roster Snapshot for a new day (ADR 0004). Only `site/data/content.js` (news, the Reward Promise card's standing intro and rules) is hand-edited.
 - Public sections: Home, Fort Rankings, Events, Roster, plus a Governor popup. Council section: `admin.html`.
-- Vocabulary is fixed by `GLOSSARY.md`: Governor, Character ID, Main, Farm, Migrated, Fort Week, Fort Count, Weekly Ranking, Complete / Partial Week, Fort Average, Weekly Award, GH Event, Roster Snapshot, Top 200. UI never says "Fort Score", "player" or "alt".
+- Vocabulary is fixed by `GLOSSARY.md`. UI never says "Fort Score", "player" or "alt".
 - Governor names are user-controlled and carry exotic Unicode: they must be escaped and must render without breaking layout.
-- Unmatched names stay flagged "needs ID" until the Council resolves them by hand.
+- Unmatched names stay flagged "needs ID" until the Council Picks the Governor.
 - Migrated Governors stay visible (greyed, tagged) rather than deleted. The roster defaults to the Top 200.
 - Kill Points and Alliance Helps are stored but not shown (the export reports 0 Kill Points).
 - A reader reads the in-game ranking and keeps the Live Week current on Fort Rankings, marked with the time of its last reading; Fort Average leaves the Live Week out until the Monday reset closes it (ADR 0002).

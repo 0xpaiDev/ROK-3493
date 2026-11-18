@@ -13,9 +13,9 @@ that key read and never write.
 - **Schema:** `supabase/migrations/`. A schema change is a new migration file, applied to the
   project with a SQL client or in the Supabase SQL editor.
 - **The Council** edits data on the admin page (`site/admin.html`, magic-link sign-in): Farm links,
-  Fort Weeks and their Weekly Awards, and the Live Week's Reward Promise.
+  Picks for "needs ID" rows, Weekly Awards, Governor status and the Reward Promise.
 - **The reader** on an Oracle A1 reads the in-game Fort Destroyer Rankings every night and writes
-  the Live Week; Sunday's run closes it ([ADR 0002](docs/adr/0002-the-reader-writes-the-live-week-through-one-function.md),
+  the Live Week; Sunday's run lets it close Complete ([ADR 0002](docs/adr/0002-the-reader-writes-the-live-week-through-one-function.md),
   [0003](docs/adr/0003-the-reader-runs-on-the-oracle-a1-under-redroid.md),
   [0005](docs/adr/0005-the-reading-time-decides-whether-the-live-week-closes-complete.md)).
   The **Roster job** on the same host saves a Roster Snapshot every day from Lilith's stats

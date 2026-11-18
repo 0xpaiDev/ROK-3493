@@ -186,7 +186,7 @@ import { rewardItem } from "./rewards.js";
     const li = (r, n, { part = false } = {}) => {
       const place = r.e.rank != null && r.e.rank <= 3 ? PLACE[r.e.rank - 1] : "";
       const cls = ["row", place, part && "part", deltas && "with-delta", stagger && "reveal"].filter(Boolean).join(" ");
-      const tie = r.tie ? `<span class="tag tie" title="Tied on ${r.e.groupScore != null ? `a Group Score of ${score1(r.e.groupScore)}` : `${r.e.fortCount} forts`}. The Council set this order.">Tie<span class="long"> · Council order</span></span>` : "";
+      const tie = r.tie ? `<span class="tag tie" title="Tied on ${r.e.groupScore != null ? `a Group Score of ${score1(r.e.groupScore)}` : `${r.e.fortCount} forts`}.">Tie</span>` : "";
       const tags = tie
         + (!part && r.g.id == null ? `<span class="tag needs-id" title="No Character ID on record yet. The Council will pick the Governor.">needs ID</span>` : "")
         + (r.e.unlinked ? `<span class="tag farm" title="A Farm not yet linked to its Main">Farm · unlinked</span>` : "")
