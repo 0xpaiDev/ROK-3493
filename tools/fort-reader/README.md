@@ -1,6 +1,6 @@
 # Fort reader
 
-Reads the in-game Fort Destroyer Rankings and prints the Weekly Ranking in the admin page's Fort Week paste format: one Governor per line, name then Fort Count. With `--send` it also writes the reading to the public site as the Live Week (ADR 0002).
+Reads the in-game Fort Destroyer Rankings and prints the Weekly Ranking: one Governor per line, name then Fort Count. With `--send` it also writes the reading to the public site as the Live Week (ADR 0002).
 
 ## Setup (once)
 
@@ -20,7 +20,7 @@ On any other Android device (Redroid on a server, a phone), set `FORT_READER_ADB
 1. Have BlueStacks running with the game installed and the Reader Account logged in. The game may be open on any screen, or closed.
 2. From this folder: `.venv\Scripts\python.exe fort_reader.py`
 3. It restarts the game, taps through to the Fort Destroyer Rankings and swipes through the list on its own; the PC's mouse is free.
-4. Paste the result, already on the clipboard, into the admin page's Fort Week.
+4. It prints the ranking and saves it as `paste.txt`. Nothing reaches the site without `--send`.
 
 ## Opening the ranking from a closed game
 
@@ -54,7 +54,7 @@ It never guesses a tap and never types a password. Starting the game from closed
 
 `.venv\Scripts\python.exe fort_reader.py --send` signs in as the reader's own Supabase user and calls `record_live_week`. Fort Rankings then shows the week marked "live, as of HH:MM UTC". The reading is sent only when the run found no problems; otherwise the Live Week keeps its last reading.
 
-Needs `FORT_READER_EMAIL` and `FORT_READER_PASSWORD` in the repo's `.env`: a Supabase user whose email is on `fort_reader` and not on `council_member`. The database matches names exactly against Name History, leaves the rest "needs ID", and refuses any week but the Live Week. The reading counts as of its first screenshot, so `--from` with `--send` works only for a run taken in the Live Week and no older than the saved reading, and a run that crosses the Monday reset is refused: paste that week by hand once it closes. A "needs ID" name the Council resolves in the admin page, Live Week included, goes into Name History, so the next reading matches it.
+Needs `FORT_READER_EMAIL` and `FORT_READER_PASSWORD` in the repo's `.env`: a Supabase user whose email is on `fort_reader` and not on `council_member`. The database matches names exactly against Name History, leaves the rest "needs ID", and refuses any week but the Live Week. The reading counts as of its first screenshot, so `--from` with `--send` works only for a run taken in the Live Week and no older than the saved reading, and a run that crosses the Monday reset is refused: any correction to that week is made directly in SQL once it closes (ADR 0006). A "needs ID" name the Council Picks on the admin page, Live Week included, goes into Name History, so the next reading matches it.
 
 Screenshots and `paste.txt` are kept under `runs/`. To re-read a run without the game: `fort_reader.py --from runs\<folder>`.
 

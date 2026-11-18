@@ -1,9 +1,9 @@
-"""Read the in-game Fort Destroyer Rankings into Fort Week paste text.
+"""Read the in-game Fort Destroyer Rankings into a Weekly Ranking.
 
 With Rise of Kingdoms in BlueStacks, or on the device FORT_READER_ADB names, run:
     .venv\\Scripts\\python.exe fort_reader.py
 It restarts the game, taps through to the Fort Destroyer Rankings, swipes the list to the end over ADB, reads every screen with Claude Haiku, and prints the
-rows for the admin page's Fort Week paste (also copied to the clipboard on Windows). The PC's mouse is not
+rows (also copied to the clipboard on Windows). The PC's mouse is not
 used, so you can keep working while it runs.
 
     fort_reader.py --from runs\\<folder>   re-reads screenshots saved by an earlier run
@@ -315,7 +315,7 @@ def run(args, run_dir):
         print("Read more than one way, sent with every spelling (matched only when they lead to one Governor): "
               + "; ".join(f'rank {r["rank"]} ({" / ".join(r["names"])})' for r in unsure) + ".")
     if problems:
-        print("Check these before saving the Fort Week:")
+        print("Check these:")
         for p in problems:
             print("  -", p)
     else:
@@ -325,8 +325,8 @@ def run(args, run_dir):
         # A reading with problems is not sent: a stale "as of" time is better than a wrong ranking.
         if problems or not rows:
             found = "\n".join(f"  - {p}" for p in problems) if problems else "  - No Governors were read."
-            raise SystemExit("Not sent to the Live Week: the run found problems. Fix them, or paste the "
-                             f"week by hand once it closes.\n{found}")
+            raise SystemExit("Not sent to the Live Week: the run found problems, so the week keeps "
+                             f"its last reading.\n{found}")
         from send import send_live_week
         # The reading is as of its first screenshot, not of when it is sent: the database refuses
         # screenshots from a week that has closed, such as an old run read again with --from.

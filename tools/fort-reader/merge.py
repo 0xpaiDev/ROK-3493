@@ -2,7 +2,7 @@
 
 Every screenshot shows a slice of the ranking and slices overlap, so rows are joined by rank.
 Nothing here guesses: a Fort Count read two ways, a gap, or a Fort Count that rises is reported,
-and the Council decides. A name read two ways with one Fort Count is kept with every spelling
+and the reading is not sent. A name read two ways with one Fort Count is kept with every spelling
 (names in odd scripts read differently per screen): the database matches the row only when those
 spellings lead to one Governor.
 """
@@ -70,5 +70,5 @@ def check_pinned(pinned, rows):
 
 
 def paste_text(rows):
-    """The Fort Week paste format: one Governor per line, name, a tab, then the Fort Count."""
+    """The reading as text: one Governor per line, name, a tab, then the Fort Count."""
     return "\n".join(f'{r["name"]}\t{r["forts"]}' for r in rows) + "\n"
