@@ -2,6 +2,6 @@
 __pycache__/
 .env
 .env.*
-.impeccable/
+samples/
 tools/fort-reader/.venv/
 tools/fort-reader/runs/
