@@ -1,131 +1,67 @@
 # Kingdom 3493
 
-Weekly performance tracking and recognition for the Void Legion in Rise of Kingdoms Kingdom 3493.
+The language of the Void Legion's public site for Rise of Kingdoms, Kingdom 3493: its Governors, Fort rankings and rewards.
 
 ## Language
 
-### People and accounts
-
-**Kingdom**:
-Kingdom 3493 and its one main alliance, the Void Legion, treated as a single community.
-_Avoid_: Alliance (as a separate concept), server
-
 **Governor**:
-One in-game account, identified for life by its Character ID. Its name can change at any time.
-_Avoid_: Player, member, user
+One in-game account that has been seen in Kingdom 3493, identified by its Character ID. A person with three accounts has three Governors.
+_Avoid_: player, account, member
 
 **Character ID**:
-The permanent in-game number that identifies a Governor; the only reliable way to tell Governors apart.
-_Avoid_: Gov ID, player ID
-
-**Main**:
-A Governor that a person plays as their primary account.
-
-**Farm**:
-A Governor linked as a secondary account of some Main. Its forts still count for the Kingdom, and count half toward its Main's Group Score in the "Main + Farm" view of the Weekly Ranking; it is shown alongside its Main.
-_Avoid_: Alt, second account
+The game's permanent number for a Governor, and the only thing that identifies one. Names can change; a Character ID does not.
+_Avoid_: Governor ID, player ID
 
 **Migrated**:
-A Governor no longer in the Kingdom. Only the Council marks a Governor Migrated: a Roster Snapshot can't tell leaving from going quiet. Its history stays.
-_Avoid_: Left, removed
+A Governor who has left for another Kingdom and no longer belongs to this one.
 
-**Inactive**:
-A Governor from the previous Top 200 who is absent from the latest Roster Snapshot. The Lilith export leaves out inactive Governors and those who left alike, so absence alone never means Migrated. A Governor who reappears is Current again.
-_Avoid_: Migrated (for mere absence), dormant
+**Owner**:
+The person behind a Main and its Farms.
+_Avoid_: player, governor (for the person)
 
-**King**:
-The person who leads the Kingdom and hands out Weekly Awards.
+**Main**:
+The one Governor an Owner treats as their primary account.
 
-**Council**:
-The King and officers who decide Weekly Award recipients, including breaking ties.
-_Avoid_: Leadership, R4s (as a decision body)
+**Farm**:
+A Governor its Owner keeps to support their Main, usually by gathering resources.
+_Avoid_: alt, support account
 
-**Name History**:
-Every name a Governor has been seen under, kept against its Character ID.
-_Avoid_: Aliases
-
-**Pick**:
-The Council's choice of Governor for a "needs ID" row the reader could not match. On the Live Week it only adds the row's name to Name History, so the reader's next reading matches it, and a Pick that reading would not match is refused. On a closed Fort Week it also sets the row's Character ID, since no later reading comes. A name another row of that week has, or was also read as, stays out of Name History.
-_Avoid_: Assign, link
-
-**Roster Snapshot**:
-The list of all Governors in the Kingdom with their stats as of one date, taken from Lilith's official stats (the data behind the RoK Toolkit's stats export).
-_Avoid_: Member list, KD list
-
-**Roster job**:
-The daily run on the reader's host that saves Lilith's newest day as a Roster Snapshot, with no Council member signed in (ADR 0004).
-_Avoid_: Roster sync, cron
-
-**Lilith token**:
-The login the RoK Toolkit (Lilith's stats site, where the export lives) keeps after a sign-in. The Roster job reads Lilith's stats with it; it lasts 30 days.
-_Avoid_: pauth, cookie
-
-**Top 200**:
-The 200 highest-power Governors in the latest Roster Snapshot; the part of the Kingdom whose membership changes and growth are tracked.
-_Avoid_: Core, active members
-
-### Fort grind
-
-**Fort Week**:
-The seven days from the in-game weekly reset (Monday 00:00 UTC) to the next one.
-_Avoid_: Round, cycle
+**Filler Farm**:
+A larger Farm that holds troops, used during KvK to defend structures.
 
 **Fort Count**:
-The number of barbarian forts a Governor killed or joined during one Fort Week, as shown on the in-game weekly ranking page.
-_Avoid_: Fort score, fort kills, points
+How many forts a Governor participated in destroying in a Fort Week, whether it started the attack or joined another Governor's.
 
-**Weekly Ranking**:
-The ordered list of Governors by Fort Count for one Fort Week, copied from the in-game ranking page.
-_Avoid_: Leaderboard, log
-
-**Group Score**:
-A Main's own Fort Count plus half of each of its Farms' Fort Counts, for one Fort Week. The "Main + Farm" view ranks Mains on it. It is not a Fort Count.
-_Avoid_: Points, combined Fort Count, total
+**Fort Week**:
+The seven days from one Monday 00:00 UTC reset to the next, over which Fort Counts build up.
 
 **Live Week**:
-The current Fort Week, whose Weekly Ranking the reader refreshes until the Monday reset closes it.
-_Avoid_: Current week, open week
-
-**Reader Account**:
-The dedicated Governor the reader plays as. It is never a Main or a Farm and never appears in a Weekly Ranking.
-_Avoid_: Bot account
+The Fort Week in progress now.
 
 **Complete Week**:
-A Fort Week whose Weekly Ranking lists every Governor that joined at least one fort; a Governor missing from it had a Fort Count of 0.
+A closed Fort Week whose last reading came close enough to the Monday reset to be treated as final.
 
 **Partial Week**:
-A Fort Week whose saved Weekly Ranking is known to be incomplete; a Governor missing from it has an unknown Fort Count.
+A closed Fort Week with no reading on the evening of its last day, so a missing Governor's Fort Count is unknown.
+
+**Group Score**:
+A Main's own Fort Count plus its Farms' Fort Counts, each multiplied by a Farm Weight Coefficient.
+
+**Farm Weight Coefficient**:
+The configurable coefficient for how much a Farm's Fort Count weighs in its Main's Group Score. It can depend on how many Farms the Main has.
+_Avoid_: Farm Coefficient
+
+**Weekly Ranking**:
+The order of Mains in a Fort Week, either by their own Fort Counts or by Group Score. Tied Mains share a rank.
 
 **Fort Average**:
-A Governor's average Fort Count from their first ranked Fort Week to the latest one. A Complete Week they are missing from counts as 0; a Partial Week counts only if they were ranked in it.
-_Avoid_: Average score, avg per week played
+A Governor's average Fort Count from their first ranked Fort Week onward. A missed Complete Week counts as 0, while a missed Partial Week and the Live Week are left out.
 
 **Weekly Award**:
-A reward the Council gives a Main after a Fort Week, as King's Chests or resources. The Weekly Ranking informs it; the Council decides it. Farms never receive one.
-_Avoid_: Prize, bonus
-
-**Reward Promise**:
-What the Council says each place will get for the Live Week, set before the week closes so Governors have something to compete for. Each tier pays exactly one place (1st, 7th), so the promise matches the ranking place for place, and the promise says whether it pays on the Mains ranking or the "Main + Farm" ranking. Home shows it until the Monday reset; then that week's Weekly Awards take over.
-_Avoid_: Prize pool, bounty
-
-**Fill**:
-Drafting a closed week's Weekly Awards from its Reward Promise, or the latest earlier one: each promised place goes to the Main at that place on the ranking the promise pays on. "Needs ID" rows and unlinked Farms are skipped and listed, and the next Main moves up. The draft stays on the admin page until the Council publishes it.
-_Avoid_: Auto-assign, payout run
-
-**Reward item**:
-One thing a Weekly Award gives, with its amount: a King's Chest grade as a count (×2) or a resource (Food, Wood, Stone, Gold, Any Resource) in K or M (2M Food). The game fixes the list; an award can hold several, plus free text for anything outside it.
-_Avoid_: Prize, loot
-
-**Any Resource**:
-A resource Reward item where the winner picks which resource they receive, counted in K or M.
-_Avoid_: RSS of choice, choice chest
-
-**King's Chest**:
-A reward chest the King hands out as part of a Weekly Award, in four grades: Legendary, Epic, Elite and Advanced. The game labels them "Trophy".
-_Avoid_: Trophy, Kingdom Chest
-
-### Events
+What the Council gives for a closed Fort Week.
 
 **GH Event**:
-An in-game event whose top 10 Governors receive Golden Heads. Several kinds of GH Event happen; each is logged as its own result.
-_Avoid_: 20GH, golden head event (as a single fixed event)
+An event whose reward is Golden Heads, the game's most valuable resource. Kingdoms usually fix its top 10 beforehand, deciding who gets each place.
+
+**Roster Snapshot**:
+One day's stats for a Kingdom's Governors, as published by Lilith.
