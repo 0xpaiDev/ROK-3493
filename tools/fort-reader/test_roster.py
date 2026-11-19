@@ -11,7 +11,8 @@ from unittest import mock
 
 import roster
 
-NOW = datetime.datetime(2026, 11, 15, 12, 0, tzinfo=datetime.timezone.utc)
+NOW = datetime.datetime(2026, 11, 15, 6, 0, tzinfo=datetime.timezone.utc)  # the morning run
+EVENING = datetime.datetime(2026, 11, 15, 18, 0, tzinfo=datetime.timezone.utc)
 
 
 def token(expires):
@@ -62,16 +63,51 @@ class Roster(unittest.TestCase):
         self.sent.append((day, rows))
         return {"saved": True, "taken_on": day, "rows": len(rows), "new_governors": 0, "renamed": 0, "inactive": 0, "current": 0}
 
-    def run_job(self, lilith=None, without=(), **kw):
+    def run_job(self, lilith=None, without=(), missing=(), **kw):
         lilith = lilith or FakeLilith()
-        self.asked_since = []
+        self.asked_since, self.asked_missing_since = [], []
 
         def days_without_t4_t5(since):
             self.asked_since.append(since)
             return list(without)
+
+        def days_missing(since):
+            self.asked_missing_since.append(since)
+            return list(missing)
         lines = roster.run(args(**kw), kw.get("now", NOW), lilith, self.send, lambda s, b: self.mails.append(s),
-                           days_without_t4_t5)
+                           days_without_t4_t5, days_missing)
         return lines, lilith
+
+    def test_a_second_run_on_a_saved_day_saves_nothing_and_emails_nobody(self):
+        self.send = lambda day, rows: self.sent.append(day) or {"saved": False, "taken_on": day, "latest": day, "filled": 0}
+        lines, _ = self.run_job(now=EVENING)
+        self.assertEqual(self.sent, ["2026-11-14"])
+        self.assertEqual(self.mails, [])
+        self.assertEqual(lines[-1], "Nothing new: the latest Roster Snapshot is already 2026-11-14.")
+
+    def test_a_run_after_a_missed_day_saves_the_missed_day_and_the_newest(self):
+        lines, lilith = self.run_job(missing=["2026-11-13"])
+        self.assertEqual(self.asked_missing_since, ["2026-08-17"])  # no further back than Lilith's history
+        self.assertEqual([d for d, _ in self.sent], ["2026-11-14", "2026-11-13"])
+        self.assertIn("start=2026-11-13&end=2026-11-13", lilith.asked[2][0])
+        self.assertEqual(lines[-1], "Saved the missed day 2026-11-13: 2 Governors.")
+
+    def test_a_missed_day_lilith_cannot_give_does_not_fail_the_run(self):
+        lilith = FakeLilith()
+        real = lilith.__call__
+
+        def answer(req, timeout):
+            if "start=2026-11-13" in req.full_url:
+                return io.BytesIO(json.dumps({"code": 200, "msg": "OK", "data": [], "total": 0}).encode())
+            return real(req, timeout)
+        lines, _ = self.run_job(answer, missing=["2026-11-13"])
+        self.assertEqual([d for d, _ in self.sent], ["2026-11-14"])
+        self.assertEqual(lines[-1], "Couldn't save the missed day 2026-11-13: Lilith has no member data for 2026-11-13.")
+
+    def test_the_evening_run_leaves_the_reminders_to_the_morning_run(self):
+        os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
+        self.run_job(FakeLilith(day="2026-11-11"), now=EVENING)
+        self.assertEqual(self.mails, [])
 
     def test_saved_days_without_t4_t5_are_filled_from_lilith_history(self):
         def send(day, rows):
@@ -104,8 +140,8 @@ class Roster(unittest.TestCase):
         self.assertEqual(lines[-1], "Couldn't fill T4/T5 kills and deaths for 2026-11-10: Lilith has no member data for 2026-11-10.")
 
     def test_a_dry_run_fills_nothing(self):
-        lines, _ = self.run_job(dry_run=True, without=["2026-11-10"])
-        self.assertEqual([self.sent, self.asked_since], [[], []])
+        lines, _ = self.run_job(dry_run=True, without=["2026-11-10"], missing=["2026-11-13"])
+        self.assertEqual([self.sent, self.asked_since, self.asked_missing_since], [[], [], []])
 
     def test_saves_the_newest_day_with_character_ids_and_the_kept_columns(self):
         lines, lilith = self.run_job()
@@ -183,7 +219,7 @@ class Roster(unittest.TestCase):
         os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
         def broken(subject, body):
             raise TimeoutError("smtp timed out")
-        lines = roster.run(args(), NOW, FakeLilith(day="2026-11-11"), self.send, broken, lambda since: [])
+        lines = roster.run(args(), NOW, FakeLilith(day="2026-11-11"), self.send, broken, lambda since: [], lambda since: [])
         self.assertEqual(len(self.sent), 1)
         self.assertIn("couldn't email it: smtp timed out", lines[0])
         self.assertIn("Saved the 2026-11-11 Roster Snapshot", lines[2])

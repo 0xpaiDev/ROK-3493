@@ -21,9 +21,10 @@ from test_record_live_week import db_url
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = [ROOT / "supabase" / "migrations" / "20261109120000_live_week_reading.sql",  # is_reader, fort_reader
               ROOT / "supabase" / "migrations" / "20261117090000_reader_records_roster_snapshot.sql",
-              ROOT / "supabase" / "migrations" / "20261119090000_roster_snapshot_t4_t5.sql"]
+              ROOT / "supabase" / "migrations" / "20261119090000_roster_snapshot_t4_t5.sql",
+              ROOT / "supabase" / "migrations" / "20261119140500_roster_snapshot_missed_days.sql"]
 SHARED = json.loads((ROOT / "tests" / "roster-snapshot-cases.json").read_text(encoding="utf-8"))
-CASES, T4T5_CASES = SHARED["cases"], SHARED["t4t5Cases"]
+CASES, T4T5_CASES, OLDER_DAY_CASES = SHARED["cases"], SHARED["t4t5Cases"], SHARED["olderDayCases"]
 T4T5 = ("t4_kills", "t5_kills", "t4_deaths", "t5_deaths")
 
 
@@ -177,10 +178,60 @@ class RosterSnapshot(unittest.TestCase):
 
     def test_a_day_already_saved_changes_nothing(self):
         self.record("2020-01-07", [{"id": "1", "name": "Gov 1", "power": 900}])
+        self.record("2020-01-06", [{"id": "1", "name": "Gov 1", "power": 800}])
         again = self.record("2020-01-07", [{"id": "1", "name": "Renamed", "power": 1}])
         older = self.record("2020-01-06", [{"id": "1", "name": "Renamed", "power": 1}])
         self.assertEqual([again["saved"], older["saved"], again["latest"]], [False, False, "2020-01-07"])
         self.assertEqual(self.one("select current_name from governor where character_id = '1'"), "Gov 1")
+        self.assertEqual([r[:2] for r in self.t4_t5("2020-01-06")], [("1", 800)])
+
+    def test_shared_older_day_cases(self):
+        for c in OLDER_DAY_CASES:
+            with self.subTest(c["case"]):
+                self.conn.execute("savepoint case_start")
+                try:
+                    for g in c["governors"]:
+                        self.conn.execute(
+                            "insert into governor (character_id, current_name, status, status_set_at) values (%s, %s, %s, '2020-01-01T00:00:00Z')",
+                            (g["id"], g["name"], g.get("status", "current")))
+                    for n in c["nameHistory"]:
+                        self.conn.execute("insert into governor_name (character_id, name, first_seen) values (%s, %s, %s)",
+                                          (n["id"], n["name"], n["firstSeen"]))
+                    for snap in c["saved"]:
+                        sid = self.one("insert into roster_snapshot (taken_on) values (%s) returning id", (snap["takenOn"],))
+                        for r in snap["rows"]:
+                            self.conn.execute("insert into roster_snapshot_row (snapshot_id, character_id, power) values (%s, %s, %s)",
+                                              (sid, r["id"], r["power"]))
+                    ids = sorted({g["id"] for g in c["governors"]} | {r["id"] for r in c["record"]["rows"]})
+                    result = self.record(c["record"]["takenOn"], c["record"]["rows"])
+                    self.assertEqual({k: result.get(k) for k in c["result"]}, c["result"])
+                    self.assertEqual([list(r) for r in self.conn.execute(
+                        "select character_id, current_name, status from governor where character_id = any(%s) order by 1", (ids,))],
+                        c["governorsAfter"])
+                    self.assertEqual([[i, n, d.isoformat()] for i, n, d in self.conn.execute(
+                        "select character_id, name, first_seen from governor_name where character_id = any(%s) order by 1, 2", (ids,))],
+                        c["namesAfter"])
+                    self.assertEqual([list(r[:2]) for r in self.t4_t5(c["record"]["takenOn"])], c["rows"])
+                finally:
+                    self.conn.execute("rollback to savepoint case_start")
+
+    def test_a_newer_day_after_a_filled_missed_day_still_marks_inactive_as_today(self):
+        self.record("2020-01-05", [{"id": "1", "name": "Gov 1", "power": 900}, {"id": "2", "name": "Gov 2", "power": 800}])
+        self.record("2020-01-07", [{"id": "1", "name": "Gov 1", "power": 900}, {"id": "2", "name": "Gov 2", "power": 800}])
+        self.record("2020-01-06", [{"id": "1", "name": "Gov 1", "power": 900}])
+        newer = self.record("2020-01-08", [{"id": "1", "name": "Gov 1", "power": 900}])
+        self.assertEqual(newer["inactive"], 1)
+        self.assertEqual(self.one("select status from governor where character_id = '2'"), "inactive")
+
+    def test_the_missed_days_are_listed_oldest_first_between_the_first_and_the_latest_saved(self):
+        # Days before the first snapshot were never the store's, so they aren't missed.
+        for day in ("2020-01-03", "2020-01-05", "2020-01-08"):
+            self.record(day, [{"id": "1", "name": "Gov 1", "power": 900}])
+        self.conn.execute("set local role authenticated")
+        self.conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps(self.reader),))
+        days = [self.one("select roster_days_missing(%s::date)", (since,)) for since in ("2020-01-01", "2020-01-05")]
+        self.conn.execute("reset role")
+        self.assertEqual(days, [[datetime.date(2020, 1, d) for d in (4, 6, 7)], [datetime.date(2020, 1, d) for d in (6, 7)]])
 
     def test_an_absent_governor_ranked_201st_is_not_marked_inactive(self):
         prev = [{"id": str(i), "name": f"Gov {i}", "power": 1000 - i} for i in range(1, 202)]  # "201" ranks 201st

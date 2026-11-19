@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from alert import after_run, mail
+from alert import after_roster_run, after_run, mail
 
 MAIL = {
     "FORT_READER_GMAIL": "reader@gmail.com",
@@ -88,6 +88,32 @@ class FailureAlert(unittest.TestCase):
 
     def test_without_mail_settings_a_failed_run_emails_nobody(self):
         after_run("Stopped on the login screen.", self.shot, {}, SUNDAY, smtp=FakeGmail)
+        self.assertEqual(FakeGmail.sent, [])
+
+
+class RosterFailure(unittest.TestCase):
+    """The Roster job runs about 06:00 and 18:00 UTC; only the evening run's failure emails, since the
+    morning's is retried that evening."""
+
+    def setUp(self):
+        FakeGmail.sent = []
+
+    def test_a_failed_morning_run_emails_nobody(self):
+        morning = datetime.datetime(2026, 11, 15, 6, 0, tzinfo=datetime.timezone.utc)
+        self.assertEqual(after_roster_run("Couldn't reach Lilith's API: timed out.", MAIL, morning, smtp=FakeGmail), [])
+        self.assertEqual(FakeGmail.sent, [])
+
+    def test_a_failed_evening_run_emails_petras_the_reason(self):
+        evening = datetime.datetime(2026, 11, 15, 18, 0, tzinfo=datetime.timezone.utc)
+        to = after_roster_run("Couldn't reach Lilith's API: timed out.\nSecond line.", MAIL, evening, smtp=FakeGmail)
+        [msg] = FakeGmail.sent
+        self.assertEqual([to, msg["To"], msg["Subject"]],
+                         [["petras@example.com"], "petras@example.com", "Roster job: Couldn't reach Lilith's API: timed out."])
+        self.assertIn("2026-11-15 18:00 UTC saved no Roster Snapshot", msg.get_body(("plain",)).get_content())
+
+    def test_a_run_that_saved_emails_nobody(self):
+        evening = datetime.datetime(2026, 11, 15, 18, 0, tzinfo=datetime.timezone.utc)
+        self.assertEqual(after_roster_run(None, MAIL, evening, smtp=FakeGmail), [])
         self.assertEqual(FakeGmail.sent, [])
 
 

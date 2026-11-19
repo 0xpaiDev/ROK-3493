@@ -117,5 +117,54 @@
       "result": { "saved": false, "filled": 0 },
       "after": { "2020-01-07": [["1", 900, 11, 12, 13, 14]] }
     }
+  ],
+  "olderDayAbout": "A missing day older than the latest saved one, as the Roster job fetches it from Lilith's history after a missed night. It is saved, but it is not today: no Governor's status or current name changes. governors and nameHistory are the store before; saved are the snapshots already in it (power only); record is one call. governorsAfter is every Governor as [id, current name, status]; namesAfter is Name History as [id, name, first seen]; rows is what the recorded day holds as [id, power].",
+  "olderDayCases": [
+    {
+      "case": "a missed day is saved, and a Top 200 Governor absent from it does not become Inactive",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1", "firstSeen": "2020-01-05" }, { "id": "2", "name": "Gov 2", "firstSeen": "2020-01-05" }],
+      "saved": [{ "takenOn": "2020-01-05", "rows": [{ "id": "1", "power": 900 }, { "id": "2", "power": 800 }] },
+                { "takenOn": "2020-01-07", "rows": [{ "id": "1", "power": 950 }, { "id": "2", "power": 850 }] }],
+      "record": { "takenOn": "2020-01-06", "rows": [{ "id": "1", "name": "Gov 1", "power": 920 }] },
+      "result": { "saved": true, "rows": 1, "inactive": 0, "current": 0, "renamed": 0, "new_governors": 0 },
+      "governorsAfter": [["1", "Gov 1", "current"], ["2", "Gov 2", "current"]],
+      "namesAfter": [["1", "Gov 1", "2020-01-05"], ["2", "Gov 2", "2020-01-05"]],
+      "rows": [["1", 920]]
+    },
+    {
+      "case": "an Inactive Governor present on a missed day stays Inactive",
+      "governors": [{ "id": "1", "name": "Gov 1" }, { "id": "2", "name": "Gov 2", "status": "inactive" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1", "firstSeen": "2020-01-05" }, { "id": "2", "name": "Gov 2", "firstSeen": "2020-01-05" }],
+      "saved": [{ "takenOn": "2020-01-05", "rows": [{ "id": "1", "power": 900 }, { "id": "2", "power": 800 }] },
+                { "takenOn": "2020-01-07", "rows": [{ "id": "1", "power": 950 }] }],
+      "record": { "takenOn": "2020-01-06", "rows": [{ "id": "1", "name": "Gov 1", "power": 920 }, { "id": "2", "name": "Gov 2", "power": 810 }] },
+      "result": { "saved": true, "rows": 2, "inactive": 0, "current": 0 },
+      "governorsAfter": [["1", "Gov 1", "current"], ["2", "Gov 2", "inactive"]],
+      "namesAfter": [["1", "Gov 1", "2020-01-05"], ["2", "Gov 2", "2020-01-05"]],
+      "rows": [["1", 920], ["2", 810]]
+    },
+    {
+      "case": "an older name leaves the current name as it is, joins Name History from its day, and a name first seen the next day is dated back",
+      "governors": [{ "id": "1", "name": "New Name" }, { "id": "2", "name": "Gov 2" }],
+      "nameHistory": [{ "id": "1", "name": "New Name", "firstSeen": "2020-01-07" }, { "id": "2", "name": "Gov 2", "firstSeen": "2020-01-07" }],
+      "saved": [{ "takenOn": "2020-01-07", "rows": [{ "id": "1", "power": 950 }, { "id": "2", "power": 850 }] }],
+      "record": { "takenOn": "2020-01-06", "rows": [{ "id": "1", "name": "Old Name", "power": 920 }, { "id": "2", "name": "Gov 2", "power": 840 }] },
+      "result": { "saved": true, "renamed": 0, "new_names": 1 },
+      "governorsAfter": [["1", "New Name", "current"], ["2", "Gov 2", "current"]],
+      "namesAfter": [["1", "New Name", "2020-01-07"], ["1", "Old Name", "2020-01-06"], ["2", "Gov 2", "2020-01-06"]],
+      "rows": [["1", 920], ["2", 840]]
+    },
+    {
+      "case": "a Character ID seen only on a missed day joins as Inactive, since the newest snapshot doesn't have it",
+      "governors": [{ "id": "1", "name": "Gov 1" }],
+      "nameHistory": [{ "id": "1", "name": "Gov 1", "firstSeen": "2020-01-05" }],
+      "saved": [{ "takenOn": "2020-01-07", "rows": [{ "id": "1", "power": 950 }] }],
+      "record": { "takenOn": "2020-01-06", "rows": [{ "id": "1", "name": "Gov 1", "power": 920 }, { "id": "3", "name": "ᵛø Passing", "power": 30 }] },
+      "result": { "saved": true, "new_governors": 1 },
+      "governorsAfter": [["1", "Gov 1", "current"], ["3", "ᵛø Passing", "inactive"]],
+      "namesAfter": [["1", "Gov 1", "2020-01-05"], ["3", "ᵛø Passing", "2020-01-06"]],
+      "rows": [["1", 920], ["3", 30]]
+    }
   ]
 }

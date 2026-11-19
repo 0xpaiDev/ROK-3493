@@ -60,6 +60,12 @@ def send_roster_snapshot(taken_on, rows):
     return _post("/rest/v1/rpc/record_roster_snapshot", {"taken_on": taken_on, "rows": rows}, _sign_in())
 
 
+def roster_days_missing(since):
+    """The days from since (an ISO date) on, oldest first, that have no Roster Snapshot although days
+    before and after them do: the nights the Roster job missed, as ISO dates."""
+    return _post("/rest/v1/rpc/roster_days_missing", {"since": since}, _sign_in())
+
+
 def roster_days_without_t4_t5(since):
     """The saved days from since (an ISO date) on, oldest first, with no T4/T5 values yet, as ISO dates."""
     return _post("/rest/v1/rpc/roster_days_without_t4_t5", {"since": since}, _sign_in())
