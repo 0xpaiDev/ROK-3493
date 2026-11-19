@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards, fortPauseAt } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -40,6 +40,7 @@ const TASKS = [
   { id: "farm-links", label: "Farm links" },
   { id: "fort-week", label: "Fort Week" },
   { id: "reward-promise", label: "Reward Promise" },
+  { id: "fort-pause", label: "Fort Pause" },
   { id: "gh-event", label: "GH Event", meta: "Top 10, Golden Heads", soon: {
     title: "Log a GH Event", body: "Log a GH Event's top 10 with Golden Heads.",
     steps: [["Name and dates", "One result per GH Event"], ["Enter the top 10", "Matched like a Fort Week"], ["Check Golden Heads", "Prefilled 20/10/5/4×7, editable"]] } },
@@ -105,6 +106,7 @@ async function showAdmin(session) {
   showFortWeek(document.getElementById("task-fort-week"));
   showRewardPromise(document.getElementById("task-reward-promise"));
   showRoster(document.getElementById("task-roster"));
+  showFortPause(document.getElementById("task-fort-pause"));
 }
 
 function soonHtml(t) {
@@ -1109,6 +1111,59 @@ async function showRoster(section, message = "") {
       return;
     }
     showRoster(section, `${g.name} is now ${status[0].toUpperCase() + status.slice(1)}.`);
+  });
+}
+
+// ---------- Fort Pause (KvK ticket 05, ADR 0007) ----------
+// The Council's switch: while Forts are paused the reader takes no reading, so no Fort Week exists and Fort
+// Average skips those weeks. Writes only through set_fort_pause; the rules module says whether Forts are paused.
+
+const utcTime = (iso) => {
+  const t = new Date(iso).toISOString();
+  return `${dayMonth(t.slice(0, 10))} ${t.slice(0, 4)}, ${t.slice(11, 16)} UTC`;
+};
+
+async function showFortPause(section, message = "") {
+  const { data, error } = await supabase.from("fort_pause").select("starts_at,ends_at").order("starts_at", { ascending: false }).limit(1);
+  if (error) {
+    section.innerHTML = `<div class="eyebrow">Fort Pause</div><p class="admin-msg" role="status">Could not load the Fort Pause: ${esc(error.message)}</p>`;
+    setTaskStatus("fort-pause", "Could not load");
+    return;
+  }
+  const last = data[0] ? { start: data[0].starts_at, end: data[0].ends_at } : null;
+  const paused = fortPauseAt(last ? [last] : [], Date.now());
+  setTaskStatus("fort-pause", paused ? `Paused since ${dayMonth(new Date(paused.start).toISOString().slice(0, 10))}` : "Forts running", paused ? "Paused" : "");
+
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <div class="reveal">
+      <div class="eyebrow">Fort Pause</div>
+      <h1 class="task-title">${paused ? `Forts paused since ${esc(utcTime(paused.start))}` : "Forts are running"}</h1>
+      <p class="task-lede">${paused
+        ? "The reader takes no reading, so no Fort Week exists until Forts resume, and Fort Average skips those weeks. Fort Rankings says since when Forts are paused."
+        : `The reader reads the Live Week every night.${last?.end ? ` The last pause ended ${esc(utcTime(last.end))}.` : ""}`}</p>
+    </div>
+    <p class="admin-msg" role="status">${esc(message)}</p>
+    <section class="card admin-card">
+      <h2>${paused ? "Resume Forts" : "Pause Forts"}</h2>
+      <p class="muted">${paused
+        ? "From now the reader reads the Live Week again. This week is an ordinary Live Week: its Fort Counts count in full."
+        : "Usually for a KvK, and independent of its days. The Live Week keeps its last reading and closes Complete or Partial as it stands; the weeks after it are not Fort Weeks until you resume."}</p>
+      <button class="btn primary" type="button" id="fort-pause-switch">${paused ? "Resume Forts" : "Pause Forts"}</button>
+    </section>`;
+  section.replaceChildren(body);
+
+  const button = body.querySelector("#fort-pause-switch");
+  button.addEventListener("click", async () => {
+    if (!confirm(paused ? "Resume Forts now? The reader reads the Live Week again from its next run." : "Pause Forts now? The reader stops reading Forts until you resume them.")) return;
+    button.disabled = true;
+    const { error } = await supabase.rpc("set_fort_pause", { paused: !paused });
+    if (error) {
+      button.disabled = false;
+      body.querySelector(".admin-msg").textContent = `Could not ${paused ? "resume" : "pause"} Forts: ${error.message}`;
+      return;
+    }
+    showFortPause(section, paused ? "Forts resumed." : "Forts paused.");
   });
 }
 

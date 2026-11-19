@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks, fortPauseAt } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -612,4 +612,34 @@ test("Fill on the Main + Farm ranking pays the Mains in Group Score order, never
   const { awards, skipped } = fillWeeklyAwards({ ...promise("2026-11-02", tier(1, gold(5)), tier(2, gold(3)), tier(3, gold(1))), paidOn: "main_farm" }, ranking);
   assert.deepEqual(awards.map((a) => [a.id, a.place]), [["b", 1], ["a", 2]]);
   assert.deepEqual(skipped, []);
+});
+
+// The Fort Pause (ADR 0007): record_live_week refuses readings while Forts are paused, so the weeks inside a
+// pause never exist and Fort Average skips them; the week the pause started keeps its last reading.
+test("Fort Average skips the weeks inside a Fort Pause, which hold no Fort Week", () => {
+  // Paused Wed 11 Nov, resumed Wed 6 Jan: the weeks of 16 Nov to 28 Dec were never read.
+  const weeks = [fortWeek("2026-11-02", entry("g", 20)), fortWeek("2027-01-04", entry("g", 10)), fortWeek("2027-01-11", entry("g", 30))];
+  assert.deepEqual(fortAverage(weeks, "g", new Date("2027-01-20T12:00:00Z")), { average: 20, weeksCounted: 3 });
+});
+
+test("the week a Fort Pause starts keeps its Complete or Partial", () => {
+  const now = new Date("2027-01-20T12:00:00Z");
+  const after = [fortWeek("2027-01-04", entry("g", 10))];
+  const partial = [fortWeek("2026-11-02", entry("g", 20)), { start: "2026-11-09", completeness: "partial", entries: [entry("x", 9)] }, ...after];
+  const complete = [fortWeek("2026-11-02", entry("g", 20)), fortWeek("2026-11-09", entry("x", 9)), ...after];
+  assert.deepEqual([fortAverage(partial, "g", now).average, fortAverage(complete, "g", now).average], [15, 10]);
+});
+
+const pause = (start, end = null) => ({ start, end });
+
+test("Forts are paused from a Fort Pause's start until its end", () => {
+  const pauses = [pause("2026-06-01T10:00:00Z", "2026-08-01T10:00:00Z"), pause("2026-11-20T18:00:00Z")];
+  assert.deepEqual(
+    ["2026-07-01T00:00:00Z", "2026-08-01T10:00:00Z", "2026-11-20T17:59:00Z", "2026-11-20T18:00:00Z", "2027-01-01T00:00:00Z"]
+      .map((t) => fortPauseAt(pauses, t)?.start ?? null),
+    ["2026-06-01T10:00:00Z", null, null, "2026-11-20T18:00:00Z", "2026-11-20T18:00:00Z"]);
+});
+
+test("Forts run when no Fort Pause was ever set", () => {
+  assert.equal(fortPauseAt([], "2026-11-20T18:00:00Z"), null);
 });

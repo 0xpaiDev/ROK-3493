@@ -22,7 +22,7 @@ async function rows(table, query) {
 }
 
 export async function loadKingdom() {
-  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards, promises] = await Promise.all([
+  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards, promises, pauses] = await Promise.all([
     rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
     rows("fort_week", "select=starts_on,completeness,read_at&order=starts_on.asc"),
@@ -33,6 +33,8 @@ export async function loadKingdom() {
     rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc&limit=1"),
     rows("weekly_award", "select=week,character_id,place,award,note,weekly_award_item(item,amount)&weekly_award_item.order=id.asc&order=week.desc,place.asc,id.asc"),
     rows("reward_promise", "select=week,intro,paid_on,reward_promise_tier(place,reward,items)&reward_promise_tier.order=position.asc&order=week.desc"),
+    // Until the Fort Pause migration reaches the database the table is missing: Forts read as running.
+    rows("fort_pause", "select=starts_at,ends_at&order=starts_at.asc").catch(() => []),
   ]);
   const latest = snapshots[0];
   const snapshotRows = latest
@@ -109,5 +111,7 @@ export async function loadKingdom() {
     // Reward Promises { week, intro, paidOn, tiers: [{ place, reward, items }] }, the latest week first.
     // paidOn is "mains" or "main_farm"; each tier pays one place.
     rewardPromises: promises.map((p) => ({ week: p.week, intro: p.intro, paidOn: p.paid_on, tiers: p.reward_promise_tier })),
+    // Fort Pauses { start, end } (ADR 0007), oldest first; end is null while Forts are still paused.
+    fortPauses: pauses.map((p) => ({ start: p.starts_at, end: p.ends_at })),
   };
 }
