@@ -22,7 +22,8 @@ MIGRATIONS = sorted((ROOT / "supabase" / "migrations").glob("20261109*.sql")) + 
     ROOT / "supabase" / "migrations" / "20261116130000_live_week_completeness_from_reading_day.sql",
     ROOT / "supabase" / "migrations" / "20261116180000_live_week_match_any_spelling.sql",
     ROOT / "supabase" / "migrations" / "20261117100000_pick_governor.sql",
-    ROOT / "supabase" / "migrations" / "20261117180000_every_pick_through_pick_governor.sql"]
+    ROOT / "supabase" / "migrations" / "20261117180000_every_pick_through_pick_governor.sql",
+    ROOT / "supabase" / "migrations" / "20261119200000_fort_pause.sql"]
 CASES = json.loads((ROOT / "tests" / "name-matching-cases.json").read_text(encoding="utf-8"))["cases"]
 
 

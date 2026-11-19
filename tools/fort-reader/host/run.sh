@@ -11,6 +11,12 @@ HERE="$(cd "$(dirname "$0")/.." && pwd)"   # tools/fort-reader
 
 ADB_ADDRESS="${FORT_READER_ADB:-127.0.0.1:5555}"
 
+# While the Council has Forts paused (ADR 0007) there is nothing to read: end before Android starts.
+# A failed check (no network, no sign-in) carries on, and the reader itself reports the failure.
+if (cd "$HERE" && .venv/bin/python fort_reader.py --forts-paused); then
+  exit 0
+fi
+
 echo "$(date -u '+%F %T') UTC: starting redroid"
 docker start redroid >/dev/null || echo "docker start redroid failed; the reader will report it"
 

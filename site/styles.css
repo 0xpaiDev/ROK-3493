@@ -158,6 +158,7 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
   background: rgba(233, 196, 106, .07); border: 1px solid rgba(233, 196, 106, .22);
 }
 .note svg { flex: none; margin-top: 2px; }
+.pause-note { margin-bottom: 16px; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px;
   font-weight: 600; font-size: 14px; cursor: pointer; transition: transform .15s, border-color .2s;

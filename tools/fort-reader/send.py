@@ -15,13 +15,15 @@ SUPABASE_URL = "https://xjgswlqzdpmnhhnitucr.supabase.co"
 SUPABASE_KEY = "sb_publishable_UZPl9wsrFKR7oV1YEAHBbg_AnqyQLSe"
 
 
-def _post(path, body, token=None):
+def _post(path, body, token=None, opener=urllib.request.urlopen):
+    """POSTs body (or GETs, when body is None) to Supabase, as token's user or else the public key."""
     req = urllib.request.Request(
-        SUPABASE_URL + path, data=json.dumps(body).encode(), method="POST",
+        SUPABASE_URL + path, data=None if body is None else json.dumps(body).encode(),
+        method="GET" if body is None else "POST",
         headers={"apikey": SUPABASE_KEY, "Content-Type": "application/json",
                  "Authorization": f"Bearer {token or SUPABASE_KEY}"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as res:
+        with opener(req, timeout=30) as res:
             return json.loads(res.read() or b"null")
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")
@@ -32,24 +34,30 @@ def _post(path, body, token=None):
         raise SystemExit(f"Supabase refused {path.split('?')[0]}: {e.code} {detail}")
 
 
+def _sign_in(opener=urllib.request.urlopen):
+    """The reader's own Supabase sign-in (never a Council member): its access token."""
+    email, password = os.environ.get("FORT_READER_EMAIL"), os.environ.get("FORT_READER_PASSWORD")
+    if not email or not password:
+        raise SystemExit("Add FORT_READER_EMAIL and FORT_READER_PASSWORD (the reader's Supabase sign-in) to .env.")
+    return _post("/auth/v1/token?grant_type=password", {"email": email, "password": password}, opener=opener)["access_token"]
+
+
+def forts_paused_since(opener=urllib.request.urlopen):
+    """When the Fort Pause still going started (an ISO timestamp), or None while Forts run (ADR 0007).
+    Asked through the reader's own sign-in, before the nightly run starts Android or the game."""
+    token = _sign_in(opener)
+    open_pauses = _post("/rest/v1/fort_pause?select=starts_at&ends_at=is.null", None, token, opener)
+    return open_pauses[0]["starts_at"] if open_pauses else None
+
+
 def send_live_week(rows, read_at):
     """rows: the merged reading, each {rank, name, forts, names?}; read_at: when its first screenshot
     was taken (an aware datetime). Returns {rows, matched, needs_id}.
     A row read two ways is sent with every spelling (names); it matches only when they lead to one Governor."""
-    email, password = os.environ.get("FORT_READER_EMAIL"), os.environ.get("FORT_READER_PASSWORD")
-    if not email or not password:
-        raise SystemExit("Add FORT_READER_EMAIL and FORT_READER_PASSWORD (the reader's Supabase sign-in) to .env.")
-    token = _post("/auth/v1/token?grant_type=password", {"email": email, "password": password})["access_token"]
+    token = _sign_in()
     entries = [{"rank": r["rank"], "name": r["name"], "fort_count": r["forts"],
                 **({"names": r["names"]} if r.get("names") else {})} for r in rows]
     return _post("/rest/v1/rpc/record_live_week", {"read_at": read_at.isoformat(), "entries": entries}, token)
-
-
-def _sign_in():
-    email, password = os.environ.get("FORT_READER_EMAIL"), os.environ.get("FORT_READER_PASSWORD")
-    if not email or not password:
-        raise SystemExit("Add FORT_READER_EMAIL and FORT_READER_PASSWORD (the reader's Supabase sign-in) to .env.")
-    return _post("/auth/v1/token?grant_type=password", {"email": email, "password": password})["access_token"]
 
 
 def send_roster_snapshot(taken_on, rows):
