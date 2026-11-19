@@ -16,7 +16,7 @@ Character ID is the only key for a Governor; names change. When a name can't be 
 
 ## Work in flight
 
-Work lines live under `.scratch/` (git-ignored), one folder each: `fort-reader/` (the reader and Roster job on the Oracle A1, the active line), `kingdom-admin/` (the Council admin page) and `reward-payout/` (Reward Promise, Group Score, Fill). In the line the task belongs to, read `STATE.md` first, then `SPEC.md` and the ticket under `issues/` that `Next:` names. `.scratch/pre-existing.md` collects bugs found in passing.
+Work lines live under `.scratch/` (git-ignored), one folder each: `fort-reader/` (the reader and Roster job on the Oracle A1, the active line), `kingdom-admin/` (the Council admin page), `reward-payout/` (Reward Promise, Group Score, Fill) and `kvk/` (KvK standings, Counting Periods, Fort Pause). In the line the task belongs to, read `STATE.md` first, then `SPEC.md` and the ticket under `issues/` that `Next:` names. `.scratch/pre-existing.md` collects bugs found in passing.
 
 Architecture decisions live in `docs/adr/`:
 
