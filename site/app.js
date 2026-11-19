@@ -1,4 +1,4 @@
-import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal } from "./kingdom.js";
+import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, kvkState, kvkStandings } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -93,6 +93,7 @@ import { rewardItem } from "./rewards.js";
   };
   D.roster.forEach((r) => (get(r.id, r.name).roster = r));
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
+  D.kvkTotals?.rows.forEach((r) => get(r.id, r.name));
   D.ghEvents.forEach((ev) => (ev.label = `${fmtDay(ev.startsOn)}–${fmtDay(ev.endsOn)} ${ev.endsOn.slice(0, 4)}`));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
   // Each Governor's Fort history keeps their own Fort Count: a Main's Mains-only rank, a Farm's
@@ -451,6 +452,44 @@ import { rewardItem } from "./rewards.js";
       </div></div>`;
   }
 
+  // The KvK tab: the KvK currentKvk picks (the Active one, else the last to end, else the next to start) and its
+  // table, ranked by DKP over the Counting Periods. The full list of KvKs comes with ticket 04 of the kvk line.
+  function kvkTab() {
+    const k = D.kvks.find((x) => x.id === D.kvkTotals?.kvkId);
+    const head = (title, lede) => `<div class="section-head reveal"><div><div class="eyebrow">KvK</div><h1>${title}</h1>${lede ? `<p class="muted">${lede}</p>` : ""}</div></div>`;
+    if (!k) return `<div class="wrap page">${head("KvK")}<section class="card empty">No KvK is set up yet.</section></div>`;
+    const phase = kvkState(k, now);
+    const day = (iso) => `${fmtDay(iso)} ${iso.slice(0, 4)}`;
+    const periods = k.periods.length
+      ? k.periods.map((p) => p.endsOn == null ? `from ${day(p.startsOn)}` : p.endsOn === p.startsOn ? day(p.startsOn) : `${day(p.startsOn)} – ${day(p.endsOn)}`).join(", ")
+      : "none set yet";
+    const lede = `${{ upcoming: "Starts", active: "Active", ended: "Ended" }[phase]} · ${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Counting Periods: ${esc(periods)}.
+      DKP is T4 kills ×${k.weights.t4Kill}, T5 kills ×${k.weights.t5Kill}, T4 deaths ×${k.weights.t4Death} and T5 deaths ×${k.weights.t5Death} over the Counting Periods.
+      Governors at or above ${big(k.powerCutoff)} power in the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
+    const rows = kvkStandings(D.kvkTotals.rows, k);
+    const away = (r) => r.status === "Inactive" || r.status === "Migrated";
+    const empty = phase === "upcoming" ? `The table fills from the Roster Snapshot of ${esc(day(k.startsOn))}.`
+      : D.kvkTotals.rows.length ? `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot.`
+      : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
+    return `<div class="wrap page">
+      ${head(esc(k.name), lede)}
+      <section class="card">${rows.length ? `
+        <div class="table-wrap"><table>
+          <thead><tr><th>#</th><th>Governor</th><th class="r">Start power</th><th class="r">DKP</th><th class="r">T4 kills</th><th class="r">T5 kills</th><th class="r">T4 deaths</th><th class="r">T5 deaths</th></tr></thead>
+          <tbody>${rows.map((r) => `<tr class="${away(r) ? "is-away" : ""}">
+            <td class="faint num mono">${r.rank}</td>
+            <td class="name-cell">${who(byKey(r.id))} ${away(r) ? `<span class="tag away">${esc(r.status)}</span>` : ""}</td>
+            <td class="r num">${big(r.startPower)}</td>
+            <td class="r num"><b>${big(r.dkp)}</b></td>
+            <td class="r num">${big(r.t4Kills)}</td>
+            <td class="r num">${big(r.t5Kills)}</td>
+            <td class="r num">${big(r.t4Deaths)}</td>
+            <td class="r num">${big(r.t5Deaths)}</td>
+          </tr>`).join("")}</tbody>
+        </table></div>` : `<p class="empty">${empty}</p>`}
+      </section></div>`;
+  }
+
   function roster() {
     const q = state.rosterQ.trim().toLowerCase();
     const sorters = { power: (g) => g.roster.power, highestPower: (g) => g.roster.highestPower, resources: (g) => g.roster.resources, fort: (g) => g.avg };
@@ -613,7 +652,7 @@ import { rewardItem } from "./rewards.js";
   }
 
   // ---------- routing + events ----------
-  const views = { home, fort, events, roster };
+  const views = { home, fort, kvk: kvkTab, events, roster };
   function render() {
     const tab = (location.hash.slice(1) || "home").split("/")[0];
     const view = views[tab] ? tab : "home";

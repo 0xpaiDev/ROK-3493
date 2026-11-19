@@ -1,6 +1,6 @@
 // Reads the Kingdom from Supabase with the public key. Read-only: no rules here, only reshaping
 // rows into the plain data the pages and the kingdom rules module take.
-import { fortWeekEnd, top200 } from "./kingdom.js";
+import { fortWeekEnd, top200, currentKvk } from "./kingdom.js";
 
 export const SUPABASE_URL = "https://xjgswlqzdpmnhhnitucr.supabase.co";
 // Publishable (anon) key: safe to ship, row-level security only lets it read.
@@ -21,8 +21,23 @@ async function rows(table, query) {
   }
 }
 
+const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
+
+// A KvK as the kingdom rules take it (checkKvk, kvkStandings in kingdom.js); the admin page reads it the same way.
+export const KVK_SELECT = "id,name,starts_on,ends_on,power_cutoff,weight_t4_kill,weight_t5_kill,weight_t4_death,weight_t5_death,kvk_counting_period(starts_on,ends_on)";
+export const kvkFromRow = (k) => ({
+  id: k.id, name: k.name, startsOn: k.starts_on, endsOn: k.ends_on, powerCutoff: Number(k.power_cutoff),
+  weights: { t4Kill: Number(k.weight_t4_kill), t5Kill: Number(k.weight_t5_kill), t4Death: Number(k.weight_t4_death), t5Death: Number(k.weight_t5_death) },
+  periods: [...(k.kvk_counting_period ?? [])].sort((a, b) => a.starts_on.localeCompare(b.starts_on)).map((p) => ({ startsOn: p.starts_on, endsOn: p.ends_on })),
+});
+// One Governor's KvK totals, as kvk_standings returns them.
+const totalsFromRow = (r) => ({
+  id: r.character_id, name: r.name, status: cap(r.status), startPower: r.start_power,
+  t4Kills: r.t4_kills, t5Kills: r.t5_kills, t4Deaths: r.t4_deaths, t5Deaths: r.t5_deaths,
+});
+
 export async function loadKingdom() {
-  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards, promises] = await Promise.all([
+  const [governors, names, weeks, entries, events, ghEntries, kvk, snapshots, awards, promises, kvkSetups] = await Promise.all([
     rows("governor", "select=character_id,current_name,status,kind,main_character_id"),
     rows("governor_name", "select=character_id,name&order=first_seen.asc.nullslast,name.asc"),
     rows("fort_week", "select=starts_on,completeness,read_at&order=starts_on.asc"),
@@ -33,13 +48,18 @@ export async function loadKingdom() {
     rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc&limit=1"),
     rows("weekly_award", "select=week,character_id,place,award,note,weekly_award_item(item,amount)&weekly_award_item.order=id.asc&order=week.desc,place.asc,id.asc"),
     rows("reward_promise", "select=week,intro,paid_on,reward_promise_tier(place,reward,items)&reward_promise_tier.order=position.asc&order=week.desc"),
+    rows("kvk", `select=${KVK_SELECT}&order=starts_on.desc`),
   ]);
+  // The KvKs the Council set up, newest first, and the totals of the one the KvK tab shows: one row per
+  // Governor in its KvK Start Snapshot, summed in the database (kvk_standings), never the daily rows.
+  const kvks = kvkSetups.map(kvkFromRow);
+  const shown = currentKvk(kvks, Date.now());
+  const totals = shown ? await rows("rpc/kvk_standings", `kvk_id=${shown.id}`) : [];
   const latest = snapshots[0];
   const snapshotRows = latest
     ? await rows("roster_snapshot_row", `select=character_id,power,highest_power,resources_gathered&snapshot_id=eq.${latest.id}&order=power.desc.nullslast`)
     : [];
   const governor = new Map(governors.map((g) => [g.character_id, g]));
-  const cap = (s) => s[0].toUpperCase() + s.slice(1);
 
   const fortWeeks = weeks.map((w) => ({
     start: w.starts_on,
@@ -99,6 +119,10 @@ export async function loadKingdom() {
     fortWeeks,
     ghEvents,
     kvk: kvkRows,
+    // KvKs the Council set up, newest first: { id, name, startsOn, endsOn, powerCutoff, weights, periods }.
+    kvks,
+    // The KvK tab's KvK and its totals: { kvkId, rows: [{ id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths }] }.
+    kvkTotals: shown ? { kvkId: shown.id, rows: totals.map(totalsFromRow) } : null,
     roster,
     // Kind and Farm link for the Mains ranking: { id, name, kind, mainId }.
     governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id })),
