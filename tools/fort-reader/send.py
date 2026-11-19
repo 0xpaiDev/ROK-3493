@@ -63,6 +63,11 @@ def send_live_week(rows, read_at):
 def send_roster_snapshot(taken_on, rows):
     """Saves one day's Lilith stats as a Roster Snapshot (ADR 0004), signed in as the reader.
     taken_on: an ISO date; rows: [{id, name, power, highest_power, kill_points, resources_gathered,
-    alliance_helps}]. Returns {saved, taken_on, ...}; saved is false when that day is already saved."""
-    token = _sign_in()
-    return _post("/rest/v1/rpc/record_roster_snapshot", {"taken_on": taken_on, "rows": rows}, token)
+    alliance_helps, t4_kills, t5_kills, t4_deaths, t5_deaths}]. Returns {saved, taken_on, ...}; saved is
+    false when that day is already saved, and then filled counts the rows whose null T4/T5 values it filled."""
+    return _post("/rest/v1/rpc/record_roster_snapshot", {"taken_on": taken_on, "rows": rows}, _sign_in())
+
+
+def roster_days_without_t4_t5(since):
+    """The saved days from since (an ISO date) on, oldest first, with no T4/T5 values yet, as ISO dates."""
+    return _post("/rest/v1/rpc/roster_days_without_t4_t5", {"since": since}, _sign_in())

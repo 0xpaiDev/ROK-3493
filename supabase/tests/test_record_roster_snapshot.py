@@ -20,8 +20,11 @@ from test_record_live_week import db_url
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = [ROOT / "supabase" / "migrations" / "20261109120000_live_week_reading.sql",  # is_reader, fort_reader
-              ROOT / "supabase" / "migrations" / "20261117090000_reader_records_roster_snapshot.sql"]
-CASES = json.loads((ROOT / "tests" / "roster-snapshot-cases.json").read_text(encoding="utf-8"))["cases"]
+              ROOT / "supabase" / "migrations" / "20261117090000_reader_records_roster_snapshot.sql",
+              ROOT / "supabase" / "migrations" / "20261119090000_roster_snapshot_t4_t5.sql"]
+SHARED = json.loads((ROOT / "tests" / "roster-snapshot-cases.json").read_text(encoding="utf-8"))
+CASES, T4T5_CASES = SHARED["cases"], SHARED["t4t5Cases"]
+T4T5 = ("t4_kills", "t5_kills", "t4_deaths", "t5_deaths")
 
 
 class RosterSnapshot(unittest.TestCase):
@@ -88,6 +91,21 @@ class RosterSnapshot(unittest.TestCase):
             "select character_id, name from governor_name where character_id = any(%s)", (ids,)).fetchall())
         return govs, names
 
+    def t4_t5(self, day):
+        return self.conn.execute(
+            "select r.character_id, r.power, r.t4_kills, r.t5_kills, r.t4_deaths, r.t5_deaths from roster_snapshot s "
+            "join roster_snapshot_row r on r.snapshot_id = s.id where s.taken_on = %s order by 1", (day,)).fetchall()
+
+    def everything_but_t4_t5(self, ids):
+        """The Governors, their Name History and every snapshot value but the four, to see a fill touch nothing else."""
+        return (self.conn.execute("select character_id, current_name, status, status_set_by, status_set_at from governor "
+                                  "where character_id = any(%s) order by 1", (ids,)).fetchall(),
+                self.conn.execute("select character_id, name, first_seen from governor_name where character_id = any(%s) order by 1, 2",
+                                  (ids,)).fetchall(),
+                self.conn.execute("select s.taken_on, s.uploaded_by, s.uploaded_at, r.character_id, r.power, r.highest_power, r.kill_points, "
+                                  "r.resources_gathered, r.alliance_helps from roster_snapshot s join roster_snapshot_row r on r.snapshot_id = s.id "
+                                  "order by 1, 4").fetchall())
+
     # ---- tests ----
 
     def test_shared_roster_cases(self):
@@ -117,6 +135,45 @@ class RosterSnapshot(unittest.TestCase):
             "select s.uploaded_by, r.power, r.highest_power, r.kill_points, r.resources_gathered, r.alliance_helps "
             "from roster_snapshot s join roster_snapshot_row r on r.snapshot_id = s.id where s.taken_on = '2020-01-07'").fetchall(),
             [("reader-test@example.invalid", 900, 950, 7, 8, 9)])
+
+    def test_shared_t4_t5_cases(self):
+        for c in T4T5_CASES:
+            with self.subTest(c["case"]):
+                self.conn.execute("savepoint case_start")
+                try:
+                    for snap in c["saved"]:
+                        sid = self.one("insert into roster_snapshot (taken_on) values (%s) returning id", (snap["takenOn"],))
+                        for r in snap["rows"]:
+                            self.conn.execute(
+                                "insert into governor (character_id, current_name) values (%s, %s) on conflict do nothing", (r["id"], r["name"]))
+                            self.conn.execute(
+                                "insert into governor_name (character_id, name) values (%s, %s) on conflict do nothing", (r["id"], r["name"]))
+                            self.conn.execute(
+                                "insert into roster_snapshot_row (snapshot_id, character_id, power, t4_kills, t5_kills, t4_deaths, t5_deaths) "
+                                "values (%s, %s, %s, %s, %s, %s, %s)",
+                                (sid, r["id"], r["power"], *(r.get(k) for k in T4T5)))
+                    ids = sorted({r["id"] for s in c["saved"] for r in s["rows"]} | {r["id"] for r in c["record"]["rows"]})
+                    others_before = self.everything_but_t4_t5(ids)
+                    result = self.record(c["record"]["takenOn"], c["record"]["rows"])
+                    self.assertEqual({k: result.get(k) for k in c["result"]}, c["result"])
+                    for day, rows in c["after"].items():
+                        self.assertEqual([list(r) for r in self.t4_t5(day)], rows, day)
+                    if not result["saved"]:
+                        self.assertEqual(self.everything_but_t4_t5(ids), others_before)
+                finally:
+                    self.conn.execute("rollback to savepoint case_start")
+
+    def test_the_saved_days_without_t4_t5_are_listed_oldest_first_from_a_day_on(self):
+        # A day where no Governor has any of the four was saved before they existed; one with a value is filled.
+        self.record("2020-01-04", [{"id": "1", "name": "Gov 1", "power": 900}])
+        self.record("2020-01-05", [{"id": "1", "name": "Gov 1", "power": 900}])
+        self.record("2020-01-06", [{"id": "1", "name": "Gov 1", "power": 900, "t5_deaths": 0}, {"id": "2", "name": "Gov 2", "power": 1}])
+        self.record("2020-01-07", [{"id": "1", "name": "Gov 1", "power": 900}])
+        self.conn.execute("set local role authenticated")
+        self.conn.execute("select set_config('request.jwt.claims', %s, true)", (json.dumps(self.reader),))
+        days = self.one("select roster_days_without_t4_t5('2020-01-05')")
+        self.conn.execute("reset role")
+        self.assertEqual(days, [datetime.date(2020, 1, 5), datetime.date(2020, 1, 7)])
 
     def test_a_day_already_saved_changes_nothing(self):
         self.record("2020-01-07", [{"id": "1", "name": "Gov 1", "power": 900}])

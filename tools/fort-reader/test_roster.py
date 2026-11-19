@@ -21,7 +21,7 @@ def token(expires):
 
 def member(id, name, power, **extra):
     return {"id": id, "name": name, "power": power, "max_power": power + 1, "kill": 7, "collect": 8, "help": 9,
-            "dead": 1, "t5": 2, "dt": "2026/11/14", **extra}
+            "dead": 1, "t1": 5, "dead_t1": 6, "t4": 3, "t5": 2, "dead_t4": 4, "dead_t5": 0, "dt": "2026/11/14", **extra}
 
 
 class FakeLilith:
@@ -62,16 +62,58 @@ class Roster(unittest.TestCase):
         self.sent.append((day, rows))
         return {"saved": True, "taken_on": day, "rows": len(rows), "new_governors": 0, "renamed": 0, "inactive": 0, "current": 0}
 
-    def run_job(self, lilith=None, **kw):
+    def run_job(self, lilith=None, without=(), **kw):
         lilith = lilith or FakeLilith()
-        lines = roster.run(args(**kw), kw.get("now", NOW), lilith, self.send, lambda s, b: self.mails.append(s))
+        self.asked_since = []
+
+        def days_without_t4_t5(since):
+            self.asked_since.append(since)
+            return list(without)
+        lines = roster.run(args(**kw), kw.get("now", NOW), lilith, self.send, lambda s, b: self.mails.append(s),
+                           days_without_t4_t5)
         return lines, lilith
+
+    def test_saved_days_without_t4_t5_are_filled_from_lilith_history(self):
+        def send(day, rows):
+            self.sent.append((day, rows))
+            if day == "2026-11-14":
+                return {"saved": True, "taken_on": day, "rows": len(rows), "new_governors": 0, "renamed": 0, "inactive": 0, "current": 0}
+            return {"saved": False, "taken_on": day, "latest": "2026-11-14", "filled": len(rows)}
+        self.send = send
+        lines, lilith = self.run_job(without=["2026-11-10", "2026-11-12"])
+        self.assertEqual(self.asked_since, ["2026-08-17"])  # Lilith keeps at least 90 days
+        self.assertEqual([d for d, _ in self.sent], ["2026-11-14", "2026-11-10", "2026-11-12"])
+        self.assertIn("start=2026-11-10&end=2026-11-10", lilith.asked[2][0])
+        self.assertEqual({k: self.sent[1][1][0][k] for k in ("t4_kills", "t5_kills", "t4_deaths", "t5_deaths")},
+                         {"t4_kills": 3, "t5_kills": 2, "t4_deaths": 4, "t5_deaths": 0})
+        self.assertEqual(lines[-2:], ["Filled T4/T5 kills and deaths for 2026-11-10: 2 Governors.",
+                                      "Filled T4/T5 kills and deaths for 2026-11-12: 2 Governors."])
+        self.assertEqual(self.mails, [])
+
+    def test_a_saved_day_lilith_cannot_give_does_not_fail_the_run(self):
+        lilith = FakeLilith()
+        real = lilith.__call__
+
+        def answer(req, timeout):
+            if "start=2026-11-10" in req.full_url:
+                lilith.asked.append((req.full_url, {}))
+                return io.BytesIO(json.dumps({"code": 200, "msg": "OK", "data": [], "total": 0}).encode())
+            return real(req, timeout)
+        lines, _ = self.run_job(answer, without=["2026-11-10"])
+        self.assertEqual([d for d, _ in self.sent], ["2026-11-14"])
+        self.assertEqual(lines[-1], "Couldn't fill T4/T5 kills and deaths for 2026-11-10: Lilith has no member data for 2026-11-10.")
+
+    def test_a_dry_run_fills_nothing(self):
+        lines, _ = self.run_job(dry_run=True, without=["2026-11-10"])
+        self.assertEqual([self.sent, self.asked_since], [[], []])
 
     def test_saves_the_newest_day_with_character_ids_and_the_kept_columns(self):
         lines, lilith = self.run_job()
         self.assertEqual(self.sent, [("2026-11-14", [
-            {"id": "149673994", "name": "FKK CATHAY", "power": 125, "highest_power": 126, "kill_points": 7, "resources_gathered": 8, "alliance_helps": 9},
-            {"id": "49913581", "name": "Zhuī Mìng", "power": 104, "highest_power": 105, "kill_points": 7, "resources_gathered": 8, "alliance_helps": 9}])])
+            {"id": "149673994", "name": "FKK CATHAY", "power": 125, "highest_power": 126, "kill_points": 7, "resources_gathered": 8, "alliance_helps": 9,
+             "t4_kills": 3, "t5_kills": 2, "t4_deaths": 4, "t5_deaths": 0},
+            {"id": "49913581", "name": "Zhuī Mìng", "power": 104, "highest_power": 105, "kill_points": 7, "resources_gathered": 8, "alliance_helps": 9,
+             "t4_kills": 3, "t5_kills": 2, "t4_deaths": 4, "t5_deaths": 0}])])
         self.assertIn("start=2026-11-14&end=2026-11-14", lilith.asked[1][0])
         self.assertIn("server_id=2493", lilith.asked[1][0])
         self.assertTrue(lilith.asked[0][1]["Authorization"].startswith("Bearer header."))
@@ -104,8 +146,12 @@ class Roster(unittest.TestCase):
             self.run_job(FakeLilith(members=[]))
 
     def test_a_value_that_is_not_a_whole_number_is_refused(self):
-        with self.assertRaisesRegex(roster.RosterError, "power is '12M'"):
-            self.run_job(FakeLilith(members=[{**member("1", "A", 0), "power": "12M"}]))
+        for field, value, message in [("power", "12M", "power is '12M'"), ("t4", 1.5, "t4 is 1.5"),
+                                      ("dead_t5", -1, "dead_t5 is -1"), ("t5", "7", "t5 is '7'")]:
+            with self.subTest(field):
+                with self.assertRaisesRegex(roster.RosterError, message):
+                    self.run_job(FakeLilith(members=[{**member("1", "A", 0), field: value}]))
+        self.assertEqual(self.sent, [])
 
     def test_a_refused_token_says_to_replace_it(self):
         with self.assertRaisesRegex(roster.RosterError, "put a new one in LILITH_PAUTH"):
@@ -137,7 +183,7 @@ class Roster(unittest.TestCase):
         os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
         def broken(subject, body):
             raise TimeoutError("smtp timed out")
-        lines = roster.run(args(), NOW, FakeLilith(day="2026-11-11"), self.send, broken)
+        lines = roster.run(args(), NOW, FakeLilith(day="2026-11-11"), self.send, broken, lambda since: [])
         self.assertEqual(len(self.sent), 1)
         self.assertIn("couldn't email it: smtp timed out", lines[0])
         self.assertIn("Saved the 2026-11-11 Roster Snapshot", lines[2])
