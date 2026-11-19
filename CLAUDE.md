@@ -1,4 +1,4 @@
-﻿# Kingdom 3493
+# Kingdom 3493
 
 Public site for the Void Legion (Rise of Kingdoms, Kingdom 3493): Fort rankings, GH Events, roster. Plain HTML/CSS/JS in `site/`, no build step. Every push to `main` publishes it to GitHub Pages.
 
