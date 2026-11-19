@@ -73,5 +73,49 @@
       "snapshot": { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }] },
       "statusChanges": [], "newGovernors": [], "renames": [], "newNames": []
     }
+  ],
+  "t4t5About": "T4 kills, T5 kills, T4 deaths and T5 deaths (Lilith's t4, t5, dead_t4, dead_t5): what record_roster_snapshot keeps, as the day's gains. saved are the snapshots already in the store; record is one call and result what it returns. after lists each day's rows as [id, power, t4_kills, t5_kills, t4_deaths, t5_deaths]. A call that fills a saved day changes nothing else: no status, name, Name History or other value.",
+  "t4t5Cases": [
+    {
+      "case": "a new day saves the four values; a Governor Lilith sent without them holds null",
+      "saved": [{ "takenOn": "2020-01-06", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }] }],
+      "record": { "takenOn": "2020-01-07", "rows": [
+        { "id": "1", "name": "Gov 1", "power": 950, "t4_kills": 11, "t5_kills": 12, "t4_deaths": 13, "t5_deaths": 14 },
+        { "id": "2", "name": "Gov 2", "power": 800 }] },
+      "result": { "saved": true },
+      "after": { "2020-01-07": [["1", 950, 11, 12, 13, 14], ["2", 800, null, null, null, null]] }
+    },
+    {
+      "case": "a saved day without them is filled for its own Governors, and nothing else on it changes",
+      "saved": [
+        { "takenOn": "2020-01-06", "rows": [{ "id": "1", "name": "Gov 1", "power": 900 }, { "id": "2", "name": "Gov 2", "power": 800 }] },
+        { "takenOn": "2020-01-07", "rows": [{ "id": "1", "name": "Gov 1", "power": 950 }] }],
+      "record": { "takenOn": "2020-01-06", "rows": [
+        { "id": "1", "name": "Renamed Since", "power": 1, "t4_kills": 11, "t5_kills": 12, "t4_deaths": 13, "t5_deaths": 14 },
+        { "id": "2", "name": "Gov 2", "power": 2, "t4_kills": 21, "t5_kills": 0, "t4_deaths": 0, "t5_deaths": 24 },
+        { "id": "3", "name": "Not On That Day", "power": 3, "t4_kills": 31, "t5_kills": 32, "t4_deaths": 33, "t5_deaths": 34 }] },
+      "result": { "saved": false, "filled": 2 },
+      "after": { "2020-01-06": [["1", 900, 11, 12, 13, 14], ["2", 800, 21, 0, 0, 24]], "2020-01-07": [["1", 950, null, null, null, null]] }
+    },
+    {
+      "case": "a fill keeps every value already saved and fills only the nulls",
+      "saved": [{ "takenOn": "2020-01-07", "rows": [
+        { "id": "1", "name": "Gov 1", "power": 900, "t4_kills": 11, "t5_kills": 12, "t4_deaths": 13, "t5_deaths": 14 },
+        { "id": "2", "name": "Gov 2", "power": 800, "t4_kills": 21 }] }],
+      "record": { "takenOn": "2020-01-07", "rows": [
+        { "id": "1", "name": "Gov 1", "power": 900, "t4_kills": 99, "t5_kills": 99, "t4_deaths": 99, "t5_deaths": 99 },
+        { "id": "2", "name": "Gov 2", "power": 800, "t4_kills": 99, "t5_kills": 22, "t4_deaths": 23, "t5_deaths": 24 }] },
+      "result": { "saved": false, "filled": 1 },
+      "after": { "2020-01-07": [["1", 900, 11, 12, 13, 14], ["2", 800, 21, 22, 23, 24]] }
+    },
+    {
+      "case": "saving a filled day again changes nothing",
+      "saved": [{ "takenOn": "2020-01-07", "rows": [
+        { "id": "1", "name": "Gov 1", "power": 900, "t4_kills": 11, "t5_kills": 12, "t4_deaths": 13, "t5_deaths": 14 }] }],
+      "record": { "takenOn": "2020-01-07", "rows": [
+        { "id": "1", "name": "Gov 1", "power": 900, "t4_kills": 11, "t5_kills": 12, "t4_deaths": 13, "t5_deaths": 14 }] },
+      "result": { "saved": false, "filled": 0 },
+      "after": { "2020-01-07": [["1", 900, 11, 12, 13, 14]] }
+    }
   ]
 }

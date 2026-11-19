@@ -1,5 +1,6 @@
 """The daily Roster Snapshot (ADR 0004): fetch the newest day of the Lilith stats export (its JSON) and
-save it through record_roster_snapshot, which applies the Roster Snapshot rules in the database.
+save it through record_roster_snapshot, which applies the Roster Snapshot rules in the database. Then
+fill the T4/T5 kills and deaths of saved days that lack them, from Lilith's history.
 
     .venv/bin/python roster.py              fetch the newest day and save it
     .venv/bin/python roster.py --dry-run    fetch and print, save nothing
@@ -25,7 +26,7 @@ import urllib.request
 from pathlib import Path
 
 from alert import mail
-from send import send_roster_snapshot
+from send import roster_days_without_t4_t5, send_roster_snapshot
 
 HERE = Path(__file__).resolve().parent
 API = "https://plat-rok-gametools-global-api.lilithgames.com"
@@ -34,9 +35,12 @@ SERVER_ID = "2493"
 WARN_DAYS = 5     # email when the token has fewer days left than this
 STALE_DAYS = 3    # email when Lilith's newest day is this many days old or more;
                   # ROSTER_STALE_DAYS in site/admin.js flags the admin page from the same age
-# The API's field for each roster_snapshot_row column. Deaths and per-tier kills are not kept.
+HISTORY_DAYS = 90  # how far back Lilith keeps daily stats (at least; checked on the host, 19 Nov 2026)
+# The API's field for each roster_snapshot_row column. Of the kills and deaths per tier only T4 and
+# T5 are kept; like kills, they are the day's gains.
 FIELDS = {"power": "power", "highest_power": "max_power", "kill_points": "kill",
-          "resources_gathered": "collect", "alliance_helps": "help"}
+          "resources_gathered": "collect", "alliance_helps": "help",
+          "t4_kills": "t4", "t5_kills": "t5", "t4_deaths": "dead_t4", "t5_deaths": "dead_t5"}
 
 
 class RosterError(Exception):
@@ -111,8 +115,10 @@ def fetch_rows(day, token, opener=urllib.request.urlopen):
     return rows
 
 
-def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, notify=None):
-    """One run. Returns the lines to print. notify(subject, body) emails."""
+def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, notify=None,
+        days_without_t4_t5=roster_days_without_t4_t5):
+    """One run. Returns the lines to print. notify(subject, body) emails; days_without_t4_t5(since)
+    lists the saved days from since on that lack T4/T5 values."""
     notify = notify or (lambda subject, body: mail(subject, body, os.environ))
     lines = []
 
@@ -155,6 +161,17 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
              f"Lilith's stats tools still have nothing newer than {day} ({age} days ago), so the roster isn't moving. "
              f"Nothing is wrong on our side; it usually catches up by itself.",
              f"Lilith's newest day is {age} days old", "emailed a note")
+
+    # Days saved before the T4/T5 values existed get them from Lilith's history. record_roster_snapshot
+    # fills only their nulls and changes nothing else. A day Lilith can't give doesn't fail the run:
+    # the newest day is saved already.
+    since = (now.date() - datetime.timedelta(days=HISTORY_DAYS)).isoformat()
+    for old in days_without_t4_t5(since):
+        try:
+            filled = send(old, fetch_rows(old, token, opener)).get("filled", 0)
+            lines.append(f"Filled T4/T5 kills and deaths for {old}: {filled} Governors.")
+        except RosterError as e:
+            lines.append(f"Couldn't fill T4/T5 kills and deaths for {old}: {e}")
     return lines
 
 

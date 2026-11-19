@@ -146,7 +146,7 @@ It should print `Success`. Then `docker stop redroid`; the next run carries on. 
 Each one lives only in the host's `.env`. Put the new value there; the next run uses it.
 
 - **Anthropic key.** In the Anthropic Console, in a workspace with a low monthly spend limit, create a key named `fort-reader host`, put it in `ANTHROPIC_API_KEY`, then delete the old key. A leaked key can spend only up to that limit.
-- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002) and save a Roster Snapshot for a new day (ADR 0004).
+- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002) and save a Roster Snapshot for a new day or fill a saved day's empty T4/T5 values (ADR 0004).
 - **Gmail app password.** See "Revoke or rotate it" above.
 - **Council addresses.** Edit `FORT_READER_ALERT_COUNCIL`.
 - **Lilith token.** See "Roster Snapshot" below; signing out of the RoK Toolkit ends it.
@@ -154,6 +154,8 @@ Each one lives only in the host's `.env`. Put the new value there; the next run 
 ## Roster Snapshot
 
 The Roster job, `roster.py`, saves the newest day of the Lilith stats export as a Roster Snapshot (ADR 0004). It is the only writer of Roster Snapshots: the admin page no longer uploads the export. The database applies the rules: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
+
+Each snapshot keeps every Governor's T4 kills, T5 kills, T4 deaths and T5 deaths for the day (Lilith's `t4`, `t5`, `dead_t4`, `dead_t5`); T1 to T3 are left out. After saving, every run asks the database for saved days within Lilith's 90-day history that have none of these yet (`roster_days_without_t4_t5`), fetches each from Lilith and fills only their empty T4/T5 values; nothing else on those days changes. A day Lilith can't give is printed, not a failure.
 
 ```
 .venv/bin/python roster.py              # fetch the newest day and save it
