@@ -1,4 +1,4 @@
-# Kingdom 3493
+﻿# Kingdom 3493
 
 Public site for the Void Legion (Rise of Kingdoms, Kingdom 3493): Fort rankings, GH Events, roster. Plain HTML/CSS/JS in `site/`, no build step. Every push to `main` publishes it to GitHub Pages.
 
@@ -32,7 +32,7 @@ Only `site/data/content.js` is hand-edited: news posts and the Reward Promise ca
 ## Tests
 
 - Site rules: `npm test` (Node's test runner over `tests/`).
-- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_capture test_merge test_game test_navigate test_alert test_roster`.
+- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_capture test_merge test_game test_navigate test_alert test_roster test_pause`.
 - Database functions: `py -m unittest discover -s supabase/tests` with psycopg on `PYTHONPATH`. They run against the live project inside a rolled-back transaction. `tests/name-matching-cases.json` and `tests/pick-cases.json` are shared by the JS and SQL tests so the two can't drift; `tests/roster-snapshot-cases.json` pins the SQL rules.
 
 ## Gotchas
