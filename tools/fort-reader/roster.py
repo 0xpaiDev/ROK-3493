@@ -12,9 +12,10 @@ after a login. It goes in LILITH_PAUTH in the repo's .env. Saving uses the reade
 sign-in (FORT_READER_EMAIL, FORT_READER_PASSWORD). A run that saves nothing new is not a failure:
 Lilith publishes each day late, so asking again for a saved day is normal.
 
-It runs twice a day, about 06:00 and 18:00 UTC. The morning run emails FORT_READER_ALERT_TO when the
-token is close to expiry or Lilith's data has gone stale; the evening run emails a failure, since a
-morning failure is retried that evening (alert.py's mail settings). Without them they only print.
+It runs twice a day, at 06:00 and 18:00 UTC. It emails FORT_READER_ALERT_TO once a day when the token
+is close to expiry or Lilith's data has gone stale, from whichever run gets there first; and a failure
+only when both of the day's runs failed (alert.py's mail settings). Without them they only print.
+runs/roster-day.json keeps what the day's runs did between runs.
 """
 import argparse
 import base64
@@ -27,7 +28,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from alert import after_roster_run, mail, roster_morning_run
+from alert import after_roster_run, mail, roster_last_run
 from send import roster_days_missing, roster_days_without_t4_t5, send_roster_snapshot
 
 HERE = Path(__file__).resolve().parent
@@ -38,6 +39,7 @@ WARN_DAYS = 5     # email when the token has fewer days left than this
 STALE_DAYS = 3    # email when Lilith's newest day is this many days old or more;
                   # ROSTER_STALE_DAYS in site/admin.js flags the admin page from the same age
 HISTORY_DAYS = 90  # how far back Lilith keeps daily stats (at least; checked on the host, 19 Nov 2026)
+DAY_LOG = HERE / "runs" / "roster-day.json"  # runs/ is git-ignored
 # The API's field for each roster_snapshot_row column. Of the kills and deaths per tier only T4 and
 # T5 are kept; like kills, they are the day's gains.
 FIELDS = {"power": "power", "highest_power": "max_power", "kill_points": "kill",
@@ -56,6 +58,24 @@ def load_env():
             key, sep, value = line.partition("=")
             if sep and not key.strip().startswith("#"):
                 os.environ.setdefault(key.strip(), value.strip().strip('"'))
+
+
+def day_log(path, day):
+    """What the runs of day (a UTC date, ISO) did so far: {day, saved, reminded}. saved is whether one
+    of them saved (or found saved) the day's Roster Snapshot; reminded lists the reminders emailed.
+    A log of another day, a missing one (path None too) or a garbled one starts the day afresh."""
+    try:
+        log = json.loads(Path(path).read_text(encoding="utf-8"))
+        if log.get("day") == day and isinstance(log.get("saved"), bool) and isinstance(log.get("reminded"), list):
+            return log
+    except (TypeError, OSError, ValueError, AttributeError):
+        pass
+    return {"day": day, "saved": False, "reminded": []}
+
+
+def save_day_log(path, log):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(json.dumps(log), encoding="utf-8")
 
 
 def token_expiry(token):
@@ -118,21 +138,25 @@ def fetch_rows(day, token, opener=urllib.request.urlopen):
 
 
 def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, notify=None,
-        days_without_t4_t5=roster_days_without_t4_t5, days_missing=roster_days_missing):
+        days_without_t4_t5=roster_days_without_t4_t5, days_missing=roster_days_missing, log=None):
     """One run. Returns the lines to print. notify(subject, body) emails; days_without_t4_t5(since)
     lists the saved days from since on that lack T4/T5 values; days_missing(since) the days from since
-    on that the store has no snapshot for."""
+    on that the store has no snapshot for. log is the day's day_log; the reminders it sends are added."""
     notify = notify or (lambda subject, body: mail(subject, body, os.environ))
+    log = log if log is not None else day_log(None, now.date().isoformat())
     lines = []
 
-    def note(subject, body, fact, sent):
-        # Reminders go out once a day, from the morning run; the evening run only prints them.
-        if not roster_morning_run(now):
-            lines.append(f"{fact}; the morning run emails it.")
+    def note(key, subject, body, fact, sent):
+        # Each reminder goes out once a day, from the first run that gets to it: a morning run that
+        # failed before it leaves it to the evening run.
+        if key in log["reminded"]:
+            lines.append(f"{fact}; already emailed today.")
             return
-        # A reminder that can't be mailed must neither stop the save nor make a saved run look failed.
+        # A reminder that can't be mailed must neither stop the save nor make a saved run look failed;
+        # the next run tries it again.
         try:
             notify(subject, body)
+            log["reminded"].append(key)
             lines.append(f"{fact}; {sent}.")
         except Exception as e:
             lines.append(f"{fact}; couldn't email it: {e}")
@@ -145,7 +169,7 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
         raise RosterError(f"The Lilith token expired on {expires:%Y-%m-%d}: put a new one in LILITH_PAUTH.")
     left = expires - now
     if left < datetime.timedelta(days=WARN_DAYS):
-        note(f"Roster job: the Lilith token expires {expires:%Y-%m-%d}",
+        note("token", f"Roster job: the Lilith token expires {expires:%Y-%m-%d}",
              f"The token in LILITH_PAUTH stops working on {expires:%Y-%m-%d %H:%M} UTC. Log in to the RoK Toolkit, "
              f"copy a new one into .env on the host (README: Roster Snapshot), or the daily Roster Snapshot stops.",
              f"Token expires {expires:%Y-%m-%d %H:%M} UTC", "emailed a reminder")
@@ -158,13 +182,15 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
         lines.append("Dry run: nothing saved.")
         return lines
     result = send(day, rows)
+    if not args.day:
+        log["saved"] = True  # saved now or already: the day's Roster Snapshot is in, whatever fails next
     if result.get("saved"):
         lines.append(f"Saved the {day} Roster Snapshot: {result['rows']} Governors, {result['new_governors']} new, "
                      f"{result['renamed']} renamed, {result['inactive']} became Inactive, {result['current']} back to Current.")
     else:
         lines.append(f"Nothing new: the latest Roster Snapshot is already {result.get('latest')}.")
     if not args.day and age >= STALE_DAYS:
-        note(f"Roster job: Lilith's newest stats are from {day}",
+        note("stale", f"Roster job: Lilith's newest stats are from {day}",
              f"Lilith's stats tools still have nothing newer than {day} ({age} days ago), so the roster isn't moving. "
              f"Nothing is wrong on our side; it usually catches up by itself.",
              f"Lilith's newest day is {age} days old", "emailed a note")
@@ -198,21 +224,29 @@ def main():
     parser.add_argument("--day", help="a day to fetch (YYYY-MM-DD) instead of Lilith's newest")
     args = parser.parse_args()
     now = datetime.datetime.now(datetime.timezone.utc)
+    log = day_log(DAY_LOG, now.date().isoformat())
     try:
-        lines = run(args, now)
+        lines = run(args, now, log=log)
     except (Exception, SystemExit) as e:
         # A RosterError or a Supabase refusal says what to do; anything else is a crash, named by its type.
         reason = str(e) if isinstance(e, (RosterError, SystemExit)) else f"The job crashed: {type(e).__name__}: {e}"
         print(reason)
         if not args.dry_run:
             try:
-                if after_roster_run(reason, os.environ, now):
+                if after_roster_run(reason, os.environ, now, log["saved"]):
                     print("Emailed the failure.")
-                elif roster_morning_run(now):
+                elif log["saved"]:
+                    print("Not emailed: today's Roster Snapshot is saved already.")
+                elif not roster_last_run(now):
                     print("Not emailed: the evening run tries again.")
             except Exception as m:  # the failure is printed already, and journalctl keeps it
                 print(f"Couldn't email the failure: {m}")
         return 1
+    finally:
+        try:
+            save_day_log(DAY_LOG, log)
+        except OSError as e:
+            print(f"Couldn't keep the day's log in {DAY_LOG}: {e}")
     print("\n".join(lines))
     return 0
 

@@ -4,9 +4,11 @@ import datetime
 import io
 import json
 import os
+import tempfile
 import types
 import unittest
 import urllib.error
+from pathlib import Path
 from unittest import mock
 
 import roster
@@ -63,7 +65,7 @@ class Roster(unittest.TestCase):
         self.sent.append((day, rows))
         return {"saved": True, "taken_on": day, "rows": len(rows), "new_governors": 0, "renamed": 0, "inactive": 0, "current": 0}
 
-    def run_job(self, lilith=None, without=(), missing=(), **kw):
+    def run_job(self, lilith=None, without=(), missing=(), log=None, **kw):
         lilith = lilith or FakeLilith()
         self.asked_since, self.asked_missing_since = [], []
 
@@ -75,7 +77,7 @@ class Roster(unittest.TestCase):
             self.asked_missing_since.append(since)
             return list(missing)
         lines = roster.run(args(**kw), kw.get("now", NOW), lilith, self.send, lambda s, b: self.mails.append(s),
-                           days_without_t4_t5, days_missing)
+                           days_without_t4_t5, days_missing, log)
         return lines, lilith
 
     def test_a_second_run_on_a_saved_day_saves_nothing_and_emails_nobody(self):
@@ -104,10 +106,44 @@ class Roster(unittest.TestCase):
         self.assertEqual([d for d, _ in self.sent], ["2026-11-14"])
         self.assertEqual(lines[-1], "Couldn't save the missed day 2026-11-13: Lilith has no member data for 2026-11-13.")
 
-    def test_the_evening_run_leaves_the_reminders_to_the_morning_run(self):
+    def test_the_evening_run_sends_the_reminders_a_failed_morning_run_could_not(self):
         os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
-        self.run_job(FakeLilith(day="2026-11-11"), now=EVENING)
+        log = roster.day_log(None, "2026-11-15")  # the morning run left nothing: it failed before them
+        self.run_job(FakeLilith(day="2026-11-11"), log=log, now=EVENING)
+        self.assertEqual(self.mails, ["Roster job: the Lilith token expires 2026-11-18",
+                                      "Roster job: Lilith's newest stats are from 2026-11-11"])
+
+    def test_the_day_counts_as_saved_once_its_snapshot_is_in_even_if_the_run_fails_after(self):
+        log = roster.day_log(None, "2026-11-15")
+        def days_missing(since):
+            raise SystemExit("Supabase refused /rest/v1/rpc/roster_days_missing: 500")
+        with self.assertRaises(SystemExit):
+            roster.run(args(), NOW, FakeLilith(), self.send, self.mails.append, lambda since: [], days_missing, log)
+        self.assertTrue(log["saved"])
+
+    def test_a_run_that_fails_before_saving_leaves_the_day_unsaved(self):
+        log = roster.day_log(None, "2026-11-15")
+        with self.assertRaises(roster.RosterError):
+            self.run_job(FakeLilith(status=401), log=log)
+        self.assertFalse(log["saved"])
+
+    def test_a_second_run_on_the_same_day_sends_no_reminder_again(self):
+        os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
+        log = roster.day_log(None, "2026-11-15")
+        self.run_job(FakeLilith(day="2026-11-11"), log=log)
+        self.mails = []
+        lines, _ = self.run_job(FakeLilith(day="2026-11-11"), log=log, now=EVENING)
         self.assertEqual(self.mails, [])
+        self.assertIn("already emailed today", lines[0])
+
+    def test_a_reminder_that_could_not_be_mailed_is_tried_again_by_the_next_run(self):
+        os.environ["LILITH_PAUTH"] = token(NOW + datetime.timedelta(days=3))
+        log = roster.day_log(None, "2026-11-15")
+        def broken(subject, body):
+            raise TimeoutError("smtp timed out")
+        roster.run(args(), NOW, FakeLilith(), self.send, broken, lambda since: [], lambda since: [], log)
+        self.run_job(log=log, now=EVENING)
+        self.assertEqual(self.mails, ["Roster job: the Lilith token expires 2026-11-18"])
 
     def test_saved_days_without_t4_t5_are_filled_from_lilith_history(self):
         def send(day, rows):
@@ -231,6 +267,33 @@ class Roster(unittest.TestCase):
                 os.environ["LILITH_PAUTH"] = value
                 with self.assertRaisesRegex(roster.RosterError, message):
                     self.run_job()
+
+
+class DayLog(unittest.TestCase):
+    """What the day's runs did, kept on the host between runs: whether one saved, and the reminders sent."""
+
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = Path(self.dir.name) / "runs" / "roster-day.json"
+
+    def tearDown(self):
+        self.dir.cleanup()
+
+    def test_a_day_with_no_run_yet_has_saved_nothing_and_sent_nothing(self):
+        self.assertEqual(roster.day_log(self.path, "2026-11-15"), {"day": "2026-11-15", "saved": False, "reminded": []})
+
+    def test_the_second_run_reads_what_the_first_wrote(self):
+        roster.save_day_log(self.path, {"day": "2026-11-15", "saved": True, "reminded": ["token"]})
+        self.assertEqual(roster.day_log(self.path, "2026-11-15"), {"day": "2026-11-15", "saved": True, "reminded": ["token"]})
+
+    def test_a_new_day_starts_afresh(self):
+        roster.save_day_log(self.path, {"day": "2026-11-15", "saved": True, "reminded": ["token"]})
+        self.assertEqual(roster.day_log(self.path, "2026-11-16"), {"day": "2026-11-16", "saved": False, "reminded": []})
+
+    def test_a_garbled_log_starts_afresh(self):
+        self.path.parent.mkdir(parents=True)
+        self.path.write_text("{not json", encoding="utf-8")
+        self.assertEqual(roster.day_log(self.path, "2026-11-15"), {"day": "2026-11-15", "saved": False, "reminded": []})
 
 
 if __name__ == "__main__":

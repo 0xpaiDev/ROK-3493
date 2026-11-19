@@ -165,7 +165,7 @@ Each snapshot keeps every Governor's T4 kills, T5 kills, T4 deaths and T5 deaths
 .venv/bin/python roster.py --day 2026-11-14
 ```
 
-It emails `FORT_READER_ALERT_TO` (the mail settings above) when the evening run saves nothing because of an error (a morning failure only prints, since the evening run tries again), and from the morning run when the token has fewer than 5 days left or Lilith's newest day is 3 or more days old. `journalctl -u roster -n 50` shows the last runs; `systemctl list-timers roster.timer` shows the next one. `install.sh` installs the timer with the reader's.
+It emails `FORT_READER_ALERT_TO` (the mail settings above) a failure only when both of the day's runs failed: the run from 18:00 UTC on failed and no run that day saved the snapshot (a morning failure, or a morning run made up late after a reboot, only prints). It emails a reminder once a day, from whichever run gets to it first, when the token has fewer than 5 days left or Lilith's newest day is 3 or more days old. `runs/roster-day.json` keeps what the day's runs did between runs. `journalctl -u roster -n 50` shows the last runs; `systemctl list-timers roster.timer` shows the next one. `install.sh` installs the timer with the reader's.
 
 **The Lilith token.** The RoK Toolkit signs in with a token that lasts 30 days. The Reader Account is the safer choice: the token carries a Lilith session token for whichever account signed in. To get it:
 

@@ -32,16 +32,19 @@ def mail(subject, body, env, smtp=smtplib.SMTP_SSL):
     return [env["FORT_READER_ALERT_TO"]]
 
 
-def roster_morning_run(started_at):
-    """The Roster job runs about 06:00 and 18:00 UTC (host/install.sh). The morning run sends the day's
-    reminders; the evening run is the day's last, so only its failure emails."""
-    return started_at.hour < 12
+ROSTER_EVENING_HOUR = 18  # the Roster job's second timer (host/install.sh): no run is due after it
 
 
-def after_roster_run(failure, env, started_at, smtp=smtplib.SMTP_SSL):
-    """Email a failed Roster job run, and return the addresses mailed. A morning run's failure emails
-    nobody: the evening run tries again, and a hiccup it fixes shouldn't page anyone."""
-    if failure is None or roster_morning_run(started_at):
+def roster_last_run(started_at):
+    """Whether a Roster job run started at started_at is the day's last chance: from 18:00 UTC on no
+    timer is left that day. A run made up late after a reboot, before 18:00, still has the evening's."""
+    return started_at.hour >= ROSTER_EVENING_HOUR
+
+
+def after_roster_run(failure, env, started_at, saved_today, smtp=smtplib.SMTP_SSL):
+    """Email a failed Roster job run, and return the addresses mailed. It emails only when both of the
+    day's runs failed: this run failed, no run that day saved (saved_today), and none is left to try."""
+    if failure is None or saved_today or not roster_last_run(started_at):
         return []
     return mail(f"Roster job: {failure.splitlines()[0]}",
                 f"The run at {started_at:%Y-%m-%d %H:%M} UTC saved no Roster Snapshot.\n\n{failure}\n", env, smtp)

@@ -92,28 +92,37 @@ class FailureAlert(unittest.TestCase):
 
 
 class RosterFailure(unittest.TestCase):
-    """The Roster job runs about 06:00 and 18:00 UTC; only the evening run's failure emails, since the
-    morning's is retried that evening."""
+    """The Roster job runs at 06:00 and 18:00 UTC. The failure email comes only when the day has no
+    run that saved, and the failed run is the day's last chance (from 18:00 UTC on)."""
 
     def setUp(self):
         FakeGmail.sent = []
 
+    def at(self, hour):
+        return datetime.datetime(2026, 11, 15, hour, 0, tzinfo=datetime.timezone.utc)
+
     def test_a_failed_morning_run_emails_nobody(self):
-        morning = datetime.datetime(2026, 11, 15, 6, 0, tzinfo=datetime.timezone.utc)
-        self.assertEqual(after_roster_run("Couldn't reach Lilith's API: timed out.", MAIL, morning, smtp=FakeGmail), [])
+        self.assertEqual(after_roster_run("Couldn't reach Lilith's API: timed out.", MAIL, self.at(6), False, smtp=FakeGmail), [])
         self.assertEqual(FakeGmail.sent, [])
 
-    def test_a_failed_evening_run_emails_petras_the_reason(self):
-        evening = datetime.datetime(2026, 11, 15, 18, 0, tzinfo=datetime.timezone.utc)
-        to = after_roster_run("Couldn't reach Lilith's API: timed out.\nSecond line.", MAIL, evening, smtp=FakeGmail)
+    def test_a_late_catch_up_run_before_the_evening_run_emails_nobody(self):
+        # A morning run made up at 14:00 after a reboot still has the 18:00 run after it.
+        self.assertEqual(after_roster_run("Couldn't reach Lilith's API: timed out.", MAIL, self.at(14), False, smtp=FakeGmail), [])
+        self.assertEqual(FakeGmail.sent, [])
+
+    def test_a_failed_evening_run_after_a_morning_run_that_saved_emails_nobody(self):
+        self.assertEqual(after_roster_run("Couldn't reach Lilith's API: timed out.", MAIL, self.at(18), True, smtp=FakeGmail), [])
+        self.assertEqual(FakeGmail.sent, [])
+
+    def test_a_failed_evening_run_on_a_day_nothing_saved_emails_petras_the_reason(self):
+        to = after_roster_run("Couldn't reach Lilith's API: timed out.\nSecond line.", MAIL, self.at(18), False, smtp=FakeGmail)
         [msg] = FakeGmail.sent
         self.assertEqual([to, msg["To"], msg["Subject"]],
                          [["petras@example.com"], "petras@example.com", "Roster job: Couldn't reach Lilith's API: timed out."])
         self.assertIn("2026-11-15 18:00 UTC saved no Roster Snapshot", msg.get_body(("plain",)).get_content())
 
     def test_a_run_that_saved_emails_nobody(self):
-        evening = datetime.datetime(2026, 11, 15, 18, 0, tzinfo=datetime.timezone.utc)
-        self.assertEqual(after_roster_run(None, MAIL, evening, smtp=FakeGmail), [])
+        self.assertEqual(after_roster_run(None, MAIL, self.at(18), True, smtp=FakeGmail), [])
         self.assertEqual(FakeGmail.sent, [])
 
 
