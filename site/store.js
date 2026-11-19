@@ -14,10 +14,29 @@ async function rows(table, query) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
       headers: { apikey: SUPABASE_KEY, Range: `${from}-${from + PAGE - 1}` },
     });
-    if (!res.ok) throw new Error(`${table}: ${res.status} ${await res.text()}`);
+    if (!res.ok) {
+      const text = await res.text();
+      let code = null;
+      try { code = JSON.parse(text).code ?? null; } catch { /* not PostgREST's JSON */ }
+      throw Object.assign(new Error(`${table}: ${res.status} ${text}`), { code });
+    }
     const page = await res.json();
     out.push(...page);
     if (page.length < PAGE) return out;
+  }
+}
+
+// PostgREST's "no such table" (PGRST205) and Postgres's "no such relation" (42P01).
+const MISSING_TABLE = new Set(["PGRST205", "42P01"]);
+
+// A read of a table a migration adds: empty while the migration hasn't reached the database yet. Any
+// other failure surfaces, like every other read.
+export async function rowsIfTable(table, query) {
+  try {
+    return await rows(table, query);
+  } catch (e) {
+    if (MISSING_TABLE.has(e.code)) return [];
+    throw e;
   }
 }
 
@@ -45,13 +64,14 @@ export async function loadKingdom() {
     rows("gh_event", "select=id,name,starts_on,ends_on&order=starts_on.asc,id.asc"),
     rows("gh_entry", "select=event_id,place,character_id,name,alliance,golden_heads&order=place.asc"),
     rows("kvk_entry", "select=*&order=rank.asc"),
-    rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc&limit=1"),
+    // Every Roster Snapshot's day, newest first: the days a KvK has counted. Never their daily rows.
+    rows("roster_snapshot", "select=id,taken_on&order=taken_on.desc"),
     rows("weekly_award", "select=week,character_id,place,award,note,weekly_award_item(item,amount)&weekly_award_item.order=id.asc&order=week.desc,place.asc,id.asc"),
     rows("reward_promise", "select=week,intro,paid_on,reward_promise_tier(place,reward,items)&reward_promise_tier.order=position.asc&order=week.desc"),
     // Until the Fort Pause migration reaches the database the table is missing: Forts read as running.
-    rows("fort_pause", "select=starts_at,ends_at&order=starts_at.asc").catch(() => []),
+    rowsIfTable("fort_pause", "select=starts_at,ends_at&order=starts_at.asc"),
     // Until the KvK migration reaches the database the table is missing: no KvK is set up.
-    rows("kvk", `select=${KVK_SELECT}&order=starts_on.desc`).catch(() => []),
+    rowsIfTable("kvk", `select=${KVK_SELECT}&order=starts_on.desc`),
   ]);
   // The KvKs the Council set up, newest first, and the totals of the one the KvK tab shows: one row per
   // Governor in its KvK Start Snapshot, summed in the database (kvk_standings), never the daily rows.
@@ -134,6 +154,8 @@ export async function loadKingdom() {
     kvkTables,
     // The newest Roster Snapshot's day (YYYY-MM-DD), null before the first: how far a KvK has counted.
     newestSnapshotOn: latest?.taken_on ?? null,
+    // Every Roster Snapshot's day (YYYY-MM-DD), newest first: which Counting Period days a KvK has counted.
+    snapshotDays: snapshots.map((s) => s.taken_on),
     roster,
     // Kind and Farm link for the Mains ranking: { id, name, kind, mainId }.
     governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id })),

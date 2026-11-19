@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY, KVK_SELECT, kvkFromRow } from "./store.js";
-import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS } from "./kingdom.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -1022,8 +1022,7 @@ async function showRewardPromise(section, message = "", startWeek = null) {
 // The Council sets up a KvK: its days, Power Cutoff, DKP weights and Counting Periods. checkKvk runs before
 // Save; save_kvk refuses the same KvKs (tests/kvk-cases.json) and is the only way a KvK is written.
 
-const KVK_STATE_LABEL = { upcoming: "Upcoming", active: "Active", ended: "Ended" };
-const kvkDays = (k) => `${dayMonth(k.startsOn)} ${k.startsOn.slice(0, 4)} – ${dayMonth(k.endsOn)} ${k.endsOn.slice(0, 4)}`;
+const kvkDays = (k) => `${dayLabel(k.startsOn)} – ${dayLabel(k.endsOn)}`;
 const WEIGHT_FIELDS = [["t4Kill", "T4 kill"], ["t5Kill", "T5 kill"], ["t4Death", "T4 death"], ["t5Death", "T5 death"]];
 
 async function loadKvks() {
@@ -1062,8 +1061,9 @@ async function showKvk(section, message = "", editId = null) {
   const now = Date.now();
   const waiting = kvks.filter((k) => !k.hasStartSnapshot && kvkState(k, now) !== "ended");
   const active = kvks.find((k) => kvkState(k, now) === "active");
+  const activeWaits = waiting.some((k) => kvkState(k, now) === "active");
   setTaskStatus("kvk", active ? `${active.name} active` : kvks.length ? `${kvks.length} set up` : "None set up",
-    waiting.some((k) => kvkState(k, now) === "active") ? "Review" : "", waiting.some((k) => kvkState(k, now) === "active") ? "review" : "");
+    activeWaits ? "Review" : "", activeWaits ? "review" : "");
 
   let form = kvkToForm(kvks.find((k) => k.id === editId));
   let msgText = message;
@@ -1320,7 +1320,7 @@ async function showRoster(section, message = "") {
 
 const utcTime = (iso) => {
   const t = new Date(iso).toISOString();
-  return `${dayMonth(t.slice(0, 10))} ${t.slice(0, 4)}, ${t.slice(11, 16)} UTC`;
+  return `${dayLabel(t.slice(0, 10))}, ${t.slice(11, 16)} UTC`;
 };
 
 async function showFortPause(section, message = "") {

@@ -108,19 +108,34 @@ test("sorted by Governor, the table goes A to Z and each Governor keeps their DK
 
 const counting = { ...k, periods: [{ startsOn: "2026-11-25", endsOn: "2026-11-27" }, { startsOn: "2026-12-01", endsOn: null }] };
 
+// The Roster Snapshot days the store has, newest first, as the site reads them (no daily rows).
+const snaps = (...days) => days.sort().reverse();
+
 test("before its first Counting Period starts, a KvK says when counting begins", () => {
-  assert.deepEqual(kvkCounting(counting, "2026-11-24", "2026-11-24"), { begins: "2026-11-25" });
+  assert.deepEqual(kvkCounting(counting, "2026-11-24", snaps("2026-11-24")), { begins: "2026-11-25" });
 });
 
-test("once counting has begun, a KvK's table counts the Counting Period days up to the newest Roster Snapshot", () => {
-  assert.deepEqual(kvkCounting(counting, "2026-11-26", "2026-11-26"), { days: 2 });
-  assert.deepEqual(kvkCounting(counting, "2026-12-03", "2026-12-02"), { days: 5 });
+test("once counting has begun, a KvK counts the Counting Period days that have a Roster Snapshot", () => {
+  assert.deepEqual(kvkCounting(counting, "2026-11-26", snaps("2026-11-24", "2026-11-25", "2026-11-26")), { days: 2 });
+  assert.deepEqual(kvkCounting(counting, "2026-12-03", snaps("2026-11-25", "2026-11-26", "2026-11-27", "2026-11-28", "2026-12-01", "2026-12-02")), { days: 5 });
+});
+
+test("a Counting Period day with no Roster Snapshot is not counted", () => {
+  // 26 Nov was never saved: two of the first period's three days are in the numbers.
+  assert.deepEqual(kvkCounting(counting, "2026-11-28", snaps("2026-11-25", "2026-11-27", "2026-11-28")), { days: 2 });
 });
 
 test("an open Counting Period counts no further than the KvK's end day", () => {
-  assert.deepEqual(kvkCounting(counting, "2027-02-01", "2027-02-01"), { days: 3 + 51 });
+  const days = [];
+  for (let t = Date.parse("2026-11-20"); t <= Date.parse("2027-02-01"); t += 864e5) days.push(new Date(t).toISOString().slice(0, 10));
+  assert.deepEqual(kvkCounting(counting, "2027-02-01", snaps(...days)), { days: 3 + 51 });
+});
+
+test("once counting has begun with no Roster Snapshot in it yet, a KvK has counted 0 days", () => {
+  assert.deepEqual(kvkCounting(counting, "2026-11-26", snaps("2026-11-24")), { days: 0 });
+  assert.deepEqual(kvkCounting(counting, "2026-11-26", []), { days: 0 });
 });
 
 test("a KvK with no Counting Period set has no day counting begins", () => {
-  assert.deepEqual(kvkCounting(k, "2026-12-01", "2026-12-01"), { begins: null });
+  assert.deepEqual(kvkCounting(k, "2026-12-01", snaps("2026-12-01")), { begins: null });
 });

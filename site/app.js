@@ -1,4 +1,4 @@
-import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings, homeShows, kvkList, kvkCounting } from "./kingdom.js";
+import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings, homeShows, kvkList, kvkCounting, dayLabel, KVK_STATE_LABEL } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -222,7 +222,7 @@ import { rewardItem } from "./rewards.js";
   const paused = fortPauseAt(D.fortPauses, now);
   const pauseNote = paused ? (() => {
     const t = new Date(paused.start), pad = (n) => String(n).padStart(2, "0");
-    return `<div class="note pause-note reveal">${ICON_INFO}<span><b>Forts paused since ${t.getUTCDate()} ${MON[t.getUTCMonth()]} ${t.getUTCFullYear()}, ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} UTC.</b> The Council paused Forts, so no Fort Week is read until they resume. Weeks inside the pause are not Fort Weeks and never count toward a Fort Average.</span></div>`;
+    return `<div class="note pause-note reveal">${ICON_INFO}<span><b>Forts paused since ${dayLabel(t.toISOString().slice(0, 10))}, ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} UTC.</b> The Council paused Forts, so no Fort Week is read until they resume. Weeks inside the pause are not Fort Weeks and never count toward a Fort Average.</span></div>`;
   })() : "";
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
 
@@ -230,20 +230,22 @@ import { rewardItem } from "./rewards.js";
   // else Fort Rankings, with the pause line when paused without a KvK.
   const homeShown = homeShows({ pauses: D.fortPauses, kvks: D.kvks, now });
 
+  // Why a KvK's table is empty without "show all": nobody reached its Power Cutoff.
+  const noneAtCutoff = (k) => `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot.`;
   // Home during a Fort Pause: the KvK's name, its top DKP standings and a link to the full table.
   // The store loads totals for currentKvk, which is this KvK whenever one has started.
   function homeKvk(k) {
     const totals = D.kvkTotals?.kvkId === k.id ? D.kvkTotals.rows : [];
     const rows = kvkStandings(totals, k);
-    const day = (iso) => `${fmtDay(iso)} ${iso.slice(0, 4)}`;
+    const day = dayLabel;
     const top = Math.min(10, rows.length);
-    const empty = totals.length ? `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot.`
+    const empty = totals.length ? noneAtCutoff(k)
       : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
     return `<div class="wrap page">
-      <div class="section-head reveal"><div><div class="eyebrow">KvK · ${kvkState(k, now) === "active" ? "Active" : "Ended"}</div><h1>${esc(k.name)}</h1>
+      <div class="section-head reveal"><div><div class="eyebrow">KvK · ${KVK_STATE_LABEL[kvkState(k, now)]}</div><h1>${esc(k.name)}</h1>
         <p class="muted">${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Governors ranked by DKP over the Counting Periods.</p></div></div>
       ${pauseNote}
-      <section class="card reveal" style="--d:120ms">
+      <section class="card reveal reveal-next">
         <div class="card-head"><div><div class="eyebrow">DKP standings</div><h2>${rows.length ? `Top ${top}` : "Standings"}</h2></div><a href="#kvk">Full table on the KvK tab →</a></div>
         ${rows.length ? kvkTable(rows.slice(0, top)) : `<p class="empty">${empty}</p>`}
       </section></div>`;
@@ -468,7 +470,6 @@ import { rewardItem } from "./rewards.js";
   // The KvK tab: the list of KvKs (kvkList, newest first, the carried-over Last KvK last) and the table of the
   // one opened, #kvk/<id> or #kvk/last. Without one in the URL it opens the KvK currentKvk picks.
   const LAST_KVK = "last";
-  const kvkDayLabel = (iso) => `${fmtDay(iso)} ${iso.slice(0, 4)}`;
   function kvkOpened() {
     const id = location.hash.split("/")[1];
     if (id === LAST_KVK && D.kvk.length) return LAST_KVK;
@@ -479,34 +480,35 @@ import { rewardItem } from "./rewards.js";
     const head = (title, lede) => `<div class="section-head reveal"><div><div class="eyebrow">KvK</div><h1>${title}</h1>${lede ? `<p class="muted">${lede}</p>` : ""}</div></div>`;
     const open = kvkOpened();
     if (!open) return `<div class="wrap page">${head("KvK")}<section class="card empty">No KvK is set up yet.</section></div>`;
-    const label = { upcoming: "Upcoming", active: "Active", ended: "Ended" };
-    const chip = (key, name, sub) => `<button class="chip ${key === (open === LAST_KVK ? LAST_KVK : String(open.id)) ? "on" : ""}" data-kvkopen="${esc(key)}" aria-pressed="${key === (open === LAST_KVK ? LAST_KVK : String(open.id))}"><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;
-    const list = `<div class="chips" role="group" aria-label="KvKs">${kvkList(D.kvks, now).map((k) => chip(String(k.id), k.name, `${label[k.state]} · ${fmtDay(k.startsOn)} ${k.startsOn.slice(0, 4)}`)).join("")}${D.kvk.length ? chip(LAST_KVK, "Last KvK", "Ended · before the site") : ""}</div>`;
+    const openKey = open === LAST_KVK ? LAST_KVK : String(open.id);
+    const chip = (key, name, sub) => `<button class="chip ${key === openKey ? "on" : ""}" data-kvkopen="${esc(key)}" aria-pressed="${key === openKey}"><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;
+    const list = `<div class="chips" role="group" aria-label="KvKs">${kvkList(D.kvks, now).map((k) => chip(String(k.id), k.name, `${KVK_STATE_LABEL[k.state]} · ${dayLabel(k.startsOn)}`)).join("")}${D.kvk.length ? chip(LAST_KVK, "Last KvK", "Ended · before the site") : ""}</div>`;
     return `<div class="wrap page">${open === LAST_KVK ? lastKvk(head, list) : kvkPage(open, head, list)}</div>`;
   }
 
   // One KvK set up by the Council: its days and rules, then its table, sortable, searchable, with "show all".
   function kvkPage(k, head, list) {
     const phase = kvkState(k, now);
-    const day = kvkDayLabel;
+    const day = dayLabel;
     const periods = k.periods.length
       ? k.periods.map((p) => p.endsOn == null ? `from ${day(p.startsOn)}` : p.endsOn === p.startsOn ? day(p.startsOn) : `${day(p.startsOn)} – ${day(p.endsOn)}`).join(", ")
       : "none set yet";
-    const lede = `${{ upcoming: "Starts", active: "Active", ended: "Ended" }[phase]} · ${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Counting Periods: ${esc(periods)}.
+    const lede = `${phase === "upcoming" ? "Starts" : KVK_STATE_LABEL[phase]} · ${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Counting Periods: ${esc(periods)}.
       DKP is T4 kills ×${k.weights.t4Kill}, T5 kills ×${k.weights.t5Kill}, T4 deaths ×${k.weights.t4Death} and T5 deaths ×${k.weights.t5Death} over the Counting Periods.
       Governors at or above ${big(k.powerCutoff)} power in the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
     const totals = D.kvkTables?.[k.id] ?? [];
-    const counting = kvkCounting(k, now, D.newestSnapshotOn);
+    const counting = kvkCounting(k, now, D.snapshotDays);
     const countLine = "days" in counting
-      ? `<p class="muted" style="margin-top:0">Counted ${counting.days} day${counting.days === 1 ? "" : "s"} of its Counting Periods${D.newestSnapshotOn ? `, through the Roster Snapshot of ${esc(day(D.newestSnapshotOn))}` : ""}.</p>`
+      ? `<p class="muted count-line">Counted ${counting.days} day${counting.days === 1 ? "" : "s"} of its Counting Periods${D.newestSnapshotOn ? `, through the Roster Snapshot of ${esc(day(D.newestSnapshotOn))}` : ""}.</p>`
       : `<div class="note">${ICON_INFO}<span>${counting.begins ? `Counting begins on ${esc(day(counting.begins))}. Until then every Governor's kills and deaths read 0.` : "No Counting Period is set yet, so every Governor's kills and deaths read 0."}</span></div>`;
     const all = kvkStandings(totals, k, { all: true, sort: state.kvkSort });
     const taking = kvkStandings(totals, k, { sort: state.kvkSort });
     const shown = state.kvkAll ? all : taking;
     const q = state.kvkQ.trim();
     const rows = q ? findInRanking(shown, D.nameHistory, q) : shown;
+    const noneTaking = `${noneAtCutoff(k)} "Show all" lists everyone.`;
     const empty = phase === "upcoming" ? `The table fills from the Roster Snapshot of ${esc(day(k.startsOn))}.`
-      : totals.length ? `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot. "Show all" lists everyone.`
+      : totals.length ? noneTaking
       : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
     const tools = `<div class="toolbar">
         <div class="seg" role="group" aria-label="Which Governors">
@@ -515,7 +517,7 @@ import { rewardItem } from "./rewards.js";
         </div><input class="search" id="kq" type="search" placeholder="Name or Character ID" aria-label="Search the KvK table" value="${esc(state.kvkQ)}" autocomplete="off" spellcheck="false"></div>`;
     const table = rows.length ? kvkTable(rows, state.kvkSort)
       : q ? `<p class="empty">No Governor matches “${esc(q)}”${state.kvkAll ? "" : `. "Show all" also searches Governors below ${big(k.powerCutoff)}`}.</p>`
-      : `<p class="empty">${state.kvkAll || !totals.length ? empty : `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot. "Show all" lists everyone.`}</p>`;
+      : `<p class="empty">${state.kvkAll || !totals.length ? empty : noneTaking}</p>`;
     return `${head(esc(k.name), lede)}${list}
       <section class="card">${countLine}${totals.length ? tools : ""}${totals.length ? table : `<p class="empty">${empty}</p>`}
         ${state.kvkAll && totals.some((r) => r.startPower == null) ? `<p class="faint">A Governor without starting power was not in the KvK Start Snapshot.</p>` : ""}
@@ -807,7 +809,7 @@ import { rewardItem } from "./rewards.js";
   };
   window.addEventListener("hashchange", () => { viewFromHash(); render(); window.scrollTo(0, 0); });
 
-  document.getElementById("generated").textContent = `Data updated ${fmtDay(D.generated)} ${D.generated.slice(0, 4)}`;
+  document.getElementById("generated").textContent = `Data updated ${dayLabel(D.generated)}`;
   viewFromHash();
   render();
 })();
