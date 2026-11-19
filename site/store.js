@@ -57,7 +57,10 @@ export async function loadKingdom() {
   // Governor in its KvK Start Snapshot, summed in the database (kvk_standings), never the daily rows.
   const kvks = kvkSetups.map(kvkFromRow);
   const shown = currentKvk(kvks, Date.now());
-  const totals = shown ? await rows("rpc/kvk_standings", `kvk_id=${shown.id}`) : [];
+  // Every KvK's totals, for the KvK tab's list: a few KvKs a year, one small read each.
+  const tables = await Promise.all(kvks.map((k) => rows("rpc/kvk_standings", `kvk_id=${k.id}`)));
+  const kvkTables = Object.fromEntries(kvks.map((k, i) => [k.id, tables[i].map(totalsFromRow)]));
+  const totals = shown ? kvkTables[shown.id] : [];
   const latest = snapshots[0];
   const snapshotRows = latest
     ? await rows("roster_snapshot_row", `select=character_id,power,highest_power,resources_gathered&snapshot_id=eq.${latest.id}&order=power.desc.nullslast`)
@@ -125,7 +128,12 @@ export async function loadKingdom() {
     // KvKs the Council set up, newest first: { id, name, startsOn, endsOn, powerCutoff, weights, periods }.
     kvks,
     // The KvK tab's KvK and its totals: { kvkId, rows: [{ id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths }] }.
-    kvkTotals: shown ? { kvkId: shown.id, rows: totals.map(totalsFromRow) } : null,
+    kvkTotals: shown ? { kvkId: shown.id, rows: totals } : null,
+    // Every KvK's totals by KvK id, the same rows as kvkTotals; startPower is null for a Governor counted
+    // in a Counting Period but not in the KvK Start Snapshot.
+    kvkTables,
+    // The newest Roster Snapshot's day (YYYY-MM-DD), null before the first: how far a KvK has counted.
+    newestSnapshotOn: latest?.taken_on ?? null,
     roster,
     // Kind and Farm link for the Mains ranking: { id, name, kind, mainId }.
     governors: governors.map((g) => ({ id: g.character_id, name: g.current_name, kind: g.kind, mainId: g.main_character_id })),

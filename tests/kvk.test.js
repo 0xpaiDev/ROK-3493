@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { kvkState, dkp, kvkStandings, KVK_DEFAULTS, currentKvk, checkKvk } from "../site/kingdom.js";
+import { kvkState, dkp, kvkStandings, KVK_DEFAULTS, currentKvk, checkKvk, kvkList, kvkCounting } from "../site/kingdom.js";
 
 const CASES = JSON.parse(readFileSync(new URL("./kvk-cases.json", import.meta.url), "utf8")).cases;
 
@@ -78,4 +78,49 @@ test("standings keep only Governors at or above the Power Cutoff in the KvK Star
 test("Governors tied on DKP share a rank, and the next one skips past them", () => {
   const rows = kvkStandings([gov("a", 30e6, 8, 0, 0, 0), gov("b", 25e6, 0, 0, 2, 0), gov("c", 40e6, 16, 0, 0, 0), gov("d", 21e6, 1, 0, 0, 0)], k);
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["c", 1], ["a", 2], ["b", 2], ["d", 4]]);
+});
+
+test("the KvK list puts the upcoming KvK first, then the Active one, then past ones, newest first, each with its state", () => {
+  const older = { name: "Older", startsOn: "2026-01-05", endsOn: "2026-03-01" };
+  const list = kvkList([past, older, next, kvk], "2026-12-01");
+  assert.deepEqual(list.map((k) => [k.name, k.state]), [["Next", "upcoming"], ["KvK 1", "active"], ["Past", "ended"], ["Older", "ended"]]);
+});
+
+test("\"show all\" brings in Governors below the Power Cutoff and those not in the KvK Start Snapshot, ranked with the rest", () => {
+  const rows = kvkStandings([gov("at", 20e6, 1, 0, 0, 0), gov("below", 19_999_999, 99, 0, 0, 0), gov("none", null, 3, 0, 0, 0)], k, { all: true });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.startPower]), [["below", 1, 19_999_999], ["none", 2, null], ["at", 3, 20e6]]);
+});
+
+test("sorted by another column, the table ranks on it, highest first, and ties share a rank", () => {
+  const rows = kvkStandings([gov("a", 30e6, 0, 4, 0, 0), gov("b", 25e6, 50, 1, 0, 0), gov("c", 40e6, 0, 4, 9, 0)], k, { sort: "t5Kills" });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["c", 1], ["b", 3]]);
+});
+
+test("sorted by starting power, a Governor without starting power comes last", () => {
+  const rows = kvkStandings([gov("none", null, 0, 0, 0, 0), gov("a", 30e6, 0, 0, 0, 0), gov("b", 0, 0, 0, 0, 0)], k, { all: true, sort: "startPower" });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["b", 2], ["none", 3]]);
+});
+
+test("sorted by Governor, the table goes A to Z and each Governor keeps their DKP rank", () => {
+  const rows = kvkStandings([{ ...gov("1", 30e6, 5, 0, 0, 0), name: "zed" }, { ...gov("2", 30e6, 9, 0, 0, 0), name: "Ánna" }, { ...gov("3", 30e6, 1, 0, 0, 0), name: "bo" }], k, { sort: "name" });
+  assert.deepEqual(rows.map((r) => [r.name, r.rank]), [["Ánna", 1], ["bo", 3], ["zed", 2]]);
+});
+
+const counting = { ...k, periods: [{ startsOn: "2026-11-25", endsOn: "2026-11-27" }, { startsOn: "2026-12-01", endsOn: null }] };
+
+test("before its first Counting Period starts, a KvK says when counting begins", () => {
+  assert.deepEqual(kvkCounting(counting, "2026-11-24", "2026-11-24"), { begins: "2026-11-25" });
+});
+
+test("once counting has begun, a KvK's table counts the Counting Period days up to the newest Roster Snapshot", () => {
+  assert.deepEqual(kvkCounting(counting, "2026-11-26", "2026-11-26"), { days: 2 });
+  assert.deepEqual(kvkCounting(counting, "2026-12-03", "2026-12-02"), { days: 5 });
+});
+
+test("an open Counting Period counts no further than the KvK's end day", () => {
+  assert.deepEqual(kvkCounting(counting, "2027-02-01", "2027-02-01"), { days: 3 + 51 });
+});
+
+test("a KvK with no Counting Period set has no day counting begins", () => {
+  assert.deepEqual(kvkCounting(k, "2026-12-01", "2026-12-01"), { begins: null });
 });

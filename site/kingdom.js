@@ -535,10 +535,37 @@ export function checkKvk(kvk, others = []) {
 
 // A KvK's table: the Governors of its KvK Start Snapshot at or above its Power Cutoff, ranked by DKP,
 // highest first. Ties keep the order given and share a rank. rows are the KvK totals read
-// (kvk_standings in supabase/migrations): { id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths }.
-export function kvkStandings(rows, kvk) {
+// (kvk_standings in supabase/migrations): { id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths };
+// startPower is null for a Governor counted in a Counting Period but not in the KvK Start Snapshot.
+// all ("show all") keeps every row: those below the Power Cutoff and those without starting power too.
+// sort is the column ranked on, highest first: "dkp" (the default), "startPower", "t4Kills", "t5Kills",
+// "t4Deaths" or "t5Deaths". No starting power ranks below any. "name" lists the Governors A to Z, each
+// keeping their DKP rank.
+export function kvkStandings(rows, kvk, { all = false, sort = "dkp" } = {}) {
   const taking = rows
-    .filter((r) => r.startPower != null && r.startPower >= kvk.powerCutoff)
+    .filter((r) => all || (r.startPower != null && r.startPower >= kvk.powerCutoff))
     .map((r) => ({ ...r, dkp: dkp(r, kvk.weights) }));
-  return rankWeek(taking, (r) => r.dkp);
+  if (sort === "name") return rankWeek(taking, (r) => r.dkp).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en", { sensitivity: "base" }));
+  return rankWeek(taking, (r) => r[sort] ?? -1);
+}
+
+// How far a KvK's table has counted at now, given the newest Roster Snapshot's day (newest, null for none).
+// Before its first Counting Period starts: { begins } with that period's start day, or null when no period
+// is set. From then on: { days }, the Counting Period days from their start up to the newest snapshot, an
+// open period running to the KvK's end day at most.
+export function kvkCounting(kvk, now, newest) {
+  const first = [...kvk.periods].sort((a, b) => a.startsOn.localeCompare(b.startsOn))[0];
+  if (!first || utcDay(now) < first.startsOn) return { begins: first?.startsOn ?? null };
+  const dayNo = (iso) => Date.parse(iso + "T00:00:00Z") / 864e5;
+  const days = kvk.periods.reduce((n, p) => {
+    const ends = [p.endsOn ?? kvk.endsOn, newest].filter(Boolean).sort()[0];
+    return n + (newest ? Math.max(0, dayNo(ends) - dayNo(p.startsOn) + 1) : 0);
+  }, 0);
+  return { days };
+}
+
+// The KvK tab's list: every KvK newest first, so the upcoming one leads, then the Active one, then the past
+// ones. Each comes with its state (kvkState). The carried-over Last KvK table is not a KvK; the tab adds it last.
+export function kvkList(kvks, now) {
+  return [...kvks].sort((a, b) => b.startsOn.localeCompare(a.startsOn)).map((k) => ({ ...k, state: kvkState(k, now) }));
 }

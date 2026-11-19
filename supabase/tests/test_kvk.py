@@ -16,7 +16,8 @@ import psycopg
 from test_record_live_week import ROOT, db_url
 
 MIGRATIONS = [ROOT / "supabase" / "migrations" / "20261119090000_roster_snapshot_t4_t5.sql",
-              ROOT / "supabase" / "migrations" / "20261119160000_kvk.sql"]
+              ROOT / "supabase" / "migrations" / "20261119160000_kvk.sql",
+              ROOT / "supabase" / "migrations" / "20261120090000_kvk_standings_show_all.sql"]
 CASES = json.loads((ROOT / "tests" / "kvk-cases.json").read_text(encoding="utf-8"))["cases"]
 WEIGHTS = {"t4Kill": 1, "t5Kill": 2, "t4Death": 4, "t5Death": 8}
 
@@ -222,7 +223,8 @@ class KvK(unittest.TestCase):
         rows = self.standings(self.kvk_with(("2020-01-11", "2020-01-13")))
         self.assertEqual(rows, [("990000001", "Gov <One>", "current", 30_000_000, 1110, 1, 1, 1),
                                 ("990000002", "Gov Two", "inactive", 25_000_000, 2220, 2, 2, 2),
-                                ("990000003", "Gov Three", "current", 21_000_000, 30, 3, 0, 0)])
+                                ("990000003", "Gov Three", "current", 21_000_000, 30, 3, 0, 0),
+                                ("990000004", "Gov Late", "current", None, 5, 5, 5, 5)])
 
     def test_an_open_period_runs_to_the_newest_snapshot(self):
         self.setup_kingdom()
@@ -233,11 +235,16 @@ class KvK(unittest.TestCase):
         self.setup_kingdom()
         rows = self.standings(self.kvk_with(("2020-01-11", "2020-01-11"), ("2020-01-13", "2020-01-13"), ("2020-01-15", None)))
         self.assertEqual([(r[0], r[4:]) for r in rows], [("990000001", (101010, 1, 0, 1)), ("990000002", (2020, 2, 0, 2)),
-                                                          ("990000003", (300030, 3, 0, 0))])
+                                                          ("990000003", (300030, 3, 0, 0)), ("990000004", (5, 5, 5, 5))])
 
-    def test_only_governors_in_the_kvk_start_snapshot_are_read(self):
+    def test_a_governor_counted_but_not_in_the_kvk_start_snapshot_is_read_without_starting_power(self):
         self.setup_kingdom()
-        rows = self.standings(self.kvk_with(("2020-01-10", None)))
+        rows = self.standings(self.kvk_with(("2020-01-12", None)))
+        self.assertEqual(rows[-1], ("990000004", "Gov Late", "current", None, 5, 5, 5, 5))
+
+    def test_a_governor_seen_only_outside_the_counting_periods_is_not_read(self):
+        self.setup_kingdom()
+        rows = self.standings(self.kvk_with(("2020-01-14", None)))
         self.assertNotIn("990000004", [r[0] for r in rows])
 
     def test_no_counting_period_yet_reads_zeros(self):
