@@ -466,6 +466,17 @@ export function currentKvk(kvks, now) {
   return started[0] ?? coming[0] ?? null;
 }
 
+// What Home shows, from the Fort Pause switch alone (ADR 0007): Fort Rankings while Forts run,
+// { view: "fort", pause: null }; while they are paused, the newest KvK that has started, Active or Ended,
+// { view: "kvk", kvk }; paused with no started KvK, Fort Rankings with the pause line, { view: "fort", pause }.
+export function homeShows({ pauses, kvks, now }) {
+  const pause = fortPauseAt(pauses, now);
+  if (!pause) return { view: "fort", pause: null };
+  const day = new Date(now).toISOString().slice(0, 10);
+  const started = kvks.filter((k) => k.startsOn <= day).sort((a, b) => b.startsOn.localeCompare(a.startsOn));
+  return started.length ? { view: "kvk", kvk: started[0] } : { view: "fort", pause };
+}
+
 // What a new KvK starts with. The database holds the same defaults (kvk in supabase/migrations).
 export const KVK_DEFAULTS = Object.freeze({
   powerCutoff: 20_000_000,
