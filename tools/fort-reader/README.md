@@ -81,6 +81,8 @@ Without the first three, the reader runs as before and prints the failure only. 
 
 On the Oracle A1 `fort-reader` (ADR 0003; its address is in `.scratch/fort-reader/oracle-vm.md`, never in this repo), a systemd timer starts one run a day at 23:45 UTC: `host/run.sh` starts the `redroid` Android container, runs `fort_reader.py --send`, and systemd stops the container afterwards, whatever happened. Each reading sets the Live Week's completeness from its time: a reading taken on the week's Sunday from 22:00 UTC closes it Complete, any earlier one (a run by hand on Sunday morning included) leaves it Partial. So when Sunday's run fails, or the host is down, the week keeps its last reading and is saved as Partial, and the failure email reaches Petras and the Council addresses. A failed weekday run only leaves a stale "as of" time. The site shows the Partial tag only once the week has closed.
 
+While the Council has Forts paused on the admin page (the Fort Pause, ADR 0007), `run.sh` first asks `fort_reader.py --forts-paused`, through the reader's own sign-in, and ends without starting Android: the journal says "Forts are paused since …" and nobody is emailed. `fort_reader.py --send` asks the same before it starts the game, and `record_live_week` refuses any reading taken during a pause. If the question itself fails, the run carries on and reports like any other.
+
 **Move the run time.** Set `FORT_READER_RUN_AT=HH:MM` (UTC, from 22:00 to 23:50) in `.env` and run `tools/fort-reader/host/install.sh` again; it prints the next run. Earlier than 22:00, Sunday's reading wouldn't close the week; later than 23:50, a run of about 10 minutes would send after the reset, which is refused. A run missed while the host was off is not made up later.
 
 **Watch a run.** `journalctl -u fort-reader -n 100` shows the last run's output; `systemctl list-timers fort-reader.timer` the next one. To run one now: `sudo systemctl start fort-reader`. Screenshots stay under `tools/fort-reader/runs/`.
@@ -146,16 +148,16 @@ It should print `Success`. Then `docker stop redroid`; the next run carries on. 
 Each one lives only in the host's `.env`. Put the new value there; the next run uses it.
 
 - **Anthropic key.** In the Anthropic Console, in a workspace with a low monthly spend limit, create a key named `fort-reader host`, put it in `ANTHROPIC_API_KEY`, then delete the old key. A leaked key can spend only up to that limit.
-- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002) and save a Roster Snapshot for a new day or fill a saved day's empty T4/T5 values (ADR 0004).
+- **The reader's Supabase sign-in.** In the Supabase dashboard, Authentication > Users, give the reader's user a new password and put it in `FORT_READER_PASSWORD`. To replace the user itself, add the new email to `fort_reader`, remove the old one and delete the old user. Whoever holds it can only rewrite the Live Week (ADR 0002) and save a Roster Snapshot for a new or missed day, or fill a saved day's empty T4/T5 values (ADR 0004).
 - **Gmail app password.** See "Revoke or rotate it" above.
 - **Council addresses.** Edit `FORT_READER_ALERT_COUNCIL`.
 - **Lilith token.** See "Roster Snapshot" below; signing out of the RoK Toolkit ends it.
 
 ## Roster Snapshot
 
-The Roster job, `roster.py`, saves the newest day of the Lilith stats export as a Roster Snapshot (ADR 0004). It is the only writer of Roster Snapshots: the admin page no longer uploads the export. The database applies the rules: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer asks twice a day, at 06:00 and 18:00 UTC.
+The Roster job, `roster.py`, saves the newest day of the Lilith stats export as a Roster Snapshot (ADR 0004). It is the only writer of Roster Snapshots: the admin page no longer uploads the export. The database applies the rules: who becomes Inactive or Current, new Governors, renames and Name History. It needs no Android. It asks Lilith's API for the newest day, fetches that day's Governors and saves them through `record_roster_snapshot` as the reader's Supabase user. A day that's already saved is a no-op, so the timer runs it twice a day, at 06:00 and 18:00 UTC, and the evening run saves only what the morning run didn't.
 
-Each snapshot keeps every Governor's T4 kills, T5 kills, T4 deaths and T5 deaths for the day (Lilith's `t4`, `t5`, `dead_t4`, `dead_t5`); T1 to T3 are left out. After saving, every run asks the database for saved days within Lilith's 90-day history that have none of these yet (`roster_days_without_t4_t5`), fetches each from Lilith and fills only their empty T4/T5 values; nothing else on those days changes. A day Lilith can't give is printed, not a failure.
+Each snapshot keeps every Governor's T4 kills, T5 kills, T4 deaths and T5 deaths for the day (Lilith's `t4`, `t5`, `dead_t4`, `dead_t5`); T1 to T3 are left out. After saving, every run asks the database for saved days within Lilith's 90-day history that have none of these yet (`roster_days_without_t4_t5`), fetches each from Lilith and fills only their empty T4/T5 values; nothing else on those days changes. It also asks for the days within that history the store has no snapshot for although days before and after it do (`roster_days_missing`), the nights both runs missed, and saves each from Lilith. A filled-in older day is not today: `record_roster_snapshot` saves it without changing any Governor's status or current name. A day Lilith can't give is printed, not a failure; the next run asks again.
 
 ```
 .venv/bin/python roster.py              # fetch the newest day and save it
@@ -163,7 +165,7 @@ Each snapshot keeps every Governor's T4 kills, T5 kills, T4 deaths and T5 deaths
 .venv/bin/python roster.py --day 2026-11-14
 ```
 
-It emails `FORT_READER_ALERT_TO` (the mail settings above) when a run saves nothing because of an error, when the token has fewer than 5 days left, and when Lilith's newest day is 3 or more days old. `journalctl -u roster -n 50` shows the last runs; `systemctl list-timers roster.timer` shows the next one. `install.sh` installs the timer with the reader's.
+It emails `FORT_READER_ALERT_TO` (the mail settings above) when the evening run saves nothing because of an error (a morning failure only prints, since the evening run tries again), and from the morning run when the token has fewer than 5 days left or Lilith's newest day is 3 or more days old. `journalctl -u roster -n 50` shows the last runs; `systemctl list-timers roster.timer` shows the next one. `install.sh` installs the timer with the reader's.
 
 **The Lilith token.** The RoK Toolkit signs in with a token that lasts 30 days. The Reader Account is the safer choice: the token carries a Lilith session token for whichever account signed in. To get it:
 

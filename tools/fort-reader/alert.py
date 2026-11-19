@@ -32,6 +32,21 @@ def mail(subject, body, env, smtp=smtplib.SMTP_SSL):
     return [env["FORT_READER_ALERT_TO"]]
 
 
+def roster_morning_run(started_at):
+    """The Roster job runs about 06:00 and 18:00 UTC (host/install.sh). The morning run sends the day's
+    reminders; the evening run is the day's last, so only its failure emails."""
+    return started_at.hour < 12
+
+
+def after_roster_run(failure, env, started_at, smtp=smtplib.SMTP_SSL):
+    """Email a failed Roster job run, and return the addresses mailed. A morning run's failure emails
+    nobody: the evening run tries again, and a hiccup it fixes shouldn't page anyone."""
+    if failure is None or roster_morning_run(started_at):
+        return []
+    return mail(f"Roster job: {failure.splitlines()[0]}",
+                f"The run at {started_at:%Y-%m-%d %H:%M} UTC saved no Roster Snapshot.\n\n{failure}\n", env, smtp)
+
+
 def after_run(failure, screenshot, env, started_at, smtp=smtplib.SMTP_SSL):
     """Email the failure and the screen the run stopped on, and return the addresses mailed:
     FORT_READER_ALERT_TO first, then any Council addresses, so more than one means the Council

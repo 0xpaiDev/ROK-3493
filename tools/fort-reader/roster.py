@@ -1,6 +1,7 @@
 """The daily Roster Snapshot (ADR 0004): fetch the newest day of the Lilith stats export (its JSON) and
 save it through record_roster_snapshot, which applies the Roster Snapshot rules in the database. Then
-fill the T4/T5 kills and deaths of saved days that lack them, from Lilith's history.
+save any day the store is missing and fill the T4/T5 kills and deaths of saved days that lack them,
+both from Lilith's history, so a missed run never leaves a hole.
 
     .venv/bin/python roster.py              fetch the newest day and save it
     .venv/bin/python roster.py --dry-run    fetch and print, save nothing
@@ -11,8 +12,9 @@ after a login. It goes in LILITH_PAUTH in the repo's .env. Saving uses the reade
 sign-in (FORT_READER_EMAIL, FORT_READER_PASSWORD). A run that saves nothing new is not a failure:
 Lilith publishes each day late, so asking again for a saved day is normal.
 
-A failure, a token close to expiry and Lilith data gone stale each email FORT_READER_ALERT_TO
-(alert.py's mail settings); without them they only print.
+It runs twice a day, about 06:00 and 18:00 UTC. The morning run emails FORT_READER_ALERT_TO when the
+token is close to expiry or Lilith's data has gone stale; the evening run emails a failure, since a
+morning failure is retried that evening (alert.py's mail settings). Without them they only print.
 """
 import argparse
 import base64
@@ -25,8 +27,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from alert import mail
-from send import roster_days_without_t4_t5, send_roster_snapshot
+from alert import after_roster_run, mail, roster_morning_run
+from send import roster_days_missing, roster_days_without_t4_t5, send_roster_snapshot
 
 HERE = Path(__file__).resolve().parent
 API = "https://plat-rok-gametools-global-api.lilithgames.com"
@@ -116,13 +118,18 @@ def fetch_rows(day, token, opener=urllib.request.urlopen):
 
 
 def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, notify=None,
-        days_without_t4_t5=roster_days_without_t4_t5):
+        days_without_t4_t5=roster_days_without_t4_t5, days_missing=roster_days_missing):
     """One run. Returns the lines to print. notify(subject, body) emails; days_without_t4_t5(since)
-    lists the saved days from since on that lack T4/T5 values."""
+    lists the saved days from since on that lack T4/T5 values; days_missing(since) the days from since
+    on that the store has no snapshot for."""
     notify = notify or (lambda subject, body: mail(subject, body, os.environ))
     lines = []
 
     def note(subject, body, fact, sent):
+        # Reminders go out once a day, from the morning run; the evening run only prints them.
+        if not roster_morning_run(now):
+            lines.append(f"{fact}; the morning run emails it.")
+            return
         # A reminder that can't be mailed must neither stop the save nor make a saved run look failed.
         try:
             notify(subject, body)
@@ -162,10 +169,18 @@ def run(args, now, opener=urllib.request.urlopen, send=send_roster_snapshot, not
              f"Nothing is wrong on our side; it usually catches up by itself.",
              f"Lilith's newest day is {age} days old", "emailed a note")
 
-    # Days saved before the T4/T5 values existed get them from Lilith's history. record_roster_snapshot
-    # fills only their nulls and changes nothing else. A day Lilith can't give doesn't fail the run:
-    # the newest day is saved already.
+    # A day the store is missing (a night both runs missed) is fetched from Lilith's history.
+    # record_roster_snapshot saves it without touching any Governor's status, since it isn't today.
+    # Days saved before the T4/T5 values existed get them the same way; it fills only their nulls.
+    # A day Lilith can't give doesn't fail the run: the newest day is saved already, and the next run
+    # asks again.
     since = (now.date() - datetime.timedelta(days=HISTORY_DAYS)).isoformat()
+    for missed in days_missing(since):
+        try:
+            saved = send(missed, fetch_rows(missed, token, opener))
+            lines.append(f"Saved the missed day {missed}: {saved.get('rows', 0)} Governors.")
+        except RosterError as e:
+            lines.append(f"Couldn't save the missed day {missed}: {e}")
     for old in days_without_t4_t5(since):
         try:
             filled = send(old, fetch_rows(old, token, opener)).get("filled", 0)
@@ -191,9 +206,10 @@ def main():
         print(reason)
         if not args.dry_run:
             try:
-                if mail(f"Roster job: {reason.splitlines()[0]}",
-                        f"The run at {now:%Y-%m-%d %H:%M} UTC saved no Roster Snapshot.\n\n{reason}\n", os.environ):
+                if after_roster_run(reason, os.environ, now):
                     print("Emailed the failure.")
+                elif roster_morning_run(now):
+                    print("Not emailed: the evening run tries again.")
             except Exception as m:  # the failure is printed already, and journalctl keeps it
                 print(f"Couldn't email the failure: {m}")
         return 1

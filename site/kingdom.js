@@ -61,6 +61,13 @@ export function isClosedWeek(startsOn, now) {
   return startsOn < fortWeekAt(now).start;
 }
 
+// The Fort Pause in effect at `now`, { start, end }, or null while Forts run. A pause runs from its start until
+// its end, or on while end is null. No Fort Week exists inside one (ADR 0007), so Fort Average needs no rule for it.
+export function fortPauseAt(pauses, now) {
+  const t = new Date(now).getTime();
+  return pauses.find((p) => new Date(p.start).getTime() <= t && (p.end == null || t < new Date(p.end).getTime())) ?? null;
+}
+
 // The Fort Week the home page shows, as an index into `weeks` (date order): the Live Week
 // once it has a ranked row, otherwise the last closed Fort Week; -1 when there is neither.
 // A week that has not begun is never shown.

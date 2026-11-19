@@ -1,4 +1,4 @@
-import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, kvkState, kvkStandings } from "./kingdom.js";
+import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -218,6 +218,12 @@ import { rewardItem } from "./rewards.js";
   };
   const finalTag = `<span class="tag final" title="The Monday reset closed this week: these Fort Counts are final">Final</span>`;
   const liveNote = `<div class="note">${ICON_INFO}<span>Live Week: read from the in-game ranking once a day until the Monday reset closes it. Fort Counts still rise, so arrows are hidden and Fort Average leaves this week out until then.</span></div>`;
+  // While the Council has Forts paused (ADR 0007), Fort Rankings stays with a line saying since when.
+  const paused = fortPauseAt(D.fortPauses, now);
+  const pauseNote = paused ? (() => {
+    const t = new Date(paused.start), pad = (n) => String(n).padStart(2, "0");
+    return `<div class="note pause-note reveal">${ICON_INFO}<span><b>Forts paused since ${t.getUTCDate()} ${MON[t.getUTCMonth()]} ${t.getUTCFullYear()}, ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} UTC.</b> The Council paused Forts, so no Fort Week is read until they resume. Weeks inside the pause are not Fort Weeks and never count toward a Fort Average.</span></div>`;
+  })() : "";
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
 
   function home() {
@@ -359,7 +365,7 @@ import { rewardItem } from "./rewards.js";
           <button data-fortview="avg" class="${state.fortView === "avg" ? "on" : ""}" aria-pressed="${state.fortView === "avg"}">Averages</button>
           <button data-fortview="awards" class="${state.fortView === "awards" ? "on" : ""}" aria-pressed="${state.fortView === "awards"}">Awards</button>
         </div>
-      </div>`;
+      </div>${pauseNote}`;
 
     if (state.fortView === "awards") {
       return `<div class="wrap page">${head}
