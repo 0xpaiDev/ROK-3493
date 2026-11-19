@@ -42,12 +42,16 @@ begin
   end loop;
 end $$;
 
--- A day as the Council reads it in a refusal: "9 Jan 2020", as kvkDay in site/kingdom.js writes it.
+-- A day as the Council reads it in a refusal: "9 Jan 2020", as dayLabel in site/kingdom.js writes it.
+-- Only save_kvk calls it, as its owner, so nobody else may.
 create or replace function public.kvk_day(d date)
 returns text
 language sql
 immutable
+set search_path = public
 as $$ select to_char(d, 'FMDD Mon YYYY') $$;
+
+revoke all on function public.kvk_day(date) from public, anon, authenticated;
 
 -- Saves a KvK with its Counting Periods in one call: a new one when id is null, else replaces that KvK's days,
 -- Power Cutoff, weights and Counting Periods. Returns the KvK's id. Only the Council may call it.

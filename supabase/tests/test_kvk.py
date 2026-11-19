@@ -150,6 +150,18 @@ class KvK(unittest.TestCase):
                 finally:
                     self.conn.execute("rollback to savepoint case_start")
 
+    def test_kvk_day_is_only_for_save_kvk(self):
+        # save_kvk writes its refusals with it (test_shared_kvk_cases); a visitor or a signed-in user can't call it.
+        for claims in (False, None):
+            with self.subTest(anonymous=claims is False):
+                self.as_caller(claims)
+                with self.assertRaises(psycopg.errors.InsufficientPrivilege):
+                    self.conn.execute("select kvk_day('2020-01-09')")
+                self.conn.rollback()
+                self.setUp()
+        self.assertEqual(self.one("select proconfig from pg_proc where oid = 'public.kvk_day(date)'::regprocedure"),
+                         ["search_path=public"])
+
     def test_a_new_kvk_takes_the_default_cutoff_and_weights(self):
         self.save({"name": "KvK 2020", "starts_on": "2020-01-10", "ends_on": "2020-02-20", "periods": []})
         self.assertEqual(self.kvks()[0][3:8], (20000000, 1, 2, 4, 8, ))
