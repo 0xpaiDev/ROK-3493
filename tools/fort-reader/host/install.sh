@@ -37,14 +37,15 @@ WantedBy=timers.target
 EOF
 
 # The daily Roster Snapshot (README: Roster Snapshot). Lilith publishes each day at a time we don't
-# know, so it asks twice a day; a day already saved is a quiet no-op. Persistent: a run missed while
+# know, so it runs twice a day; a day already saved is a quiet no-op. A failure emails only from the
+# 18:00 run (ROSTER_EVENING_HOUR in alert.py), and only when no run that day saved. Persistent: a run missed while
 # the host was off is made up at boot, which is harmless here.
 sed -e "s|__USER__|$(id -un)|" -e "s|__DIR__|$DIR|g" "$DIR/host/roster.service" \
   | sudo tee /etc/systemd/system/roster.service >/dev/null
 sudo tee /etc/systemd/system/roster.timer >/dev/null <<EOF
 # Written by install.sh. Edit host/install.sh, not this.
 [Unit]
-Description=Roster job: twice a day, save Lilith's newest day as a Roster Snapshot
+Description=Roster job: 06:00 and 18:00 UTC, save Lilith's newest day and any missed day
 
 [Timer]
 OnCalendar=*-*-* 06,18:00:00 UTC

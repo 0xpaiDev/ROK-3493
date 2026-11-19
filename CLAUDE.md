@@ -16,7 +16,7 @@ Character ID is the only key for a Governor; names change. When a name can't be 
 
 ## Work in flight
 
-Work lines live under `.scratch/` (git-ignored), one folder each: `fort-reader/` (the reader and Roster job on the Oracle A1, the active line), `kingdom-admin/` (the Council admin page) and `reward-payout/` (Reward Promise, Group Score, Fill). In the line the task belongs to, read `STATE.md` first, then `SPEC.md` and the ticket under `issues/` that `Next:` names. `.scratch/pre-existing.md` collects bugs found in passing.
+Work lines live under `.scratch/` (git-ignored), one folder each: `fort-reader/` (the reader and Roster job on the Oracle A1, the active line), `kingdom-admin/` (the Council admin page), `reward-payout/` (Reward Promise, Group Score, Fill) and `kvk/` (KvK standings, Counting Periods, Fort Pause). In the line the task belongs to, read `STATE.md` first, then `SPEC.md` and the ticket under `issues/` that `Next:` names. `.scratch/pre-existing.md` collects bugs found in passing.
 
 Architecture decisions live in `docs/adr/`:
 
@@ -32,7 +32,7 @@ Only `site/data/content.js` is hand-edited: news posts and the Reward Promise ca
 ## Tests
 
 - Site rules: `npm test` (Node's test runner over `tests/`).
-- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_capture test_merge test_game test_navigate test_alert test_roster`.
+- Reader and Roster job: from `tools/fort-reader/`, `.venv\Scripts\python.exe -m unittest test_capture test_merge test_game test_navigate test_alert test_roster test_pause`.
 - Database functions: `py -m unittest discover -s supabase/tests` with psycopg on `PYTHONPATH`. They run against the live project inside a rolled-back transaction. `tests/name-matching-cases.json` and `tests/pick-cases.json` are shared by the JS and SQL tests so the two can't drift; `tests/roster-snapshot-cases.json` pins the SQL rules.
 
 ## Gotchas

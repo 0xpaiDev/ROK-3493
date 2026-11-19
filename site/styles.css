@@ -158,6 +158,9 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
   background: rgba(233, 196, 106, .07); border: 1px solid rgba(233, 196, 106, .22);
 }
 .note svg { flex: none; margin-top: 2px; }
+.pause-note { margin-bottom: 16px; }
+/* A card's opening line, such as the KvK table's "Counted N days": flush with the card's top padding */
+.count-line { margin-top: 0; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px;
   font-weight: 600; font-size: 14px; cursor: pointer; transition: transform .15s, border-color .2s;
@@ -438,6 +441,8 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .admin-content { flex: 999 1 560px; min-width: 0; }
 .admin-content > section { display: grid; gap: 16px; }
 .admin-content > section > div { display: grid; gap: 16px; min-width: 0; }
+/* Cards inside one form, spaced like the cards around it */
+.admin-stack { display: grid; gap: 16px; min-width: 0; }
 .admin-signin { flex: 1 1 100%; max-width: 460px; margin: 24px auto; }
 .admin-signin > p { color: var(--muted); }
 .admin-signin form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; margin-top: 12px; }
@@ -587,6 +592,8 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 
 /* ---------- Motion ---------- */
 .reveal { animation: up .8s var(--ease) both; animation-delay: var(--d, 0ms); }
+/* The next section after a page head: one stagger step behind it */
+.reveal-next { --d: calc(var(--stagger) * 2); }
 @keyframes up { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
 @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes ping { 0% { transform: scale(1); opacity: .55; } 75%, 100% { transform: scale(2.6); opacity: 0; } }

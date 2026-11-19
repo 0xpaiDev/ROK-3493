@@ -8,7 +8,10 @@ used, so you can keep working while it runs.
 
     fort_reader.py --from runs\\<folder>   re-reads screenshots saved by an earlier run
     fort_reader.py --send                 also sends the reading to the public site as the Live Week,
-                                          only when the run found no problems
+                                          only when the run found no problems; ends at once while
+                                          the Council has Forts paused
+    fort_reader.py --forts-paused         exits 0 while Forts are paused, 1 while they run (host/run.sh
+                                          asks before it starts Android)
 """
 import argparse
 import datetime
@@ -228,9 +231,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--from", dest="source", help="folder of screenshots from an earlier run")
     ap.add_argument("--send", action="store_true", help="send the reading to Supabase as the Live Week")
+    ap.add_argument("--forts-paused", action="store_true", help="exit 0 while the Council has Forts paused, else 1")
     args = ap.parse_args()
 
     load_env()
+    if args.forts_paused:
+        from send import forts_paused_since
+        since = forts_paused_since()
+        print(paused_line(since) if since else "Forts are running.")
+        sys.exit(0 if since else 1)
     started_at = datetime.datetime.now(datetime.timezone.utc)
     run_dir = Path(args.source) if args.source else HERE / "runs" / started_at.strftime("%Y-%m-%d_%H%M%S")
     failure = None
@@ -274,7 +283,22 @@ def alert_after_run(failure, run_dir, started_at):
         print("Emailed the failure" + (", Council included (Sunday's final run)." if len(mailed) > 1 else "."))
 
 
-def run(args, run_dir):
+def paused_line(since):
+    at = datetime.datetime.fromisoformat(since).astimezone(datetime.timezone.utc)
+    return f"Forts are paused since {at:%Y-%m-%d %H:%M} UTC, so there is no fort scan. Nothing was read or sent."
+
+
+def run(args, run_dir, paused=None):
+    """paused(): when the Fort Pause still going started, or None while Forts run (send.forts_paused_since)."""
+    if args.send and not args.source:
+        # While the Council has Forts paused no reading is taken (ADR 0007): end before the game starts.
+        if paused is None:
+            from send import forts_paused_since as paused
+        since = paused()
+        if since:
+            print(paused_line(since))
+            return
+
     from read import make_client, read_screen
     client = make_client()
 

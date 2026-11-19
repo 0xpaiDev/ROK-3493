@@ -1,4 +1,4 @@
-import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal } from "./kingdom.js";
+import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings, homeShows, kvkList, kvkCounting, dayLabel, KVK_STATE_LABEL } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 
@@ -93,6 +93,7 @@ import { rewardItem } from "./rewards.js";
   };
   D.roster.forEach((r) => (get(r.id, r.name).roster = r));
   D.kvk.forEach((r) => (get(r.id, r.name).kvk = r));
+  Object.values(D.kvkTables ?? {}).forEach((rows) => rows.forEach((r) => get(r.id, r.name)));
   D.ghEvents.forEach((ev) => (ev.label = `${fmtDay(ev.startsOn)}–${fmtDay(ev.endsOn)} ${ev.endsOn.slice(0, 4)}`));
   D.ghEvents.forEach((ev) => ev.entries.forEach((e) => get(e.id, e.name).gh.push({ ...e, label: ev.label })));
   // Each Governor's Fort history keeps their own Fort Count: a Main's Mains-only rank, a Farm's
@@ -164,7 +165,7 @@ import { rewardItem } from "./rewards.js";
 
   // ---------- views ----------
   // Fort Rankings opens on the week home shows, so home's "All N Mains →" and Find links land on it.
-  const state = { fortView: "weekly", withFarms: false, fortWeek: homeI >= 0 ? homeI : weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", find: "" };
+  const state = { fortView: "weekly", withFarms: false, fortWeek: homeI >= 0 ? homeI : weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", kvkSort: "dkp", kvkAll: false, kvkQ: "", find: "" };
 
   function podium(rows, { live = false } = {}) {
     const step = (r, place) => {
@@ -217,10 +218,43 @@ import { rewardItem } from "./rewards.js";
   };
   const finalTag = `<span class="tag final" title="The Monday reset closed this week: these Fort Counts are final">Final</span>`;
   const liveNote = `<div class="note">${ICON_INFO}<span>Live Week: read from the in-game ranking once a day until the Monday reset closes it. Fort Counts still rise, so arrows are hidden and Fort Average leaves this week out until then.</span></div>`;
+  // While the Council has Forts paused (ADR 0007), Fort Rankings stays with a line saying since when.
+  const paused = fortPauseAt(D.fortPauses, now);
+  const pauseNote = paused ? (() => {
+    const t = new Date(paused.start), pad = (n) => String(n).padStart(2, "0");
+    return `<div class="note pause-note reveal">${ICON_INFO}<span><b>Forts paused since ${dayLabel(t.toISOString().slice(0, 10))}, ${pad(t.getUTCHours())}:${pad(t.getUTCMinutes())} UTC.</b> The Council paused Forts, so no Fort Week is read until they resume. Weeks inside the pause are not Fort Weeks and never count toward a Fort Average.</span></div>`;
+  })() : "";
   const partialNote = `<div class="note">${ICON_INFO}<span>Partial Week: this saved ranking is incomplete. A Governor missing from it has an unknown Fort Count, not 0, and their Fort Average is unaffected.</span></div>`;
 
+  // Home follows the Fort Pause switch alone (homeShows): the newest started KvK while Forts are paused,
+  // else Fort Rankings, with the pause line when paused without a KvK.
+  const homeShown = homeShows({ pauses: D.fortPauses, kvks: D.kvks, now });
+
+  // Why a KvK's table is empty without "show all": nobody reached its Power Cutoff.
+  const noneAtCutoff = (k) => `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot.`;
+  // Home during a Fort Pause: the KvK's name, its top DKP standings and a link to the full table.
+  // The store loads totals for currentKvk, which is this KvK whenever one has started.
+  function homeKvk(k) {
+    const totals = D.kvkTotals?.kvkId === k.id ? D.kvkTotals.rows : [];
+    const rows = kvkStandings(totals, k);
+    const day = dayLabel;
+    const top = Math.min(10, rows.length);
+    const empty = totals.length ? noneAtCutoff(k)
+      : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
+    return `<div class="wrap page">
+      <div class="section-head reveal"><div><div class="eyebrow">KvK · ${KVK_STATE_LABEL[kvkState(k, now)]}</div><h1>${esc(k.name)}</h1>
+        <p class="muted">${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Governors ranked by DKP over the Counting Periods.</p></div></div>
+      ${pauseNote}
+      <section class="card reveal reveal-next">
+        <div class="card-head"><div><div class="eyebrow">DKP standings</div><h2>${rows.length ? `Top ${top}` : "Standings"}</h2></div><a href="#kvk">Full table on the KvK tab →</a></div>
+        ${rows.length ? kvkTable(rows.slice(0, top)) : `<p class="empty">${empty}</p>`}
+      </section></div>`;
+  }
+
   function home() {
-    if (homeI < 0) return `<div class="wrap page"><div class="card empty">${weeks.length ? `Week ${isoWeek((weeks.find(isLive) ?? weeks[weeks.length - 1]).start)} is waiting for its first fort.` : "No Fort Week has been logged yet."}</div></div>`;
+    if (homeShown.view === "kvk") return homeKvk(homeShown.kvk);
+    const homePause = homeShown.pause ? `<div class="wrap">${pauseNote}</div>` : "";
+    if (homeI < 0) return `<div class="wrap page">${pauseNote}<div class="card empty">${weeks.length ? `Week ${isoWeek((weeks.find(isLive) ?? weeks[weeks.length - 1]).start)} is waiting for its first fort.` : "No Fort Week has been logged yet."}</div></div>`;
     const i = homeI, w = weeks[i], rows = weekRows(i), wn = isoWeek(w.start);
     const now = fortWeekAt(Date.now()), nowN = isoWeek(now.start);
     const total = w.entries.reduce((a, e) => a + e.fortCount, 0);
@@ -278,7 +312,7 @@ import { rewardItem } from "./rewards.js";
           </div>
         </div>
       </section>
-
+      ${homePause}
       <section class="wrap" aria-label="Week ${wn} in numbers">
         <div class="stats">
           <div class="stat reveal" style="--d:380ms"><div class="label">Total Fort Count</div><div class="value num" data-count="${total}">${total.toLocaleString("en")}</div><div class="sub">Week ${wn}${live ? " so far" : ""}, all Governors</div></div>
@@ -358,7 +392,7 @@ import { rewardItem } from "./rewards.js";
           <button data-fortview="avg" class="${state.fortView === "avg" ? "on" : ""}" aria-pressed="${state.fortView === "avg"}">Averages</button>
           <button data-fortview="awards" class="${state.fortView === "awards" ? "on" : ""}" aria-pressed="${state.fortView === "awards"}">Awards</button>
         </div>
-      </div>`;
+      </div>${pauseNote}`;
 
     if (state.fortView === "awards") {
       return `<div class="wrap page">${head}
@@ -420,10 +454,8 @@ import { rewardItem } from "./rewards.js";
   }
 
   function events() {
-    const kvk = D.kvk.filter((r) => state.kvkFilter === "all" || r.status.toLowerCase() === state.kvkFilter);
     return `<div class="wrap page">
-      <div class="section-head reveal"><div><div class="eyebrow">Events</div><h1>GH Events &amp; KvK</h1></div></div>
-      <div class="split">
+      <div class="section-head reveal"><div><div class="eyebrow">Events</div><h1>GH Events</h1></div></div>
         <div class="grid">${D.ghEvents.map((ev) => `
           <section class="card">
             <div class="card-head"><div><div class="eyebrow">${esc(ev.name)}</div><h2>${esc(ev.label)}</h2></div></div>
@@ -432,7 +464,70 @@ import { rewardItem } from "./rewards.js";
               return `<li><span class="i num">${e.rank}</span>${who(g)}${e.alliance ? `<span class="tag">${esc(e.alliance)}</span>` : ""}<b class="num" style="min-width:52px;text-align:right">${e.gh} GH</b></li>`;
             }).join("")}</ol>
           </section>`).join("")}
-        </div>
+        </div></div>`;
+  }
+
+  // The KvK tab: the list of KvKs (kvkList, newest first, the carried-over Last KvK last) and the table of the
+  // one opened, #kvk/<id> or #kvk/last. Without one in the URL it opens the KvK currentKvk picks.
+  const LAST_KVK = "last";
+  function kvkOpened() {
+    const id = location.hash.split("/")[1];
+    if (id === LAST_KVK && D.kvk.length) return LAST_KVK;
+    const k = D.kvks.find((x) => String(x.id) === id) ?? D.kvks.find((x) => x.id === D.kvkTotals?.kvkId);
+    return k ?? (D.kvk.length ? LAST_KVK : null);
+  }
+  function kvkTab() {
+    const head = (title, lede) => `<div class="section-head reveal"><div><div class="eyebrow">KvK</div><h1>${title}</h1>${lede ? `<p class="muted">${lede}</p>` : ""}</div></div>`;
+    const open = kvkOpened();
+    if (!open) return `<div class="wrap page">${head("KvK")}<section class="card empty">No KvK is set up yet.</section></div>`;
+    const openKey = open === LAST_KVK ? LAST_KVK : String(open.id);
+    const chip = (key, name, sub) => `<button class="chip ${key === openKey ? "on" : ""}" data-kvkopen="${esc(key)}" aria-pressed="${key === openKey}"><b>${esc(name)}</b><small>${esc(sub)}</small></button>`;
+    const list = `<div class="chips" role="group" aria-label="KvKs">${kvkList(D.kvks, now).map((k) => chip(String(k.id), k.name, `${KVK_STATE_LABEL[k.state]} · ${dayLabel(k.startsOn)}`)).join("")}${D.kvk.length ? chip(LAST_KVK, "Last KvK", "Ended · before the site") : ""}</div>`;
+    return `<div class="wrap page">${open === LAST_KVK ? lastKvk(head, list) : kvkPage(open, head, list)}</div>`;
+  }
+
+  // One KvK set up by the Council: its days and rules, then its table, sortable, searchable, with "show all".
+  function kvkPage(k, head, list) {
+    const phase = kvkState(k, now);
+    const day = dayLabel;
+    const periods = k.periods.length
+      ? k.periods.map((p) => p.endsOn == null ? `from ${day(p.startsOn)}` : p.endsOn === p.startsOn ? day(p.startsOn) : `${day(p.startsOn)} – ${day(p.endsOn)}`).join(", ")
+      : "none set yet";
+    const lede = `${phase === "upcoming" ? "Starts" : KVK_STATE_LABEL[phase]} · ${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Counting Periods: ${esc(periods)}.
+      DKP is T4 kills ×${k.weights.t4Kill}, T5 kills ×${k.weights.t5Kill}, T4 deaths ×${k.weights.t4Death} and T5 deaths ×${k.weights.t5Death} over the Counting Periods.
+      Governors at or above ${big(k.powerCutoff)} power in the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
+    const totals = D.kvkTables?.[k.id] ?? [];
+    const counting = kvkCounting(k, now, D.snapshotDays);
+    const countLine = "days" in counting
+      ? `<p class="muted count-line">Counted ${counting.days} day${counting.days === 1 ? "" : "s"} of its Counting Periods${D.newestSnapshotOn ? `, through the Roster Snapshot of ${esc(day(D.newestSnapshotOn))}` : ""}.</p>`
+      : `<div class="note">${ICON_INFO}<span>${counting.begins ? `Counting begins on ${esc(day(counting.begins))}. Until then every Governor's kills and deaths read 0.` : "No Counting Period is set yet, so every Governor's kills and deaths read 0."}</span></div>`;
+    const all = kvkStandings(totals, k, { all: true, sort: state.kvkSort });
+    const taking = kvkStandings(totals, k, { sort: state.kvkSort });
+    const shown = state.kvkAll ? all : taking;
+    const q = state.kvkQ.trim();
+    const rows = q ? findInRanking(shown, D.nameHistory, q) : shown;
+    const noneTaking = `${noneAtCutoff(k)} "Show all" lists everyone.`;
+    const empty = phase === "upcoming" ? `The table fills from the Roster Snapshot of ${esc(day(k.startsOn))}.`
+      : totals.length ? noneTaking
+      : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
+    const tools = `<div class="toolbar">
+        <div class="seg" role="group" aria-label="Which Governors">
+          <button data-kvkall="0" class="${state.kvkAll ? "" : "on"}" aria-pressed="${!state.kvkAll}">${big(k.powerCutoff)}+ (${taking.length})</button>
+          <button data-kvkall="1" class="${state.kvkAll ? "on" : ""}" aria-pressed="${state.kvkAll}">Show all ${all.length}</button>
+        </div><input class="search" id="kq" type="search" placeholder="Name or Character ID" aria-label="Search the KvK table" value="${esc(state.kvkQ)}" autocomplete="off" spellcheck="false"></div>`;
+    const table = rows.length ? kvkTable(rows, state.kvkSort)
+      : q ? `<p class="empty">No Governor matches “${esc(q)}”${state.kvkAll ? "" : `. "Show all" also searches Governors below ${big(k.powerCutoff)}`}.</p>`
+      : `<p class="empty">${state.kvkAll || !totals.length ? empty : noneTaking}</p>`;
+    return `${head(esc(k.name), lede)}${list}
+      <section class="card">${countLine}${totals.length ? tools : ""}${totals.length ? table : `<p class="empty">${empty}</p>`}
+        ${state.kvkAll && totals.some((r) => r.startPower == null) ? `<p class="faint">A Governor without starting power was not in the KvK Start Snapshot.</p>` : ""}
+      </section>`;
+  }
+
+  // The KvK from before the site: the old Excel "Last KvK" table, carried over unchanged.
+  function lastKvk(head, list) {
+    const kvk = D.kvk.filter((r) => state.kvkFilter === "all" || r.status.toLowerCase() === state.kvkFilter);
+    return `${head("Last KvK", "The KvK before the site, carried over from the Council's spreadsheet.")}${list}
         <section class="card">
           <div class="card-head"><div><div class="eyebrow">Hall of fame</div><h2>Last KvK</h2></div></div>
           <div class="seg" role="group" aria-label="Status" style="margin-bottom:12px">
@@ -447,8 +542,30 @@ import { rewardItem } from "./rewards.js";
               <td class="r num">${big(r.power)}</td>
             </tr>`).join("")}</tbody>
           </table></div>
-        </section>
-      </div></div>`;
+        </section>`;
+  }
+
+  // A KvK's standings as a table (kvkStandings rows), shared by the KvK tab and Home during a Fort Pause.
+  // With sort (the KvK tab), every column header sorts the table on it; Home's top 10 passes none.
+  function kvkTable(rows, sort) {
+    const away = (r) => r.status === "Inactive" || r.status === "Migrated";
+    const th = (key, text, cls = "r") => sort
+      ? `<th class="${cls} ${sort === key ? "sorted" : ""}"><button data-kvksort="${key}">${text}</button></th>`
+      : `<th class="${cls}">${text}</th>`;
+    return `
+        <div class="table-wrap"><table>
+          <thead><tr><th>#</th>${th("name", "Governor", "")}${th("startPower", "Start power")}${th("dkp", "DKP")}${th("t4Kills", "T4 kills")}${th("t5Kills", "T5 kills")}${th("t4Deaths", "T4 deaths")}${th("t5Deaths", "T5 deaths")}</tr></thead>
+          <tbody>${rows.map((r) => `<tr class="${away(r) ? "is-away" : ""}">
+            <td class="faint num mono">${r.rank}</td>
+            <td class="name-cell">${who(byKey(r.id))} ${away(r) ? `<span class="tag away">${esc(r.status)}</span>` : ""}</td>
+            <td class="r num">${big(r.startPower)}</td>
+            <td class="r num"><b>${big(r.dkp)}</b></td>
+            <td class="r num">${big(r.t4Kills)}</td>
+            <td class="r num">${big(r.t5Kills)}</td>
+            <td class="r num">${big(r.t4Deaths)}</td>
+            <td class="r num">${big(r.t5Deaths)}</td>
+          </tr>`).join("")}</tbody>
+        </table></div>`;
   }
 
   function roster() {
@@ -613,7 +730,7 @@ import { rewardItem } from "./rewards.js";
   }
 
   // ---------- routing + events ----------
-  const views = { home, fort, events, roster };
+  const views = { home, fort, kvk: kvkTab, events, roster };
   function render() {
     const tab = (location.hash.slice(1) || "home").split("/")[0];
     const view = views[tab] ? tab : "home";
@@ -646,6 +763,9 @@ import { rewardItem } from "./rewards.js";
     else if (t.dataset.avgsort) state.avgSort = t.dataset.avgsort;
     else if (t.dataset.rostersort) state.rosterSort = t.dataset.rostersort;
     else if (t.dataset.kvk) state.kvkFilter = t.dataset.kvk;
+    else if (t.dataset.kvkopen) history.replaceState(null, "", `#kvk/${t.dataset.kvkopen}`);
+    else if (t.dataset.kvksort) state.kvkSort = t.dataset.kvksort;
+    else if (t.dataset.kvkall) state.kvkAll = t.dataset.kvkall === "1";
     else if (t.dataset.rosterall) { state.rosterAll = t.dataset.rosterall === "1"; state.rosterLimit = 50; }
     else if ("more" in t.dataset) state.rosterLimit += 50;
     else return;
@@ -657,11 +777,12 @@ import { rewardItem } from "./rewards.js";
       document.getElementById("find-out").innerHTML = findResults(state.find);
       return;
     }
-    if (ev.target.id !== "rq") return;
-    state.rosterQ = ev.target.value;
-    state.rosterLimit = 50;
+    if (ev.target.id !== "rq" && ev.target.id !== "kq") return;
+    if (ev.target.id === "kq") state.kvkQ = ev.target.value;
+    else { state.rosterQ = ev.target.value; state.rosterLimit = 50; }
+    const id = ev.target.id;
     render();
-    const input = document.getElementById("rq");
+    const input = document.getElementById(id);
     input.focus();
     input.setSelectionRange(input.value.length, input.value.length);
   });
@@ -669,7 +790,7 @@ import { rewardItem } from "./rewards.js";
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "/" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (ev.target.closest("input, textarea, select, [contenteditable]") || dlg.open) return;
-    const input = document.getElementById("find") || document.getElementById("rq");
+    const input = document.getElementById("find") || document.getElementById("rq") || document.getElementById("kq");
     if (!input) return;
     ev.preventDefault();
     input.focus();
@@ -688,7 +809,7 @@ import { rewardItem } from "./rewards.js";
   };
   window.addEventListener("hashchange", () => { viewFromHash(); render(); window.scrollTo(0, 0); });
 
-  document.getElementById("generated").textContent = `Data updated ${fmtDay(D.generated)} ${D.generated.slice(0, 4)}`;
+  document.getElementById("generated").textContent = `Data updated ${dayLabel(D.generated)}`;
   viewFromHash();
   render();
 })();

@@ -1,8 +1,8 @@
 // Council admin page: magic-link sign-in, then one Council task at a time from the sidebar.
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
-import { SUPABASE_URL, SUPABASE_KEY } from "./store.js";
-import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards } from "./kingdom.js";
+import { SUPABASE_URL, SUPABASE_KEY, KVK_SELECT, kvkFromRow } from "./store.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -40,6 +40,8 @@ const TASKS = [
   { id: "farm-links", label: "Farm links" },
   { id: "fort-week", label: "Fort Week" },
   { id: "reward-promise", label: "Reward Promise" },
+  { id: "kvk", label: "KvK" },
+  { id: "fort-pause", label: "Fort Pause" },
   { id: "gh-event", label: "GH Event", meta: "Top 10, Golden Heads", soon: {
     title: "Log a GH Event", body: "Log a GH Event's top 10 with Golden Heads.",
     steps: [["Name and dates", "One result per GH Event"], ["Enter the top 10", "Matched like a Fort Week"], ["Check Golden Heads", "Prefilled 20/10/5/4×7, editable"]] } },
@@ -105,6 +107,8 @@ async function showAdmin(session) {
   showFortWeek(document.getElementById("task-fort-week"));
   showRewardPromise(document.getElementById("task-reward-promise"));
   showRoster(document.getElementById("task-roster"));
+  showKvk(document.getElementById("task-kvk"));
+  showFortPause(document.getElementById("task-fort-pause"));
 }
 
 function soonHtml(t) {
@@ -1014,6 +1018,204 @@ async function showRewardPromise(section, message = "", startWeek = null) {
   draw();
 }
 
+// ---------- KvK (kvk line, ticket 03) ----------
+// The Council sets up a KvK: its days, Power Cutoff, DKP weights and Counting Periods. checkKvk runs before
+// Save; save_kvk refuses the same KvKs (tests/kvk-cases.json) and is the only way a KvK is written.
+
+const kvkDays = (k) => `${dayLabel(k.startsOn)} – ${dayLabel(k.endsOn)}`;
+const WEIGHT_FIELDS = [["t4Kill", "T4 kill"], ["t5Kill", "T5 kill"], ["t4Death", "T4 death"], ["t5Death", "T5 death"]];
+
+async function loadKvks() {
+  const kvks = (await allRows("kvk", KVK_SELECT, (q) => q.order("starts_on", { ascending: false }))).map(kvkFromRow);
+  // Which start days have their Roster Snapshot, the KvK Start Snapshot.
+  const starts = kvks.map((k) => k.startsOn);
+  const have = starts.length ? await allRows("roster_snapshot", "taken_on", (q) => q.in("taken_on", starts)) : [];
+  const snapped = new Set(have.map((s) => s.taken_on));
+  return kvks.map((k) => ({ ...k, hasStartSnapshot: snapped.has(k.startsOn) }));
+}
+
+// A KvK as the form holds it: numbers as typed, so a half-typed value stays put.
+const kvkToForm = (k) => ({
+  id: k?.id ?? null, name: k?.name ?? "", startsOn: k?.startsOn ?? "", endsOn: k?.endsOn ?? "",
+  powerCutoff: awardAmountInput("power", k?.powerCutoff ?? KVK_DEFAULTS.powerCutoff),
+  weights: Object.fromEntries(WEIGHT_FIELDS.map(([f]) => [f, String((k?.weights ?? KVK_DEFAULTS.weights)[f])])),
+  periods: (k?.periods ?? []).map((p) => ({ startsOn: p.startsOn, endsOn: p.endsOn ?? "" })),
+});
+// The form as a KvK for checkKvk: a blank number is not one, so the rules module names it.
+const formToKvk = (f) => ({
+  id: f.id, name: f.name, startsOn: f.startsOn || null, endsOn: f.endsOn || null,
+  powerCutoff: parseAwardAmount(f.powerCutoff, "resource") ?? (f.powerCutoff.trim() === "0" ? 0 : NaN),
+  weights: Object.fromEntries(WEIGHT_FIELDS.map(([w]) => [w, f.weights[w].trim() === "" ? NaN : Number(f.weights[w])])),
+  periods: f.periods.map((p) => ({ startsOn: p.startsOn || null, endsOn: p.endsOn || null })),
+});
+
+async function showKvk(section, message = "", editId = null) {
+  let kvks;
+  try {
+    kvks = await loadKvks();
+  } catch (e) {
+    section.innerHTML = `<div class="eyebrow">KvK</div><p class="admin-msg" role="status">Could not load the KvKs: ${esc(e.message)}</p>`;
+    setTaskStatus("kvk", "Could not load");
+    return;
+  }
+  const now = Date.now();
+  const waiting = kvks.filter((k) => !k.hasStartSnapshot && kvkState(k, now) !== "ended");
+  const active = kvks.find((k) => kvkState(k, now) === "active");
+  const activeWaits = waiting.some((k) => kvkState(k, now) === "active");
+  setTaskStatus("kvk", active ? `${active.name} active` : kvks.length ? `${kvks.length} set up` : "None set up",
+    activeWaits ? "Review" : "", activeWaits ? "review" : "");
+
+  let form = kvkToForm(kvks.find((k) => k.id === editId));
+  let msgText = message;
+
+  const summary = () => {
+    const problem = checkKvk(formToKvk(form), kvks);
+    if (problem) return { problem, html: `<b>Fix before saving.</b> <span>${esc(problem)}</span>` };
+    const n = form.periods.length;
+    return { problem, html: `<b>${form.id ? "Replaces the saved KvK." : "Not saved yet."}</b> <span>${esc(form.name.trim())}, ${n} Counting ${n === 1 ? "Period" : "Periods"}.</span>` };
+  };
+
+  function draw() {
+    const { problem, html } = summary();
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <div class="reveal">
+        <div class="eyebrow">KvK</div>
+        <h1 class="task-title">${form.id ? `Edit ${esc(form.name || "the KvK")}` : "Set up a KvK"}</h1>
+        <p class="task-lede">Its start day's Roster Snapshot is the KvK Start Snapshot: each Governor's starting power, and who is at or above the Power Cutoff. Only kills and deaths on the days of its Counting Periods count. Move a period at any time and the standings follow.</p>
+      </div>
+      <p class="admin-msg" role="status">${esc(msgText)}</p>
+
+      ${kvks.length ? `<section class="card admin-card">
+        <h2>KvKs</h2>
+        <ol class="aw-rows">${kvks.map((k) => `
+          <li class="${k.id === form.id ? "editing" : ""}">
+            <span class="who"><span class="ell">${esc(k.name)}</span><span class="tag">${KVK_STATE_LABEL[kvkState(k, now)]}</span></span>
+            <span class="aw"><span class="mono num">${esc(kvkDays(k))}</span>${k.hasStartSnapshot ? "" : `<br><small class="faint">Waiting for its start snapshot, the Roster Snapshot of ${esc(dayMonth(k.startsOn))}.</small>`}</span>
+            <span class="row-actions"><button class="btn quiet sm" type="button" data-kvk-edit="${k.id}">Edit<span class="sr-only"> ${esc(k.name)}</span></button></span>
+          </li>`).join("")}
+        </ol>
+        ${form.id ? `<p><button class="btn quiet sm" type="button" data-kvk-new>Set up a new KvK instead</button></p>` : ""}
+      </section>` : ""}
+
+      <form id="kvk-form" class="admin-stack" onsubmit="return false">
+        <section class="card admin-card">
+          <h2>Days and DKP</h2>
+          <div class="fields">
+            <label class="field wide">Name
+              <input name="kvkName" value="${esc(form.name)}" required autocomplete="off" placeholder="KvK 3, Heroic Anthem">
+            </label>
+            <label class="field">Start day (UTC)
+              <input type="date" name="startsOn" value="${esc(form.startsOn)}" required>
+            </label>
+            <label class="field">End day (UTC)
+              <input type="date" name="endsOn" value="${esc(form.endsOn)}" required>
+            </label>
+            <label class="field">Power Cutoff
+              <input name="powerCutoff" value="${esc(form.powerCutoff)}" inputmode="decimal" autocomplete="off" placeholder="20M">
+            </label>
+          </div>
+          <div class="fields">${WEIGHT_FIELDS.map(([f, label]) => `
+            <label class="field narrow">${label}
+              <input name="w-${f}" value="${esc(form.weights[f])}" type="number" min="0" step="any" inputmode="decimal">
+            </label>`).join("")}
+          </div>
+          <p class="match">DKP weights: each T4 kill, T5 kill, T4 death and T5 death counts this many points.</p>
+        </section>
+
+        <section class="card admin-card">
+          <h2>Counting Periods</h2>
+          <p class="muted">Whole UTC days, both ends included. Leave the end empty while the fighting goes on: it counts up to the newest Roster Snapshot.</p>
+          ${form.periods.map((p, i) => `
+          <div class="fields" aria-label="Counting Period ${i + 1}">
+            <label class="field">Period ${i + 1} from
+              <input type="date" name="p-start-${i}" value="${esc(p.startsOn)}" required>
+            </label>
+            <label class="field">to
+              <input type="date" name="p-end-${i}" value="${esc(p.endsOn)}">
+            </label>
+            <button class="btn quiet sm" type="button" data-period-remove="${i}">Remove<span class="sr-only"> period ${i + 1}</span></button>
+          </div>`).join("") || `<p class="match">No Counting Period yet: nothing counts until one is added.</p>`}
+          <p><button class="btn" type="button" data-period-add>Add Counting Period</button></p>
+        </section>
+      </form>
+
+      <div class="save-bar" role="region" aria-label="KvK">
+        <span class="pulse unsaved" aria-hidden="true"></span>
+        <span class="sum">${html}</span>
+        ${form.id ? `<button class="btn quiet" type="button" data-kvk-delete>Delete KvK</button>` : ""}
+        <button class="btn primary" type="button" data-save${problem ? " disabled" : ""}>Save KvK</button>
+      </div>`;
+    section.replaceChildren(body);
+    wire(body);
+  }
+
+  function readForm(body) {
+    const f = body.querySelector("#kvk-form");
+    form = {
+      ...form, name: f.kvkName.value, startsOn: f.startsOn.value, endsOn: f.endsOn.value, powerCutoff: f.powerCutoff.value,
+      weights: Object.fromEntries(WEIGHT_FIELDS.map(([w]) => [w, f[`w-${w}`].value])),
+      periods: form.periods.map((_, i) => ({ startsOn: f[`p-start-${i}`].value, endsOn: f[`p-end-${i}`].value })),
+    };
+  }
+
+  function wire(body) {
+    const msg = body.querySelector(".admin-msg");
+    // Typing keeps the form; the save bar redraws on change, so focus stays put.
+    body.querySelector("#kvk-form").addEventListener("input", () => readForm(body));
+    body.querySelector("#kvk-form").addEventListener("change", () => {
+      readForm(body);
+      const { problem, html } = summary();
+      body.querySelector(".save-bar .sum").innerHTML = html;
+      body.querySelector("[data-save]").disabled = !!problem;
+    });
+    body.querySelectorAll("[data-kvk-edit]").forEach((b) => b.addEventListener("click", () => {
+      form = kvkToForm(kvks.find((k) => k.id === Number(b.dataset.kvkEdit)));
+      msgText = "";
+      draw();
+    }));
+    body.querySelector("[data-kvk-new]")?.addEventListener("click", () => { form = kvkToForm(null); msgText = ""; draw(); });
+    body.querySelector("[data-period-add]").addEventListener("click", () => {
+      readForm(body);
+      // A new period starts the day after the last one ends, or on the KvK's start day.
+      const last = form.periods.at(-1);
+      const next = last?.endsOn ? new Date(Date.parse(last.endsOn + "T00:00:00Z") + 864e5).toISOString().slice(0, 10) : last ? "" : form.startsOn;
+      form.periods.push({ startsOn: next, endsOn: "" });
+      draw();
+      section.querySelector(`[name="p-start-${form.periods.length - 1}"]`)?.focus();
+    });
+    body.querySelectorAll("[data-period-remove]").forEach((b) => b.addEventListener("click", () => {
+      readForm(body);
+      form.periods.splice(Number(b.dataset.periodRemove), 1);
+      draw();
+    }));
+    body.querySelector("[data-save]").addEventListener("click", async (e) => {
+      readForm(body);
+      const k = formToKvk(form);
+      const problem = checkKvk(k, kvks);
+      if (problem) { msg.textContent = `Could not save the KvK: ${problem}`; return; }
+      e.target.disabled = true;
+      msg.textContent = "Saving…";
+      const { data: id, error } = await supabase.rpc("save_kvk", { kvk: {
+        id: k.id, name: k.name.trim(), starts_on: k.startsOn, ends_on: k.endsOn, power_cutoff: k.powerCutoff,
+        weights: { t4_kill: k.weights.t4Kill, t5_kill: k.weights.t5Kill, t4_death: k.weights.t4Death, t5_death: k.weights.t5Death },
+        periods: k.periods.map((p) => ({ starts_on: p.startsOn, ends_on: p.endsOn })),
+      } });
+      if (error) { e.target.disabled = false; msg.textContent = `Could not save the KvK: ${error.message}`; return; }
+      showKvk(section, `Saved ${k.name.trim()}. The KvK tab follows at once.`, id);
+    });
+    body.querySelector("[data-kvk-delete]")?.addEventListener("click", async (e) => {
+      if (!confirm(`Delete ${form.name}? Its Counting Periods go with it; the Roster Snapshots stay.`)) return;
+      e.target.disabled = true;
+      const { error } = await supabase.rpc("delete_kvk", { kvk_id: form.id });
+      if (error) { e.target.disabled = false; msg.textContent = `Could not delete the KvK: ${error.message}`; return; }
+      showKvk(section, `Deleted ${form.name}.`);
+    });
+  }
+
+  draw();
+}
+
 // ---------- Roster Snapshot (ticket 05, ADR 0004) ----------
 // The Roster job saves a Roster Snapshot every day from the Lilith stats export, the only writer
 // of snapshots. The Council reads when it last did, and sets a Governor's status by hand where
@@ -1109,6 +1311,59 @@ async function showRoster(section, message = "") {
       return;
     }
     showRoster(section, `${g.name} is now ${status[0].toUpperCase() + status.slice(1)}.`);
+  });
+}
+
+// ---------- Fort Pause (KvK ticket 05, ADR 0007) ----------
+// The Council's switch: while Forts are paused the reader takes no reading, so no Fort Week exists and Fort
+// Average skips those weeks. Writes only through set_fort_pause; the rules module says whether Forts are paused.
+
+const utcTime = (iso) => {
+  const t = new Date(iso).toISOString();
+  return `${dayLabel(t.slice(0, 10))}, ${t.slice(11, 16)} UTC`;
+};
+
+async function showFortPause(section, message = "") {
+  const { data, error } = await supabase.from("fort_pause").select("starts_at,ends_at").order("starts_at", { ascending: false }).limit(1);
+  if (error) {
+    section.innerHTML = `<div class="eyebrow">Fort Pause</div><p class="admin-msg" role="status">Could not load the Fort Pause: ${esc(error.message)}</p>`;
+    setTaskStatus("fort-pause", "Could not load");
+    return;
+  }
+  const last = data[0] ? { start: data[0].starts_at, end: data[0].ends_at } : null;
+  const paused = fortPauseAt(last ? [last] : [], Date.now());
+  setTaskStatus("fort-pause", paused ? `Paused since ${dayMonth(new Date(paused.start).toISOString().slice(0, 10))}` : "Forts running", paused ? "Paused" : "");
+
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <div class="reveal">
+      <div class="eyebrow">Fort Pause</div>
+      <h1 class="task-title">${paused ? `Forts paused since ${esc(utcTime(paused.start))}` : "Forts are running"}</h1>
+      <p class="task-lede">${paused
+        ? "The reader takes no reading, so no Fort Week exists until Forts resume, and Fort Average skips those weeks. Fort Rankings says since when Forts are paused."
+        : `The reader reads the Live Week every night.${last?.end ? ` The last pause ended ${esc(utcTime(last.end))}.` : ""}`}</p>
+    </div>
+    <p class="admin-msg" role="status">${esc(message)}</p>
+    <section class="card admin-card">
+      <h2>${paused ? "Resume Forts" : "Pause Forts"}</h2>
+      <p class="muted">${paused
+        ? "From now the reader reads the Live Week again. This week is an ordinary Live Week: its Fort Counts count in full."
+        : "Usually for a KvK, and independent of its days. The Live Week keeps its last reading and closes Complete or Partial as it stands; the weeks after it are not Fort Weeks until you resume."}</p>
+      <button class="btn primary" type="button" id="fort-pause-switch">${paused ? "Resume Forts" : "Pause Forts"}</button>
+    </section>`;
+  section.replaceChildren(body);
+
+  const button = body.querySelector("#fort-pause-switch");
+  button.addEventListener("click", async () => {
+    if (!confirm(paused ? "Resume Forts now? The reader reads the Live Week again from its next run." : "Pause Forts now? The reader stops reading Forts until you resume them.")) return;
+    button.disabled = true;
+    const { error } = await supabase.rpc("set_fort_pause", { paused: !paused });
+    if (error) {
+      button.disabled = false;
+      body.querySelector(".admin-msg").textContent = `Could not ${paused ? "resume" : "pause"} Forts: ${error.message}`;
+      return;
+    }
+    showFortPause(section, paused ? "Forts resumed." : "Forts paused.");
   });
 }
 

@@ -61,6 +61,13 @@ export function isClosedWeek(startsOn, now) {
   return startsOn < fortWeekAt(now).start;
 }
 
+// The Fort Pause in effect at `now`, { start, end }, or null while Forts run. A pause runs from its start until
+// its end, or on while end is null. No Fort Week exists inside one (ADR 0007), so Fort Average needs no rule for it.
+export function fortPauseAt(pauses, now) {
+  const t = new Date(now).getTime();
+  return pauses.find((p) => new Date(p.start).getTime() <= t && (p.end == null || t < new Date(p.end).getTime())) ?? null;
+}
+
 // The Fort Week the home page shows, as an index into `weeks` (date order): the Live Week
 // once it has a ranked row, otherwise the last closed Fort Week; -1 when there is neither.
 // A week that has not begun is never shown.
@@ -433,4 +440,136 @@ export function fillWeeklyAwards(promise, ranking) {
     if (t) awards.push({ id: r.id, place, items: (t.items ?? []).map((x) => ({ ...x })), award: t.reward ?? null });
   }
   return { awards, skipped };
+}
+
+// ---------- KvK (kvk SPEC) ----------
+// A KvK is { id, name, startsOn, endsOn, powerCutoff, weights, periods }, days as UTC dates (YYYY-MM-DD),
+// both ends included. weights are DKP weights { t4Kill, t5Kill, t4Death, t5Death }; periods are its
+// Counting Periods [{ startsOn, endsOn }], endsOn null while a period is open.
+
+// The UTC day (YYYY-MM-DD) of a moment, or the day itself when given one.
+const utcDay = (now) => (typeof now === "string" && /^\d{4}-\d{2}-\d{2}$/.test(now) ? now : new Date(now).toISOString().slice(0, 10));
+
+// A day as the site writes it in full: "9 Jan 2020", as the database's kvk_day does with to_char(day, 'FMDD Mon YYYY').
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const dayLabel = (iso) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]} ${iso.slice(0, 4)}`;
+
+// A KvK state (kvkState) as the site and the admin page name it.
+export const KVK_STATE_LABEL = Object.freeze({ upcoming: "Upcoming", active: "Active", ended: "Ended" });
+
+// A KvK's state, from the date alone: "upcoming" before its start day, "active" from the start day
+// through the end day, "ended" after it.
+export function kvkState(kvk, now) {
+  const day = utcDay(now);
+  return day < kvk.startsOn ? "upcoming" : day <= kvk.endsOn ? "active" : "ended";
+}
+
+// The KvK the KvK tab shows: the newest that has started (the Active one, else the last to end), else the
+// next to start, else null. KvKs never overlap, so at most one is Active.
+export function currentKvk(kvks, now) {
+  const day = utcDay(now);
+  const coming = kvks.filter((k) => k.startsOn > day).sort((a, b) => a.startsOn.localeCompare(b.startsOn));
+  return newestStartedKvk(kvks, now) ?? coming[0] ?? null;
+}
+
+// The newest KvK that has started at now, Active or Ended, or null.
+function newestStartedKvk(kvks, now) {
+  const day = utcDay(now);
+  return kvks.filter((k) => k.startsOn <= day).sort((a, b) => b.startsOn.localeCompare(a.startsOn))[0] ?? null;
+}
+
+// What Home shows, from the Fort Pause switch alone (ADR 0007): Fort Rankings while Forts run,
+// { view: "fort", pause: null }; while they are paused, the newest KvK that has started, Active or Ended,
+// { view: "kvk", kvk }; paused with no started KvK, Fort Rankings with the pause line, { view: "fort", pause }.
+export function homeShows({ pauses, kvks, now }) {
+  const pause = fortPauseAt(pauses, now);
+  if (!pause) return { view: "fort", pause: null };
+  const kvk = newestStartedKvk(kvks, now);
+  return kvk ? { view: "kvk", kvk } : { view: "fort", pause };
+}
+
+// What a new KvK starts with. The database holds the same defaults (kvk in supabase/migrations).
+export const KVK_DEFAULTS = Object.freeze({
+  powerCutoff: 20_000_000,
+  weights: Object.freeze({ t4Kill: 1, t5Kill: 2, t4Death: 4, t5Death: 8 }),
+});
+
+// A Governor's DKP: T4 and T5 kills and deaths over the Counting Periods, each times its weight.
+// A value not counted yet (null) counts as 0.
+export function dkp(row, weights) {
+  return (row.t4Kills ?? 0) * weights.t4Kill + (row.t5Kills ?? 0) * weights.t5Kill
+    + (row.t4Deaths ?? 0) * weights.t4Death + (row.t5Deaths ?? 0) * weights.t5Death;
+}
+
+const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+// Why a KvK can't be saved, as a sentence for the Council, or null when it can. others are the KvKs
+// already saved, { id, name, startsOn, endsOn }; the one being edited (same id) is never counted against
+// itself. The admin page's check before Save: save_kvk refuses the same KvKs with the same sentence
+// (tests/kvk-cases.json keeps the two together).
+export function checkKvk(kvk, others = []) {
+  if (!kvk.name?.trim()) return "A KvK needs a name.";
+  if (!isDay(kvk.startsOn) || !isDay(kvk.endsOn)) return "A KvK needs a start day and an end day.";
+  if (kvk.endsOn < kvk.startsOn) return `The KvK ends on ${dayLabel(kvk.endsOn)}, before it starts on ${dayLabel(kvk.startsOn)}.`;
+  if (!(Number.isInteger(kvk.powerCutoff) && kvk.powerCutoff >= 0)) return "The Power Cutoff is a whole number from 0 up.";
+  const w = kvk.weights ?? {};
+  if (!["t4Kill", "t5Kill", "t4Death", "t5Death"].every((k) => Number.isFinite(w[k]) && w[k] >= 0)) return "Each DKP weight is a number from 0 up.";
+  const days = `the KvK's days, ${dayLabel(kvk.startsOn)} to ${dayLabel(kvk.endsOn)}`;
+  const periods = kvk.periods ?? [];
+  for (const [i, p] of periods.entries()) {
+    const n = i + 1;
+    if (!isDay(p.startsOn)) return `Counting Period ${n} needs a start day.`;
+    if (p.endsOn != null && p.endsOn < p.startsOn) return `Counting Period ${n} ends on ${dayLabel(p.endsOn)}, before it starts on ${dayLabel(p.startsOn)}.`;
+    if (p.startsOn < kvk.startsOn || p.startsOn > kvk.endsOn) return `Counting Period ${n} starts on ${dayLabel(p.startsOn)}, outside ${days}.`;
+    if (p.endsOn != null && p.endsOn > kvk.endsOn) return `Counting Period ${n} ends on ${dayLabel(p.endsOn)}, outside ${days}.`;
+  }
+  // An open period runs to the KvK's end day. Both ends are included, so a shared end day is an overlap.
+  const end = (p) => p.endsOn ?? kvk.endsOn;
+  for (let i = 0; i < periods.length; i++) {
+    for (let j = i + 1; j < periods.length; j++) {
+      const a = periods[i], b = periods[j];
+      if (a.startsOn <= end(b) && b.startsOn <= end(a)) {
+        return `Counting Periods ${i + 1} and ${j + 1} overlap on ${dayLabel(a.startsOn > b.startsOn ? a.startsOn : b.startsOn)}. No day counts twice.`;
+      }
+    }
+  }
+  const clash = others
+    .filter((o) => kvk.id == null || o.id !== kvk.id)
+    .sort((a, b) => a.startsOn.localeCompare(b.startsOn))
+    .find((o) => o.startsOn <= kvk.endsOn && kvk.startsOn <= o.endsOn);
+  if (clash) return `Its days overlap ${clash.name}, ${dayLabel(clash.startsOn)} to ${dayLabel(clash.endsOn)}. Only one KvK runs at a time.`;
+  return null;
+}
+
+// A KvK's table: the Governors of its KvK Start Snapshot at or above its Power Cutoff, ranked by DKP,
+// highest first. Ties keep the order given and share a rank. rows are the KvK totals read
+// (kvk_standings in supabase/migrations): { id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths };
+// startPower is null for a Governor counted in a Counting Period but not in the KvK Start Snapshot.
+// all ("show all") keeps every row: those below the Power Cutoff and those without starting power too.
+// sort is the column ranked on, highest first: "dkp" (the default), "startPower", "t4Kills", "t5Kills",
+// "t4Deaths" or "t5Deaths". No starting power ranks below any. "name" lists the Governors A to Z, each
+// keeping their DKP rank.
+export function kvkStandings(rows, kvk, { all = false, sort = "dkp" } = {}) {
+  const taking = rows
+    .filter((r) => all || (r.startPower != null && r.startPower >= kvk.powerCutoff))
+    .map((r) => ({ ...r, dkp: dkp(r, kvk.weights) }));
+  if (sort === "name") return rankWeek(taking, (r) => r.dkp).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en", { sensitivity: "base" }));
+  return rankWeek(taking, (r) => r[sort] ?? -1);
+}
+
+// How far a KvK's table has counted at now, given the days the store has a Roster Snapshot for (snapshotDays,
+// YYYY-MM-DD). Before its first Counting Period starts: { begins } with that period's start day, or null when
+// no period is set. From then on: { days }, the Counting Period days that have a Roster Snapshot, an open
+// period running to the KvK's end day at most. A day with no snapshot adds nothing to the totals, so it isn't counted.
+export function kvkCounting(kvk, now, snapshotDays) {
+  const first = [...kvk.periods].sort((a, b) => a.startsOn.localeCompare(b.startsOn))[0];
+  if (!first || utcDay(now) < first.startsOn) return { begins: first?.startsOn ?? null };
+  const counted = (d) => kvk.periods.some((p) => p.startsOn <= d && d <= (p.endsOn ?? kvk.endsOn));
+  return { days: new Set(snapshotDays.filter(counted)).size };
+}
+
+// The KvK tab's list: every KvK newest first, so the upcoming one leads, then the Active one, then the past
+// ones. Each comes with its state (kvkState). The carried-over Last KvK table is not a KvK; the tab adds it last.
+export function kvkList(kvks, now) {
+  return [...kvks].sort((a, b) => b.startsOn.localeCompare(a.startsOn)).map((k) => ({ ...k, state: kvkState(k, now) }));
 }

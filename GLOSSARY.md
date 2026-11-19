@@ -51,6 +51,10 @@ A Main's own Fort Count plus its Farms' Fort Counts, each multiplied by a Farm W
 The configurable coefficient for how much a Farm's Fort Count weighs in its Main's Group Score. It can depend on how many Farms the Main has.
 _Avoid_: Farm Coefficient
 
+**Fort Pause**:
+A span the Council sets when there are no Fort Rankings, usually during a KvK. Weeks inside it are not Fort Weeks at all, so they never count as missed.
+_Avoid_: off-season, Forts off
+
 **Weekly Ranking**:
 The order of Mains in a Fort Week, either by their own Fort Counts or by Group Score. Tied Mains share a rank.
 
@@ -64,4 +68,27 @@ What the Council gives for a closed Fort Week.
 An event whose reward is Golden Heads, the game's most valuable resource. Kingdoms usually fix its top 10 beforehand, deciding who gets each place.
 
 **Roster Snapshot**:
-One day's stats for a Kingdom's Governors, as published by Lilith.
+One day's stats for a Kingdom's Governors, as published by Lilith: each Governor's power at the end of that day, and what they gained during it (kills, deaths, resources gathered, helps).
+
+**Main Alliance**:
+The strongest alliance in a Kingdom, where its strongest Governors gather. Alliance names change, so it is never identified by name.
+
+## KvK
+
+**KvK**:
+A war of about two months, a few times a year, in which Kingdom 3493 fights on one side of several allied Kingdoms against the other side.
+_Avoid_: Kingdom versus Kingdom (it is never one Kingdom against one)
+
+**KvK Start Snapshot**:
+The Roster Snapshot the Council picks as the starting state of each Governor for a KvK.
+_Avoid_: Baseline
+
+**Counting Period**:
+A span of whole days inside a KvK when kills and deaths count, because the war is being fought for objectives. A KvK can have several; kills outside them, such as fights during preparation, are ignored.
+
+**Power Cutoff**:
+The power, set by the Council for each KvK, at or above which a Governor in the KvK Start Snapshot counts as taking part. It stands in for City Hall 25, which no data source records.
+
+**DKP**:
+A Governor's main KvK score: their T4 and T5 kills and T4 and T5 deaths over the Counting Periods, each multiplied by a weight the Council sets for that KvK.
+_Avoid_: KvK score, kill score
