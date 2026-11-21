@@ -79,18 +79,54 @@ The strongest alliance in a Kingdom, where its strongest Governors gather. Allia
 ## KvK
 
 **KvK**:
-A war of about two months, a few times a year, in which Kingdom 3493 fights on one side of several allied Kingdoms against the other side.
+A war of about two months, a few times a year, in which Kingdom 3493 fights in one Camp against the other Camps on a shared map, the Lost Kingdom.
 _Avoid_: Kingdom versus Kingdom (it is never one Kingdom against one)
+
+**Lost Kingdom**:
+The game's own name for the map a KvK is fought on, apart from each Kingdom's home map.
+
+**Season of Conquest**:
+The KvK format from the fourth KvK onward, in which each KvK plays one Story.
+_Avoid_: SoC (in UI text)
+
+**Story**:
+The map and rules of one Season of Conquest KvK, such as Heroic Anthem or King of the Nile. A Story sets how many Camps there are.
+_Avoid_: season, KvK type, map
+
+**Camp**:
+One side of a KvK: one or more Kingdoms the game groups together and balances by power against the others. A Story has between two and eight Camps.
+_Avoid_: side, team
+
+**Coalition**:
+A group of alliances inside one Camp that share rallies, garrisons and Holy Site rewards.
 
 **KvK Start Snapshot**:
 The Roster Snapshot the Council picks as the starting state of each Governor for a KvK.
-_Avoid_: Baseline
+_Avoid_: Baseline, MM Snapshot
 
 **Counting Period**:
 A span of whole days inside a KvK when kills and deaths count, because the war is being fought for objectives. A KvK can have several; kills outside them, such as fights during preparation, are ignored.
+_Avoid_: Fight Period
 
 **Power Cutoff**:
-The power, set by the Council for each KvK, at or above which a Governor in the KvK Start Snapshot counts as taking part. It stands in for City Hall 25, which no data source records.
+The power, set by the Council for each KvK, at or above which a Governor in the KvK Start Snapshot counts as taking part. It stands in for City Hall 25, which the Roster Snapshot does not record.
+
+**Kills**:
+Enemy troops a Governor killed or Severely Wounded, counted by tier. Neutral units such as barbarians are not Kills.
+
+**Kill Points**:
+The game's score for Kills, weighted by troop tier: 10 for each T4 and 20 for each T5.
+_Avoid_: KP (in UI text)
+
+**Severely Wounded**:
+Troops knocked out in battle and sent to hospital. They count as the attacker's Kills, and they die if the hospital is full.
+
+**Deaths**:
+A Governor's own troops lost for good, counted by tier.
+_Avoid_: Dead troops, losses
+
+**Immigration Phase**:
+The window after a KvK's battles in which Governors may move to another Kingdom.
 
 **DKP**:
 A Governor's main KvK score: their T4 and T5 kills and T4 and T5 deaths over the Counting Periods, each multiplied by a weight the Council sets for that KvK.
