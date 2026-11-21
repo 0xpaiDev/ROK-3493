@@ -168,6 +168,13 @@
       "refused": "A new KvK needs its Story."
     },
     {
+      "case": "a blank Story is no Story",
+      "others": [],
+      "kvk": { "story": "  ", "name": "KvK 2020", "startsOn": "2020-01-10", "endsOn": "2020-02-20", "powerCutoff": 20000000,
+               "weights": { "t4Kill": 1, "t5Kill": 2, "t4Death": 4, "t5Death": 8 }, "periods": [] },
+      "refused": "A new KvK needs its Story."
+    },
+    {
       "case": "a Story the site doesn't know is refused",
       "others": [],
       "kvk": { "story": "other-story", "name": "KvK 2020", "startsOn": "2020-01-10", "endsOn": "2020-02-20", "powerCutoff": 20000000,

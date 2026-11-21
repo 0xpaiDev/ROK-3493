@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY, KVK_SELECT, kvkFromRow } from "./store.js";
-import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, mainsToMark, MAIN_POWER_HINT, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel, proposeKvk, KVK_LENGTH_DAYS } from "./kingdom.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, mainsToMark, MAIN_POWER_HINT, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel, proposeKvk, KVK_LENGTH_DAYS, addDays } from "./kingdom.js";
 import { KVK_STORIES, kvkStory } from "./kvk-stories.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
@@ -1193,7 +1193,7 @@ async function showKvk(section, message = "", editId = null) {
   setTaskStatus("kvk", active ? `${active.name} active` : kvks.length ? `${kvks.length} set up` : "None set up",
     activeWaits ? "Review" : "", activeWaits ? "review" : "");
 
-  // The KvK set up last (newest start first): a new KvK carries over its Power Cutoff and DKP weights.
+  // The KvK with the newest start day (kvks come newest first): a new KvK carries over its Power Cutoff and DKP weights.
   const previous = kvks[0] ?? null;
   const editing = kvks.find((k) => k.id === editId);
   let mode = editing ? "edit" : kvks.length ? "list" : "wizard";
@@ -1462,7 +1462,7 @@ async function showKvk(section, message = "", editId = null) {
       readForm(body);
       // A new period starts the day after the last one ends, or on the KvK's start day.
       const last = form.periods.at(-1);
-      const next = last?.endsOn ? new Date(Date.parse(last.endsOn + "T00:00:00Z") + 864e5).toISOString().slice(0, 10) : last ? "" : form.startsOn;
+      const next = last?.endsOn ? addDays(last.endsOn, 1) : last ? "" : form.startsOn;
       form.periods.push({ startsOn: next, endsOn: "" });
       draw();
       section.querySelector(`[name="p-start-${form.periods.length - 1}"]`)?.focus();

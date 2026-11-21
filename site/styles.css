@@ -168,7 +168,7 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .kvk-banner .kvk-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
 .kvk-banner::after { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--art-scrim); }
 .kvk-banner h1 { margin: 8px 0 0; }
-.kvk-credit { margin: 6px 4px 0; text-align: right; font: 12px var(--mono); color: var(--faint); }
+.kvk-credit { margin: 8px 4px 0; text-align: right; font: 12px var(--mono); color: var(--faint); }
 .kvk-lede { margin: 12px 0 24px; max-width: 640px; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px;
@@ -576,20 +576,20 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .field .reward-opt input { height: 36px; padding: 0 10px; background: var(--surface); }
 
 /* KvK setup wizard (ticket 19): the steps, the Story cards, the review */
-.wiz-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; padding: 0; }
+.wiz-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 20px; padding: 0; }
 .wiz-steps button { min-height: 36px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: var(--pill); background: none; color: var(--muted); font-size: 13px; cursor: pointer; }
 .wiz-steps button:disabled { color: var(--faint); border-style: dashed; cursor: default; }
 .wiz-steps .mono { color: var(--faint); margin-right: 4px; }
 .wiz-steps .done button { color: var(--text); }
 .wiz-steps .on button { border-color: var(--accent); background: var(--accent-wash); color: var(--text); }
-.story-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; margin-top: 16px; }
-.story-card { display: grid; gap: 8px; padding: 6px 6px 10px; border: 1px solid var(--line-2); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+.story-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; margin-top: 16px; }
+.story-card { display: grid; gap: 8px; padding: 8px 8px 12px; border: 1px solid var(--line-2); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
 .story-card img { width: 100%; height: auto; aspect-ratio: 316 / 556; border-radius: var(--radius-sm); }
 .story-card:hover { border-color: var(--line-strong); transform: translateY(-2px); }
 .story-card.on { border-color: var(--accent); background: var(--accent-wash); }
 .wiz-nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .wizard > .note { margin-top: 12px; }
-.review { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 20px; margin: 12px 0 0; font-size: 14px; }
+.review { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 12px 20px; margin: 12px 0 0; font-size: 14px; }
 .review dt { color: var(--muted); }
 .review dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 

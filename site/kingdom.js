@@ -520,7 +520,8 @@ export const KVK_LENGTH_DAYS = 52;
 const FIRST_WAR_AFTER_DAYS = 7;
 const FRIDAY = 5;
 
-const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+// The day n days after iso (YYYY-MM-DD), in UTC.
+export const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
 
 // What the KvK setup wizard proposes for a new KvK of story ({ slug, name }) starting on startsOn, the day the
 // Lost Kingdom opens: its name ("Heroic Anthem · Nov 2026"), an end day KVK_LENGTH_DAYS later, one open Counting
@@ -555,8 +556,10 @@ const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 export function checkKvk(kvk, others = []) {
   if (!kvk.name?.trim()) return "A KvK needs a name.";
   // Only a KvK set up before Stories (ticket 19) may have none.
-  if (kvk.story == null && kvk.id == null) return "A new KvK needs its Story.";
-  if (kvk.story != null && !kvkStory(kvk.story)) return `There is no Story "${kvk.story}".`;
+  // A blank Story is none, as save_kvk reads it.
+  const story = kvk.story?.trim() || null;
+  if (story == null && kvk.id == null) return "A new KvK needs its Story.";
+  if (story != null && !kvkStory(story)) return `There is no Story "${story}".`;
   if (!isDay(kvk.startsOn) || !isDay(kvk.endsOn)) return "A KvK needs a start day and an end day.";
   if (kvk.endsOn < kvk.startsOn) return `The KvK ends on ${dayLabel(kvk.endsOn)}, before it starts on ${dayLabel(kvk.startsOn)}.`;
   if (!(Number.isInteger(kvk.powerCutoff) && kvk.powerCutoff >= 0)) return "The Power Cutoff is a whole number from 0 up.";
