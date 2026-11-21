@@ -169,38 +169,49 @@ export function farmLinkSuggestions(governors, dismissed = [], history = []) {
       else if (a.signal && letters(a.signal.root) >= 4 && b.c.includes(a.signal.root)) edges.push([a, b, `"${a.signal.root}" is in ${b.name}`]);
     }
   }
-  // Rank: the highest power, and no power on record ranks below any. Among equals a name that
-  // does not look like a Farm goes first, then the lowest Character ID. Negative: x outranks y.
-  const rank = (x, y) => (y.power ?? -1) - (x.power ?? -1) || !!x.signal - !!y.signal || (x.id < y.id ? -1 : 1);
+  // Rank among Mains: the highest power, and no power on record ranks below any; then the lowest
+  // Character ID. Negative: x outranks y.
+  const rank = (x, y) => (y.power ?? -1) - (x.power ?? -1) || (x.id < y.id ? -1 : 1);
   // The reason two names are related, from the rule that joined them directly.
   const reasonBetween = (p, q) => (edges.find(([a, b]) => a === p && b === q) ?? edges.find(([a, b]) => a === q && b === p))[2];
+  const near = (p) => edges.flatMap(([a, b]) => (a === p ? [b] : b === p ? [a] : []));
 
-  // A Governor's Main is the highest-ranked account it is directly related to, when that one
-  // outranks it. Names are never chained through a third account, so a real Main is not swept
-  // under a stronger, unrelated name. A dismissed pair is left out before choosing, so the next
-  // related account is offered instead; a Governor that is already a Main of linked Farms stays one.
-  const hasFarms = new Set(governors.filter((g) => g.kind === "farm" && g.mainId).map((g) => g.mainId));
-  const step = new Map();
-  for (const p of people) {
-    if (hasFarms.has(p.id)) continue;
-    const near = edges.flatMap(([a, b]) => (a === p ? [b] : b === p ? [a] : []));
-    const [best] = near.filter((q) => rank(q, p) < 0 && !gone.has(p.id + ">" + q.id)).sort(rank);
-    if (best) step.set(p.id, best);
+  // KvK ticket 07: only a Main the Council marked is offered as a Main, and only an unmarked
+  // Governor as a Farm, so a Farm is never linked to a Farm or to a guess. An unmarked Governor's
+  // Main is the highest-ranked marked Main its name is directly related to. Names are never
+  // chained through another Main, so a real Main is not swept under a stronger name. A dismissed
+  // pair is left out before choosing, so the next related Main is offered instead.
+  const unmarked = people.filter((p) => p.kind === "unmarked");
+  const mainOf = new Map();
+  for (const p of unmarked) {
+    const [best] = near(p).filter((q) => q.kind === "main" && !gone.has(p.id + ">" + q.id)).sort(rank);
+    if (best) mainOf.set(p.id, { main: best, reason: reasonBetween(p, best) });
   }
+  // With no Main directly related, the suggestion goes through a related unmarked account that
+  // has one (Odin F2 → Odin → Allfather), and says through whom. Each pass reaches one step further.
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const p of unmarked) {
+      if (mainOf.has(p.id)) continue;
+      const via = near(p)
+        .filter((q) => mainOf.has(q.id) && !gone.has(p.id + ">" + mainOf.get(q.id).main.id))
+        .sort((x, y) => rank(mainOf.get(x.id).main, mainOf.get(y.id).main))[0];
+      if (!via) continue;
+      mainOf.set(p.id, { main: mainOf.get(via.id).main, reason: `Via ${via.name}: ${reasonBetween(p, via)}` });
+      grew = true;
+    }
+  }
+  return unmarked.filter((p) => mainOf.has(p.id)).map((p) => ({ farmId: p.id, mainId: mainOf.get(p.id).main.id, reason: mainOf.get(p.id).reason }));
+}
 
-  // When that account is itself suggested as a Farm, the suggestion goes on to its Main, so the
-  // Council never links a Farm to a Farm. Ranks only rise along the way, so it ends.
-  const suggestions = [];
-  for (const p of people) {
-    const near = step.get(p.id);
-    if (!near) continue;
-    let main = near;
-    while (step.has(main.id)) main = step.get(main.id);
-    if (gone.has(p.id + ">" + main.id)) continue;
-    const why = reasonBetween(p, near);
-    suggestions.push({ farmId: p.id, mainId: main.id, reason: main === near ? why : `Via ${near.name}: ${why}` });
-  }
-  return suggestions;
+// The Council's Mark Mains list (KvK ticket 07): Governors { id, name, kind, mainId, power }, strongest first,
+// no power last. By default only those at MAIN_POWER_HINT and up, since a Main below it is rare, plus every
+// marked Main whatever its power; all lists everyone. The hint never decides: only the Council marks a Main.
+export const MAIN_POWER_HINT = 35e6;
+export function mainsToMark(governors, { all = false } = {}) {
+  return governors
+    .filter((g) => all || g.kind === "main" || (g.power ?? 0) >= MAIN_POWER_HINT)
+    .sort((a, b) => (b.power ?? -1) - (a.power ?? -1) || (a.id < b.id ? -1 : 1));
 }
 
 // Top 200: the Character IDs of the 200 highest-power Governors in a snapshot's rows. Equal power
@@ -215,21 +226,24 @@ export function top200(rows) {
 // Farm link. By default Mains rank on their own Fort Counts and Farms are left out. withFarms
 // attaches each Main's Farms, gives each Main its Group Score (`own` and `fortCount` keep the
 // Main's Fort Count), and reranks the Mains on it.
-// A ranked Governor not on record ("needs ID") counts as a Main.
+// A ranked Governor not on record ("needs ID") counts as a Main. A Governor the Council hasn't
+// marked a Main or a Farm is left out (KvK ticket 07); their Fort Counts stay stored.
 export function mainsRanking(entries, governors, { withFarms = false } = {}) {
   const farmOf = new Map(governors.filter((g) => g.kind === "farm").map((g) => [g.id, g.mainId]));
-  const mains = rankWeek(entries.filter((e) => !farmOf.has(e.id)));
+  const marked = new Set(governors.filter((g) => g.kind === "main").map((g) => g.id));
+  const isMain = (e) => e.id == null || marked.has(e.id);
+  const mains = rankWeek(entries.filter(isMain));
   if (!withFarms) return mains;
   // A "needs ID" entry has no Character ID, so it can never be any Farm's Main.
   const farmsOf = (id) => (id == null ? [] : entries.filter((e) => farmOf.has(e.id) && farmOf.get(e.id) === id));
   const ranked = new Set(mains.map((m) => m.id));
   // A Main with 0 forts still gets a row when a Farm of its has forts, so the Farm has somewhere to sit.
   const idle = governors
-    .filter((g) => g.kind !== "farm" && !ranked.has(g.id) && farmsOf(g.id).length)
+    .filter((g) => g.kind === "main" && !ranked.has(g.id) && farmsOf(g.id).length)
     .map((g) => ({ id: g.id, name: g.name, fortCount: 0 }));
   // A Main's Group Score is its own Fort Count plus half of each Farm's; the Mains rank on it.
   // Its fortCount stays its own. Mains tied on the Group Score share a rank and keep the stored order.
-  const scored = [...entries.filter((e) => !farmOf.has(e.id)), ...idle].map((m) => {
+  const scored = [...entries.filter(isMain), ...idle].map((m) => {
     const farms = farmsOf(m.id);
     return { ...m, own: m.fortCount, groupScore: m.fortCount + farms.reduce((a, f) => a + f.fortCount, 0) / 2, farms };
   });

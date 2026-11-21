@@ -2,7 +2,7 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY, KVK_SELECT, kvkFromRow } from "./store.js";
-import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel } from "./kingdom.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, mainsToMark, MAIN_POWER_HINT, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel } from "./kingdom.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -37,6 +37,7 @@ const rewardItems = (items) => `<span class="reward-items">${items.map((x) => {
 // Tasks not built yet show their planned steps. Filled in by later tickets of the kingdom-admin line.
 const TASKS = [
   { id: "roster", label: "Roster Snapshot" },
+  { id: "mains", label: "Mains" },
   { id: "farm-links", label: "Farm links" },
   { id: "fort-week", label: "Fort Week" },
   { id: "reward-promise", label: "Reward Promise" },
@@ -103,6 +104,7 @@ async function showAdmin(session) {
       <section id="task-${t.id}" aria-label="${esc(t.label)}" hidden>${t.soon ? soonHtml(t) : ""}</section>`).join("")}
     </div>`;
   showTask();
+  showMains(document.getElementById("task-mains"));
   showFarmLinks(document.getElementById("task-farm-links"));
   showFortWeek(document.getElementById("task-fort-week"));
   showRewardPromise(document.getElementById("task-reward-promise"));
@@ -156,6 +158,128 @@ async function allRows(table, columns, where = (q) => q) {
   }
 }
 
+// Every Governor { id, name, kind, mainId, power } with power from the latest Roster Snapshot, and Name History.
+async function loadGovernorsWithPower() {
+  const latest = await supabase.from("roster_snapshot").select("id").order("taken_on", { ascending: false }).limit(1);
+  if (latest.error) throw new Error(`roster_snapshot: ${latest.error.message}`);
+  const snapshotId = latest.data[0]?.id;
+  const [g, n, p] = await Promise.all([
+    allRows("governor", "character_id,current_name,kind,main_character_id"),
+    allRows("governor_name", "character_id,name"),
+    snapshotId == null ? [] : allRows("roster_snapshot_row", "character_id,power", (q) => q.eq("snapshot_id", snapshotId)),
+  ]);
+  const power = new Map(p.map((r) => [r.character_id, r.power]));
+  return {
+    governors: g.map((r) => ({ id: r.character_id, name: r.current_name, kind: r.kind, mainId: r.main_character_id, power: power.get(r.character_id) ?? null })),
+    history: n.map((r) => ({ id: r.character_id, name: r.name })),
+  };
+}
+
+const powerLabel = (n) => n == null ? "–" : n >= 1e9 ? (n / 1e9).toFixed(2) + "B" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(1) + "K" : String(Math.round(n));
+
+// ---------- Mains (KvK ticket 07) ----------
+// Nobody is a Main by default: the Council marks the Mains it has verified, then links Farms to them.
+// Writes go through the Council update policy on governor; the database refuses a Farm linked to anything
+// but a marked Main, and unmarking a Main that still has Farms.
+
+let mainsAll = false;
+let mainsQuery = "";
+
+async function showMains(section, message = "") {
+  let governors, history;
+  try {
+    ({ governors, history } = await loadGovernorsWithPower());
+  } catch (e) {
+    section.innerHTML = `<div class="eyebrow">Mains</div><p class="admin-msg" role="status">Could not load the Governors: ${esc(e.message)}</p>`;
+    setTaskStatus("mains", "Could not load");
+    return;
+  }
+  const byId = new Map(governors.map((g) => [g.id, g]));
+  const marked = () => governors.filter((g) => g.kind === "main").length;
+  const status = () => setTaskStatus("mains", `${marked()} marked`, marked() ? "" : "Review", marked() ? "" : "review");
+  status();
+
+  const body = document.createElement("div");
+  body.innerHTML = `
+    <div class="reveal">
+      <div class="eyebrow">Mains</div>
+      <h1 class="task-title">Mark the Mains</h1>
+      <p class="task-lede">Nobody is a Main until you mark them. Only marked Mains rank in Fort Rankings, and only they are offered as a Farm's Main on Farm links. Listed by power from the latest Roster Snapshot.</p>
+    </div>
+    <p class="admin-msg" role="status">${esc(message)}</p>
+    <section class="card admin-card">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Which Governors"></div>
+        <input class="search" type="search" placeholder="Name or Character ID" aria-label="Search the Governors" value="${esc(mainsQuery)}" autocomplete="off" spellcheck="false">
+      </div>
+      <ul class="farm-list"></ul>
+    </section>`;
+  section.replaceChildren(body);
+  const msg = body.querySelector(".admin-msg");
+  const seg = body.querySelector(".seg");
+  const list = body.querySelector(".farm-list");
+  const search = body.querySelector(".search");
+
+  // Any name in Name History or the Character ID.
+  const namesOf = new Map();
+  for (const h of history) namesOf.set(h.id, [...(namesOf.get(h.id) ?? []), h.name.toLowerCase()]);
+  const matches = (g, q) => g.id.startsWith(q) || g.name.toLowerCase().includes(q) || (namesOf.get(g.id) ?? []).some((n) => n.includes(q));
+
+  function draw() {
+    const top = mainsToMark(governors);
+    const every = mainsToMark(governors, { all: true });
+    seg.innerHTML = `
+      <button type="button" data-all="0" class="${mainsAll ? "" : "on"}" aria-pressed="${!mainsAll}">${powerLabel(MAIN_POWER_HINT)}+ and Mains (${top.length})</button>
+      <button type="button" data-all="1" class="${mainsAll ? "on" : ""}" aria-pressed="${mainsAll}">Show all ${every.length}</button>`;
+    const q = mainsQuery.trim().toLowerCase();
+    const rows = (mainsAll ? every : top).filter((g) => !q || matches(g, q));
+    list.innerHTML = rows.length ? rows.map((g) => `
+      <li>
+        <span class="who">${gov(g.id, g.name)}</span>
+        <span class="num muted">${powerLabel(g.power)}</span>
+        <span class="of">${g.kind === "main" ? `<span class="tag">Main</span>`
+          : g.kind === "farm" ? `<span class="tag farm">Farm</span>${g.mainId ? ` <span class="faint">of</span> ${gov(g.mainId, byId.get(g.mainId)?.name ?? g.mainId)}` : ""}` : ""}</span>
+        ${g.kind === "main" ? `<button class="btn quiet sm" type="button" data-unmark="${esc(g.id)}">Unmark</button>`
+          : g.kind === "unmarked" ? `<button class="btn sm" type="button" data-mark="${esc(g.id)}">Mark Main</button>` : ""}
+      </li>`).join("")
+      : `<li class="muted">${q ? `No Governor matches “${esc(mainsQuery.trim())}”${mainsAll ? "" : ". \"Show all\" also searches the weaker ones"}.` : "No Governor here."}</li>`;
+  }
+  draw();
+
+  seg.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-all]");
+    if (!b) return;
+    mainsAll = b.dataset.all === "1";
+    draw();
+  });
+  search.addEventListener("input", () => {
+    mainsQuery = search.value;
+    draw();
+  });
+  list.addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-mark], button[data-unmark]");
+    if (!b) return;
+    const g = byId.get(b.dataset.mark ?? b.dataset.unmark);
+    const kind = b.dataset.mark ? "main" : "unmarked";
+    b.disabled = true;
+    const { error } = await supabase.from("governor").update({ kind }).eq("character_id", g.id);
+    // 23503: a Farm still links to this Main. 23514: a Governor with a Weekly Award must stay a Main.
+    if (error) {
+      const farms = governors.filter((f) => f.mainId === g.id).length;
+      msg.textContent = error.code === "23503" ? `${g.name} still has ${farms || "its"} Farm${farms === 1 ? "" : "s"}. Unlink them on Farm links first.`
+        : error.code === "23514" ? `${g.name} holds a Weekly Award, so it stays a Main.`
+        : `Could not save ${g.name}: ${error.message}`;
+      b.disabled = false;
+      return;
+    }
+    g.kind = kind;
+    msg.textContent = kind === "main" ? `${g.name} is now a Main.` : `${g.name} is no longer a Main.`;
+    status();
+    draw();
+    showFarmLinks(document.getElementById("task-farm-links"));
+  });
+}
+
 // ---------- Farm links (ticket 06) ----------
 // Suggestions come from the kingdom rules module; this section only reads, writes and draws.
 
@@ -168,20 +292,10 @@ let farmBarFrom = 0;
 async function showFarmLinks(section, message = "") {
   let governors, dismissed, history;
   try {
-    // Power from the latest Roster Snapshot decides which account in a group is the Main.
-    const latest = await supabase.from("roster_snapshot").select("id").order("taken_on", { ascending: false }).limit(1);
-    if (latest.error) throw new Error(`roster_snapshot: ${latest.error.message}`);
-    const snapshotId = latest.data[0]?.id;
-    const [g, d, n, p] = await Promise.all([
-      allRows("governor", "character_id,current_name,kind,main_character_id"),
-      allRows("farm_link_dismissal", "farm_character_id,main_character_id"),
-      allRows("governor_name", "character_id,name"),
-      snapshotId == null ? [] : allRows("roster_snapshot_row", "character_id,power", (q) => q.eq("snapshot_id", snapshotId)),
-    ]);
-    const power = new Map(p.map((r) => [r.character_id, r.power]));
-    governors = g.map((r) => ({ id: r.character_id, name: r.current_name, kind: r.kind, mainId: r.main_character_id, power: power.get(r.character_id) ?? null }));
+    // Power from the latest Roster Snapshot decides which related Main is offered first.
+    const [loaded, d] = await Promise.all([loadGovernorsWithPower(), allRows("farm_link_dismissal", "farm_character_id,main_character_id")]);
+    ({ governors, history } = loaded);
     dismissed = d.map((r) => ({ farmId: r.farm_character_id, mainId: r.main_character_id }));
-    history = n.map((r) => ({ id: r.character_id, name: r.name }));
   } catch (e) {
     section.innerHTML = `<div class="eyebrow">Farm links</div><p class="admin-msg" role="status">Could not load the Governors: ${esc(e.message)}</p>`;
     setTaskStatus("farm-links", "Could not load");
@@ -193,10 +307,11 @@ async function showFarmLinks(section, message = "") {
   const byName = (a, b) => a.name.localeCompare(b.name);
   const mains = governors.filter((g) => g.kind === "main").sort(byName);
   const farms = governors.filter((g) => g.kind === "farm").sort(byName);
+  const unmarked = governors.filter((g) => g.kind === "unmarked").sort(byName);
   const key = (s) => s.farmId + ">" + s.mainId;
 
   // Open suggestions plus this page-load's decisions. A decision whose pair is open again
-  // (undone elsewhere, say with Make Main) is dropped.
+  // (undone elsewhere, say with Unlink) is dropped.
   const open = farmLinkSuggestions(governors, dismissed, history);
   const openKeys = new Set(open.map(key));
   for (const k of farmDecisions.keys()) if (openKeys.has(k)) farmDecisions.delete(k);
@@ -263,7 +378,7 @@ async function showFarmLinks(section, message = "") {
     <div class="reveal">
       <div class="eyebrow">Farm links</div>
       <h1 class="task-title">Link Farms to their Mains</h1>
-      <p class="task-lede">Suggested from similar names and Name History, grouped by Main: the highest-power account in each group. Each row says which rule found it. Nothing links until you confirm. A linked Farm is credited under its Main, never added to its total.</p>
+      <p class="task-lede">Suggested from similar names and Name History, grouped under the Mains you marked on Mains; an unmarked Governor is never offered as a Main. Each row says which rule found it. Nothing links until you confirm. A linked Farm is credited under its Main, never added to its total.</p>
     </div>
     <p class="admin-msg" role="status">${esc(message)}</p>
     ${items.length ? `
@@ -273,16 +388,16 @@ async function showFarmLinks(section, message = "") {
       </div>
       <div class="groups">${shown.map(groupHtml).join("")}</div>
       ${hiddenCount > 0 ? `<button class="btn more" type="button" data-show-all>Show the other ${hiddenCount} suggestions</button>` : ""}`
-    : `<p class="card none-left">No suggestions left.</p>`}
+    : `<p class="card none-left">${mains.length ? "No suggestions left." : "No Mains marked yet. Mark them on Mains first; suggestions come only under marked Mains."}</p>`}
 
     <section class="card admin-card">
       <h2>Mark a Governor as a Farm</h2>
-      <p class="muted">For a Farm the name suggestions miss. Pick the Governor from the list; its Main can stay unknown.</p>
+      <p class="muted">For a Farm the name suggestions miss. Pick an unmarked Governor from the list; its Main can stay unknown.</p>
       <form id="mark-farm" class="fields">
         <label class="field wide">Governor
           <input name="farm" list="farm-link-governors" required placeholder="Name or Character ID" autocomplete="off">
         </label>
-        <datalist id="farm-link-governors">${mains.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
+        <datalist id="farm-link-governors">${unmarked.map((g) => `<option value="${esc(label(g))}">`).join("")}</datalist>
         <label class="field">Its Main
           <select name="main">
             <option value="">Main unknown</option>
@@ -299,7 +414,7 @@ async function showFarmLinks(section, message = "") {
         <li>
           <span class="who">${gov(f.id, f.name)}</span>
           <span class="of">${f.mainId ? `<span class="faint">of</span> ${gov(f.mainId, nameOf(f.mainId))}` : `<span class="tag migrated">Main unknown</span>`}</span>
-          <button class="btn quiet sm" type="button" data-unfarm="${esc(f.id)}">Make Main</button>
+          <button class="btn quiet sm" type="button" data-unfarm="${esc(f.id)}">Unlink</button>
         </li>`).join("")}</ul>`
       : `<p class="muted">No Governor is marked as a Farm yet.</p>`}
     </section>`;
@@ -310,7 +425,11 @@ async function showFarmLinks(section, message = "") {
   if (bar) requestAnimationFrame(() => requestAnimationFrame(() => bar.style.setProperty("--p", progress)));
   farmBarFrom = progress;
 
-  const redraw = (msg) => showFarmLinks(section, msg);
+  // A redraw after a write also redraws Mains, whose Farm tags it changes.
+  const redraw = (msg, wrote = true) => {
+    if (wrote) showMains(document.getElementById("task-mains"));
+    return showFarmLinks(section, msg);
+  };
 
   // Every write returns a sentence on refusal, not a stack trace.
   async function linkFarm(farmId, mainId) {
@@ -320,11 +439,14 @@ async function showFarmLinks(section, message = "") {
     const { error } = await supabase.from("governor").update({ kind: "farm", main_character_id: mainId }).eq("character_id", farmId);
     // 23514 = Postgres check_violation: a Governor with a Weekly Award must stay a Main.
     if (error?.code === "23514") return `${farm.name} holds a Weekly Award, so it stays a Main.`;
+    // 23503: the database links a Farm only to a marked Main.
+    if (error?.code === "23503") return `${nameOf(mainId)} is not a marked Main. Mark it on Mains first.`;
     if (error) return `Could not save ${farm.name}: ${error.message}`;
     return null;
   }
-  async function makeMain(id) {
-    const { error } = await supabase.from("governor").update({ kind: "main", main_character_id: null }).eq("character_id", id);
+  // A Farm goes back to unmarked, with no link.
+  async function unlink(id) {
+    const { error } = await supabase.from("governor").update({ kind: "unmarked", main_character_id: null }).eq("character_id", id);
     return error ? `Could not save ${nameOf(id)}: ${error.message}` : null;
   }
   const suggestion = (farmId, mainId) => items.find((s) => s.farmId === farmId && s.mainId === mainId);
@@ -334,7 +456,7 @@ async function showFarmLinks(section, message = "") {
     if (!b) return;
     if (b.hasAttribute("data-show-all")) {
       farmShowAll = true;
-      return redraw(message);
+      return redraw(message, false);
     }
     body.querySelectorAll("button").forEach((x) => (x.disabled = true));
     if (b.dataset.confirm) {
@@ -363,7 +485,7 @@ async function showFarmLinks(section, message = "") {
     if (b.dataset.undo) {
       const s = farmDecisions.get(b.dataset.undo);
       let err;
-      if (s.state === "linked") err = await makeMain(s.farmId);
+      if (s.state === "linked") err = await unlink(s.farmId);
       else {
         const { error } = await supabase.from("farm_link_dismissal").delete().eq("farm_character_id", s.farmId).eq("main_character_id", s.mainId);
         err = error ? `Could not undo: ${error.message}` : null;
@@ -371,15 +493,15 @@ async function showFarmLinks(section, message = "") {
       if (!err) farmDecisions.delete(b.dataset.undo);
       return redraw(err ?? `${nameOf(s.farmId)} → ${nameOf(s.mainId)} is open again.`);
     }
-    const err = await makeMain(b.dataset.unfarm);
-    redraw(err ?? `${nameOf(b.dataset.unfarm)} is a Main again.`);
+    const err = await unlink(b.dataset.unfarm);
+    redraw(err ?? `${nameOf(b.dataset.unfarm)} is unlinked and unmarked.`);
   });
 
   body.querySelector("#mark-farm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const typed = e.target.farm.value.trim();
     const farm = byId.get(typedId(typed));
-    if (!farm || farm.kind !== "main") return redraw(`Pick the Governor from the list: "${typed}" is not a Main on it.`);
+    if (!farm || farm.kind !== "unmarked") return redraw(`Pick the Governor from the list: "${typed}" is not an unmarked Governor on it.`);
     const mainId = e.target.main.value || null;
     if (mainId === farm.id) return redraw(`${farm.name} cannot be its own Main.`);
     body.querySelectorAll("button").forEach((x) => (x.disabled = true));
@@ -560,7 +682,7 @@ async function showFortWeek(section, message = "", startWeek = null) {
   // published awards; Fill drafts them from the Reward Promise; add, edit and remove change the draft; Publish
   // replaces the week's awards in one call. A reload drops the draft. Only Mains are offered; the rules module
   // refuses a Farm, and the database refuses one too.
-  const mains = state.governors.filter((g) => g.kind !== "farm").sort((a, b) => a.name.localeCompare(b.name));
+  const mains = state.governors.filter((g) => g.kind === "main").sort((a, b) => a.name.localeCompare(b.name));
   const nameOf = (id) => byId.get(id)?.name ?? id;
   const published = (w) => (awardsByWeek(state.awards).find((x) => x.week === w)?.awards ?? [])
     .map((a) => ({ id: a.id, place: a.place, award: a.award ?? null, note: a.note ?? null, items: a.items.map((x) => ({ ...x })) }));
