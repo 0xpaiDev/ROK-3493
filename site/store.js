@@ -43,9 +43,9 @@ export async function rowsIfTable(table, query) {
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // A KvK as the kingdom rules take it (checkKvk, kvkStandings in kingdom.js); the admin page reads it the same way.
-export const KVK_SELECT = "id,name,starts_on,ends_on,power_cutoff,weight_t4_kill,weight_t5_kill,weight_t4_death,weight_t5_death,kvk_counting_period(starts_on,ends_on)";
+export const KVK_SELECT = "id,story,name,starts_on,ends_on,power_cutoff,weight_t4_kill,weight_t5_kill,weight_t4_death,weight_t5_death,kvk_counting_period(starts_on,ends_on)";
 export const kvkFromRow = (k) => ({
-  id: k.id, name: k.name, startsOn: k.starts_on, endsOn: k.ends_on, powerCutoff: Number(k.power_cutoff),
+  id: k.id, story: k.story ?? null, name: k.name, startsOn: k.starts_on, endsOn: k.ends_on, powerCutoff: Number(k.power_cutoff),
   weights: { t4Kill: Number(k.weight_t4_kill), t5Kill: Number(k.weight_t5_kill), t4Death: Number(k.weight_t4_death), t5Death: Number(k.weight_t5_death) },
   periods: [...(k.kvk_counting_period ?? [])].sort((a, b) => a.starts_on.localeCompare(b.starts_on)).map((p) => ({ startsOn: p.starts_on, endsOn: p.ends_on })),
 });

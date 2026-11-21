@@ -48,6 +48,8 @@
   /* Reward item icons (King's Chests, resources). The chest art is 114 px, so never above 48 px */
   --reward-icon: 28px;
   --reward-icon-pick: 40px;
+  /* Over a KvK's key art: clear at the top, the page ground under its name */
+  --art-scrim: linear-gradient(180deg, rgba(8, 6, 14, .05) 0%, rgba(8, 6, 14, .55) 55%, rgba(8, 6, 14, .96) 100%);
   color-scheme: dark;
 }
 
@@ -161,6 +163,13 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .pause-note { margin-bottom: 16px; }
 /* A card's opening line, such as the KvK table's "Counted N days": flush with the card's top padding */
 .count-line { margin-top: 0; }
+/* A KvK's Story key art behind its name (ticket 19), the credit under it */
+.kvk-banner { position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: flex-end; min-height: 280px; padding: 24px 32px; border-radius: var(--radius); border: 1px solid var(--line-2); }
+.kvk-banner .kvk-art { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: center 35%; }
+.kvk-banner::after { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--art-scrim); }
+.kvk-banner h1 { margin: 8px 0 0; }
+.kvk-credit { margin: 6px 4px 0; text-align: right; font: 12px var(--mono); color: var(--faint); }
+.kvk-lede { margin: 12px 0 24px; max-width: 640px; }
 .btn {
   display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px;
   font-weight: 600; font-size: 14px; cursor: pointer; transition: transform .15s, border-color .2s;
@@ -566,6 +575,24 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .reward-opt span { font-size: 13px; }
 .field .reward-opt input { height: 36px; padding: 0 10px; background: var(--surface); }
 
+/* KvK setup wizard (ticket 19): the steps, the Story cards, the review */
+.wiz-steps { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; padding: 0; }
+.wiz-steps button { min-height: 36px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: var(--pill); background: none; color: var(--muted); font-size: 13px; cursor: pointer; }
+.wiz-steps button:disabled { color: var(--faint); border-style: dashed; cursor: default; }
+.wiz-steps .mono { color: var(--faint); margin-right: 4px; }
+.wiz-steps .done button { color: var(--text); }
+.wiz-steps .on button { border-color: var(--accent); background: var(--accent-wash); color: var(--text); }
+.story-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 10px; margin-top: 16px; }
+.story-card { display: grid; gap: 8px; padding: 6px 6px 10px; border: 1px solid var(--line-2); border-radius: var(--radius-md); background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 500; text-align: center; cursor: pointer; transition: border-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease); }
+.story-card img { width: 100%; height: auto; aspect-ratio: 316 / 556; border-radius: var(--radius-sm); }
+.story-card:hover { border-color: var(--line-strong); transform: translateY(-2px); }
+.story-card.on { border-color: var(--accent); background: var(--accent-wash); }
+.wiz-nav { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.wizard > .note { margin-top: 12px; }
+.review { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 10px 20px; margin: 12px 0 0; font-size: 14px; }
+.review dt { color: var(--muted); }
+.review dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
 /* Tasks not built yet */
 .plan { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
 .plan li { padding: 18px; border-radius: var(--radius-md); border: 1px dashed var(--line-strong); color: var(--muted); font-size: 13px; }
@@ -581,6 +608,14 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
   .save-bar { padding-left: 16px; }
 }
 @media (max-width: 640px) {
+  .story-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .wiz-steps button { min-height: 44px; min-width: 44px; }
+  /* On a phone the steps show their numbers; the current one keeps its name */
+  .wiz-steps li:not(.on) .wl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .wiz-steps .mono { margin-right: 0; }
+  .wiz-steps .on .mono { margin-right: 4px; }
+  .review { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .review dd + dt { margin-top: 10px; }
   .admin-bar { flex-wrap: nowrap; gap: 4px 10px; }
   .admin-bar > a { display: none; }
   .admin-who { max-width: 130px; font-size: 12px; }
@@ -621,6 +656,7 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 @media (max-width: 640px) {
   .wrap { padding: 0 16px; }
   .page { padding-top: 28px; }
+  .kvk-banner { min-height: 168px; padding: 16px; }
   .topbar-in { gap: 0 10px; min-height: 0; padding-top: 10px; }
   .brand-mark { width: 30px; height: 30px; }
   .brand-text b { font-size: 14px; }

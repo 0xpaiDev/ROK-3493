@@ -7,6 +7,7 @@ Snapshots first (the rollback puts them back). Needs psycopg and SUPABASE_DB_URL
 test_record_live_week.py does.
 """
 import json
+import re
 import sys
 import unittest
 import uuid
@@ -17,19 +18,29 @@ from test_record_live_week import ROOT, db_url
 
 MIGRATIONS = [ROOT / "supabase" / "migrations" / "20261119090000_roster_snapshot_t4_t5.sql",
               ROOT / "supabase" / "migrations" / "20261119160000_kvk.sql",
-              ROOT / "supabase" / "migrations" / "20261120090000_kvk_standings_show_all.sql"]
+              ROOT / "supabase" / "migrations" / "20261120090000_kvk_standings_show_all.sql",
+              ROOT / "supabase" / "migrations" / "20261121180000_kvk_story.sql"]
 CASES = json.loads((ROOT / "tests" / "kvk-cases.json").read_text(encoding="utf-8"))["cases"]
 WEIGHTS = {"t4Kill": 1, "t5Kill": 2, "t4Death": 4, "t5Death": 8}
 
 
 def as_input(k, ids=None):
-    """A KvK from the shared cases (the site's shape) as save_kvk takes it."""
+    """A KvK in the site's shape as save_kvk takes it; one without a story key is a Heroic Anthem."""
     ids = ids or {}
     w = k.get("weights", WEIGHTS)
-    return {"id": ids.get(k.get("id")), "name": k["name"], "starts_on": k["startsOn"], "ends_on": k["endsOn"],
+    return {"id": ids.get(k.get("id")), "story": k.get("story", "heroic-anthem"), "name": k["name"], "starts_on": k["startsOn"], "ends_on": k["endsOn"],
             "power_cutoff": k.get("powerCutoff", 20000000),
             "weights": {"t4_kill": w["t4Kill"], "t5_kill": w["t5Kill"], "t4_death": w["t4Death"], "t5_death": w["t5Death"]},
             "periods": [{"starts_on": p["startsOn"], "ends_on": p["endsOn"]} for p in k.get("periods", [])]}
+
+
+def case_input(c, ids):
+    """A shared case's KvK as save_kvk takes it, its Story exactly as the case gives it."""
+    return {**as_input(c["kvk"], ids), "story": c["kvk"].get("story")}
+
+
+# The Story slugs the site knows (site/kvk-stories.js), which the kvk.story check constraint must match.
+STORY_SLUGS = re.findall(r'story\("([a-z-]+)"', (ROOT / "site" / "kvk-stories.js").read_text(encoding="utf-8"))
 
 
 class KvK(unittest.TestCase):
@@ -136,17 +147,20 @@ class KvK(unittest.TestCase):
                 self.conn.execute("savepoint case_start")
                 try:
                     ids = {}
+                    # Saved KvKs, some from before Stories: written straight in, as KvK 64 was.
                     for o in c["others"]:
-                        ids[o["id"]] = self.save(as_input({**o, "periods": []}))
+                        ids[o["id"]] = self.one(
+                            "insert into kvk (name, starts_on, ends_on, story) values (%s, %s, %s, %s) returning id",
+                            (o["name"], o["startsOn"], o["endsOn"], o.get("story")))
                     if c["refused"] is None:
-                        self.save(as_input(c["kvk"], ids))
+                        self.save(case_input(c, ids))
                         saved = [r for r in self.kvks() if r[0] == c["kvk"]["name"]]
                         self.assertEqual(len(saved), 1)
                         self.assertEqual(saved[0][1:3], (c["kvk"]["startsOn"], c["kvk"]["endsOn"]))
                         self.assertEqual(len(saved[0][8]), len(c["kvk"]["periods"]))
                     else:
                         self.refused(psycopg.errors.lookup("22023"), "^" + c["refused"].replace(".", r"\.") + "$",
-                                     lambda: self.save(as_input(c["kvk"], ids)))
+                                     lambda: self.save(case_input(c, ids)))
                 finally:
                     self.conn.execute("rollback to savepoint case_start")
 
@@ -163,8 +177,24 @@ class KvK(unittest.TestCase):
                          ["search_path=public"])
 
     def test_a_new_kvk_takes_the_default_cutoff_and_weights(self):
-        self.save({"name": "KvK 2020", "starts_on": "2020-01-10", "ends_on": "2020-02-20", "periods": []})
+        self.save({"story": "heroic-anthem", "name": "KvK 2020", "starts_on": "2020-01-10", "ends_on": "2020-02-20", "periods": []})
         self.assertEqual(self.kvks()[0][3:8], (20000000, 1, 2, 4, 8, ))
+
+    def test_a_kvk_keeps_its_story_and_the_public_reads_it(self):
+        kid = self.save(as_input({"story": "song-of-troy", "name": "KvK 2020", "startsOn": "2020-01-10", "endsOn": "2020-02-20"}))
+        self.conn.execute("set local role anon")
+        self.assertEqual(self.one("select story from kvk where id = %s", (kid,)), "song-of-troy")
+        self.conn.execute("reset role")
+
+    def test_the_database_knows_the_same_stories_as_the_site(self):
+        self.assertEqual(len(STORY_SLUGS), 14)
+        for slug in STORY_SLUGS:
+            with self.subTest(slug):
+                self.conn.execute("savepoint story")
+                self.conn.execute("insert into kvk (name, starts_on, ends_on, story) values ('S', '2020-01-10', '2020-01-11', %s)", (slug,))
+                self.conn.execute("rollback to savepoint story")
+        with self.assertRaises(psycopg.errors.CheckViolation):
+            self.conn.execute("insert into kvk (name, starts_on, ends_on, story) values ('S', '2020-01-10', '2020-01-11', 'other-story')")
 
     def test_saving_a_kvk_again_replaces_its_days_cutoff_weights_and_periods(self):
         k = as_input({"name": "KvK 2020", "startsOn": "2020-01-10", "endsOn": "2020-02-20",

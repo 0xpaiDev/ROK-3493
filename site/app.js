@@ -1,6 +1,7 @@
 import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings, homeShows, kvkList, kvkCounting, dayLabel, KVK_STATE_LABEL } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
+import { kvkStory } from "./kvk-stories.js";
 
 (async () => {
   const C = window.KD_CONTENT || { news: [] };
@@ -518,7 +519,15 @@ import { rewardItem } from "./rewards.js";
     const table = rows.length ? kvkTable(rows, state.kvkSort)
       : q ? `<p class="empty">No Governor matches “${esc(q)}”${state.kvkAll ? "" : `. "Show all" also searches Governors below ${big(k.powerCutoff)}`}.</p>`
       : `<p class="empty">${state.kvkAll || !totals.length ? empty : noneTaking}</p>`;
-    return `${head(esc(k.name), lede)}${list}
+    // A KvK with a Story shows its key art behind its name; one set up before Stories shows the plain head.
+    const story = kvkStory(k.story);
+    const top = story
+      ? `<div class="kvk-banner reveal"><img class="kvk-art" src="${story.art}" alt="" width="1334" height="750" decoding="async">
+          <div><div class="eyebrow">KvK</div><h1>${esc(k.name)}</h1></div></div>
+        <p class="kvk-credit">Art © Lilith Games</p>
+        <p class="muted kvk-lede">${lede}</p>`
+      : head(esc(k.name), lede);
+    return `${top}${list}
       <section class="card">${countLine}${totals.length ? tools : ""}${totals.length ? table : `<p class="empty">${empty}</p>`}
         ${state.kvkAll && totals.some((r) => r.startPower == null) ? `<p class="faint">A Governor without starting power was not in the KvK Start Snapshot.</p>` : ""}
       </section>`;
