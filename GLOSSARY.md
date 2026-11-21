@@ -20,7 +20,10 @@ The person behind a Main and its Farms.
 _Avoid_: player, governor (for the person)
 
 **Main**:
-The one Governor an Owner treats as their primary account.
+The one Governor an Owner treats as their primary account. Only the Council makes a Governor a Main.
+
+**Unmarked**:
+A Governor the Council has made neither a Main nor a Farm: an absent or dead account, or one that doesn't matter for ranking. Every new Governor starts Unmarked.
 
 **Farm**:
 A Governor its Owner keeps to support their Main, usually by gathering resources.

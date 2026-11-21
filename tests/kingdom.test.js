@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks, fortPauseAt } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks, fortPauseAt, mainsToMark } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -61,105 +61,112 @@ test("Find your Governor matches a Character ID", () => {
   assert.deepEqual(findInRanking(ranking, [], "176012522").map((e) => e.name), ["vkreçislaw"]);
 });
 
-const gov = (id, name, kind = "main", mainId = null) => ({ id, name, kind, mainId });
+// Farm link suggestions (KvK ticket 07): only a Main the Council marked is offered as a Main; only an
+// unmarked Governor is suggested as a Farm. M() marks a fixture's Main.
+const gov = (id, name, kind = "unmarked", mainId = null) => ({ id, name, kind, mainId });
+const M = (g) => ({ ...g, kind: "main" });
 
 test("a name that is a Main's name plus Farm is suggested as that Main's Farm", () => {
-  const governors = [gov("1", "TasteMyFat"), gov("2", "TasteMyFatFarm"), gov("3", "vkreçislaw")];
+  const governors = [M(gov("1", "TasteMyFat")), gov("2", "TasteMyFatFarm"), gov("3", "vkreçislaw")];
   assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId]), [["2", "1"]]);
 });
 
 test("a Farm marker can be a number or F plus a number, and case is ignored", () => {
-  const governors = [gov("1", "RuTHLess"), gov("2", "RuThLesS F1"), gov("3", "Zhuī Mìng"), gov("4", "Zhuī Mìng 5")];
+  const governors = [M(gov("1", "RuTHLess")), gov("2", "RuThLesS F1"), M(gov("3", "Zhuī Mìng")), gov("4", "Zhuī Mìng 5")];
   assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId]), [["2", "1"], ["4", "3"]]);
 });
 
 test("FKK1 and FKK10 are both Farms of FKK CATHAY, not one of the other; ZARAHHH is not a Farm of ZARAH", () => {
   const governors = [
-    { ...gov("149673994", "FKK CATHAY"), power: 124.2e6 }, { ...gov("151514913", "FKK1"), power: 32.4e6 },
-    { ...gov("211854507", "FKK10"), power: 11.0e6 }, gov("3", "ZARAH"), gov("4", "ZARAHHH"),
+    M({ ...gov("149673994", "FKK CATHAY"), power: 124.2e6 }), { ...gov("151514913", "FKK1"), power: 32.4e6 },
+    { ...gov("211854507", "FKK10"), power: 11.0e6 }, M(gov("3", "ZARAH")), gov("4", "ZARAHHH"),
   ];
   assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId]), [["151514913", "149673994"], ["211854507", "149673994"]]);
 });
 
-test("a Farm-shaped name is never suggested as a Main", () => {
-  const governors = [gov("1", "Enes"), gov("2", "Enes farm"), gov("3", "Enes farm2")];
+test("Farm-shaped names go under the marked Main, never under each other", () => {
+  const governors = [M(gov("1", "Enes")), gov("2", "Enes farm"), gov("3", "Enes farm2")];
   assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId]), [["2", "1"], ["3", "1"]]);
 });
 
 test("a Governor already marked as a Farm is neither suggested again nor offered as a Main", () => {
-  const governors = [gov("1", "TasteMyFat"), gov("2", "TasteMyFatFarm", "farm", "1"), gov("3", "Alvaru", "farm"), gov("4", "Alvaru 2")];
+  const governors = [M(gov("1", "TasteMyFat")), gov("2", "TasteMyFatFarm", "farm", "1"), gov("3", "Alvaru", "farm"), gov("4", "Alvaru 2")];
   assert.deepEqual(farmLinkSuggestions(governors), []);
 });
 
 test("a dismissed pair is not suggested again; other pairs still are", () => {
-  const governors = [gov("1", "yuriel"), gov("2", "yuriel3"), gov("3", "yuriel33")];
+  const governors = [M(gov("1", "yuriel")), gov("2", "yuriel3"), gov("3", "yuriel33")];
   const dismissed = [{ farmId: "3", mainId: "1" }];
   assert.deepEqual(farmLinkSuggestions(governors, dismissed).map((s) => [s.farmId, s.mainId]), [["2", "1"]]);
 });
 
 test("a suggestion says which rule found it: here the Farm marker", () => {
-  const [s] = farmLinkSuggestions([gov("1", "RuTHLess"), gov("2", "RuThLesS F1")]);
+  const [s] = farmLinkSuggestions([M(gov("1", "RuTHLess")), gov("2", "RuThLesS F1")]);
   assert.equal(s.reason, 'Farm marker "f1"');
 });
 
-// Ticket 14: wider rules. Each Governor carries its power from the latest Roster Snapshot;
-// in a suggested group the highest-power account is the Main.
-const pgov = (id, name, power) => ({ id, name, kind: "main", mainId: null, power });
+// Ticket 14's wider rules. Each Governor carries its power from the latest Roster Snapshot.
+const pgov = (id, name, power) => ({ id, name, kind: "unmarked", mainId: null, power });
 const pairs = (list) => list.map((s) => [s.farmId, s.mainId]).sort();
 
 test("normalising drops alliance tags and symbols, folds full-width letters and ignores case", () => {
   const governors = [
-    pgov("75711209", "㋛ BiL ㋛", 91.8e6), pgov("92372523", "屮 BiL", 55.0e6), pgov("193098374", "ᵛø cciell", 50.6e6),
-    pgov("210712263", "cciell f4", 23.9e6), pgov("14025937", "ＫＭＢ f1", 16.1e6), pgov("3", "kmb", 1e6),
+    M(pgov("75711209", "㋛ BiL ㋛", 91.8e6)), pgov("92372523", "屮 BiL", 55.0e6), M(pgov("193098374", "ᵛø cciell", 50.6e6)),
+    pgov("210712263", "cciell f4", 23.9e6), M(pgov("14025937", "ＫＭＢ f1", 16.1e6)), pgov("3", "kmb", 1e6),
   ];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["210712263", "193098374"], ["3", "14025937"], ["92372523", "75711209"]]);
 });
 
-test("names identical after normalising are one group, its highest-power account the Main", () => {
-  const governors = [pgov("41810399", "ᵛøDarkBlacK", 40.4e6), pgov("57027433", "ᵛøDarkBlack", 66.7e6), pgov("99299244", "ᵛøDarkBlaCK", 24.8e6)];
+test("names identical after normalising go under the one the Council marked", () => {
+  const governors = [pgov("41810399", "ᵛøDarkBlacK", 40.4e6), M(pgov("57027433", "ᵛøDarkBlack", 66.7e6)), pgov("99299244", "ᵛøDarkBlaCK", 24.8e6)];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["41810399", "57027433"], ["99299244", "57027433"]]);
 });
 
-test("the highest-power account is the Main even when its name looks like a Farm; no power never beats power", () => {
-  const governors = [pgov("14025937", "ＫＭＢ f1", 16.1e6), pgov("11139139", "ＫＭＢ f2", 7.5e6), pgov("1", "KMB", 2.0e6), pgov("2", "KMB 9", null)];
+test("a Farm-shaped name the Council marked is a Main, whatever its power", () => {
+  const governors = [M(pgov("14025937", "ＫＭＢ f1", 16.1e6)), pgov("11139139", "ＫＭＢ f2", 7.5e6), pgov("1", "KMB", 20e6), pgov("2", "KMB 9", null)];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["1", "14025937"], ["11139139", "14025937"], ["2", "14025937"]]);
+});
+
+test("among related Mains the higher-power one is offered, and no power never beats power", () => {
+  const governors = [M(pgov("1", "Kami", null)), M(pgov("2", "Kami bot", 2e6)), pgov("3", "Kami F1", 1e6)];
+  assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["3", "2"]]);
 });
 
 test("a Farm marker counts anywhere in the name: farm, frm, mini, clone, glued or spaced", () => {
   const governors = [
-    pgov("191044511", "ᵛøENES", 63.8e6), pgov("144398884", "Enesfarm7", 25.4e6), pgov("169805414", "Enes farm 3", 1.2e6),
-    pgov("184760438", "OzamisFarm", 12.2e6), pgov("189020883", "Ozamis Frm", 10.7e6),
-    pgov("179508915", "YEEEE", 84.7e6), pgov("182254461", "Mini YEEEE", 11.9e6),
-    pgov("179452862", "azuretf", 6.8e6), pgov("229803024", "azuretf clone1", 1.6e6),
+    M(pgov("191044511", "ᵛøENES", 63.8e6)), pgov("144398884", "Enesfarm7", 25.4e6), pgov("169805414", "Enes farm 3", 1.2e6),
+    M(pgov("183921866", "W乄Ozamis乄", 71.6e6)), pgov("184760438", "OzamisFarm", 12.2e6), pgov("189020883", "Ozamis Frm", 10.7e6),
+    M(pgov("179508915", "YEEEE", 84.7e6)), pgov("182254461", "Mini YEEEE", 11.9e6),
+    M(pgov("179452862", "azuretf", 6.8e6)), pgov("229803024", "azuretf clone1", 1.6e6),
   ];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [
-    ["144398884", "191044511"], ["169805414", "191044511"], ["182254461", "179508915"], ["189020883", "184760438"], ["229803024", "179452862"],
+    ["144398884", "191044511"], ["169805414", "191044511"], ["182254461", "179508915"], ["184760438", "183921866"], ["189020883", "183921866"], ["229803024", "179452862"],
   ]);
 });
 
 test("a letter series ending in F is one group under the account its root starts", () => {
-  const governors = [pgov("88693430", "Årtåigē", 101.1e6), pgov("125745217", "Årt・AF", 32.2e6), pgov("88787836", "Årt・BF", 30.7e6), pgov("129680423", "Årt・GF", 6.3e6)];
+  const governors = [M(pgov("88693430", "Årtåigē", 101.1e6)), pgov("125745217", "Årt・AF", 32.2e6), pgov("88787836", "Årt・BF", 30.7e6), pgov("129680423", "Årt・GF", 6.3e6)];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["125745217", "88693430"], ["129680423", "88693430"], ["88787836", "88693430"]]);
 });
 
 test("a Farm's root of at least 4 letters inside another name joins it; a shorter root does not", () => {
   const governors = [
-    pgov("164080955", "LordLorenzoniˢ", 91.3e6), pgov("175047993", "MiniLorenzoniˢ", 44.0e6), pgov("175050757", "FarmLorenzoni1", 33.5e6),
-    pgov("81275271", "ᵛø HelloCake", 83.7e6), pgov("205406316", "cake f1", 12.8e6),
-    pgov("78067532", "BiL F1", 12.6e6), pgov("179538837", "big bill", 4.7e6),
+    M(pgov("164080955", "LordLorenzoniˢ", 91.3e6)), pgov("175047993", "MiniLorenzoniˢ", 44.0e6), pgov("175050757", "FarmLorenzoni1", 33.5e6),
+    M(pgov("81275271", "ᵛø HelloCake", 83.7e6)), pgov("205406316", "cake f1", 12.8e6),
+    pgov("78067532", "BiL F1", 12.6e6), M(pgov("179538837", "big bill", 4.7e6)),
   ];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["175047993", "164080955"], ["175050757", "164080955"], ["205406316", "81275271"]]);
 });
 
 test("a name another Governor once went by, plus a Farm marker, is that Governor's Farm", () => {
-  const governors = [pgov("8787605", "ᵛø wahab", 63.9e6), pgov("25007784", "Mr Wahab F2", 32.0e6)];
+  const governors = [M(pgov("8787605", "ᵛø wahab", 63.9e6)), pgov("25007784", "Mr Wahab F2", 32.0e6)];
   const history = [{ id: "8787605", name: "Mr Wahab" }, { id: "8787605", name: "ᵛø wahab" }];
   const [s, ...rest] = farmLinkSuggestions(governors, [], history);
   assert.deepEqual([s.farmId, s.mainId, s.reason, rest.length], ["25007784", "8787605", 'Was "Mr Wahab"', 0]);
 });
 
 test("the overlap counts a Farm's own former name too, after it was renamed", () => {
-  const governors = [pgov("8787605", "ᵛø wahab", 64.8e6), pgov("25007784", "ᵛøwahab   ii", 33.6e6)];
+  const governors = [M(pgov("8787605", "ᵛø wahab", 64.8e6)), pgov("25007784", "ᵛøwahab   ii", 33.6e6)];
   const history = [{ id: "8787605", name: "Mr Wahab" }, { id: "25007784", name: "Mr Wahab F2" }];
   const [s, ...rest] = farmLinkSuggestions(governors, [], history);
   assert.deepEqual([s.farmId, s.mainId, s.reason, rest.length], ["25007784", "8787605", 'Was "Mr Wahab F2"', 0]);
@@ -167,9 +174,9 @@ test("the overlap counts a Farm's own former name too, after it was renamed", ()
 
 test("a resource word after the root marks a Farm, however many letters it repeats", () => {
   const governors = [
-    pgov("154551867", "ᵛø EREN", 78.9e6), pgov("153935494", "Eren cornnn", 7.6e6), pgov("155440734", "Eren stonee", 4.0e6),
+    M(pgov("154551867", "ᵛø EREN", 78.9e6)), pgov("153935494", "Eren cornnn", 7.6e6), pgov("155440734", "Eren stonee", 4.0e6),
     pgov("154636856", "Eren gold", 3.6e6), pgov("191571674", "Eren inf", 37.1e6),
-    pgov("177745552", "ᵛø J4KU", 74.3e6), pgov("178893621", "J4KUFOOD", 4.8e6),
+    M(pgov("177745552", "ᵛø J4KU", 74.3e6)), pgov("178893621", "J4KUFOOD", 4.8e6),
   ];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [
     ["153935494", "154551867"], ["154636856", "154551867"], ["155440734", "154551867"], ["178893621", "177745552"], ["191571674", "154551867"],
@@ -178,26 +185,26 @@ test("a resource word after the root marks a Farm, however many letters it repea
 
 test("default names never pair, in any language", () => {
   const governors = [
-    pgov("179509850", "Governor179509850", 3e6), pgov("179488756", "Governor179488756", 2e6),
-    pgov("179451054", "Правитель179451054", 1e6), pgov("179503686", "Правитель179503686", 1e6),
-    pgov("179484037", "執政官179484037", 1e6), pgov("179484038", "執政官179484038", 1e6),
-    pgov("179509851", "Thống đốc179509851", 1e6), pgov("179509852", "Thống đốc179509852", 1e6),
-    pgov("179509853", "Vali179509853", 1e6), pgov("179509854", "Vali179509854", 1e6),
+    M(pgov("179509850", "Governor179509850", 3e6)), pgov("179488756", "Governor179488756", 2e6),
+    M(pgov("179451054", "Правитель179451054", 1e6)), pgov("179503686", "Правитель179503686", 1e6),
+    M(pgov("179484037", "執政官179484037", 1e6)), pgov("179484038", "執政官179484038", 1e6),
+    M(pgov("179509851", "Thống đốc179509851", 1e6)), pgov("179509852", "Thống đốc179509852", 1e6),
+    M(pgov("179509853", "Vali179509853", 1e6)), pgov("179509854", "Vali179509854", 1e6),
   ];
   assert.deepEqual(farmLinkSuggestions(governors), []);
 });
 
 test("F glued after a letter, pc plus a number and a closing fm are Farm markers too", () => {
   const governors = [
-    pgov("1", "Stormblessed", 80e6), pgov("2", "StormblessedF1", 10e6), pgov("3", "JADE", 70e6), pgov("4", "JADE pc2", 5e6),
-    pgov("5", "Rhaegar", 60e6), pgov("6", "Rhaegar fm", 4e6),
+    M(pgov("1", "Stormblessed", 80e6)), pgov("2", "StormblessedF1", 10e6), M(pgov("3", "JADE", 70e6)), pgov("4", "JADE pc2", 5e6),
+    M(pgov("5", "Rhaegar", 60e6)), pgov("6", "Rhaegar fm", 4e6),
   ];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["2", "1"], ["4", "3"], ["6", "5"]]);
 });
 
 test("a numbered series off a shared root is one Main's: acmong2 over Acmong1, Ac mong, acmong52 and acmong3", () => {
   const governors = [
-    pgov("179695312", "acmong2", 14.9e6), pgov("179872374", "Acmong1", 11.5e6), pgov("181458933", "Ac mong", 11.4e6),
+    M(pgov("179695312", "acmong2", 14.9e6)), pgov("179872374", "Acmong1", 11.5e6), pgov("181458933", "Ac mong", 11.4e6),
     pgov("200523736", "acmong52", 2.2e6), pgov("200551343", "acmong3", 2.1e6),
   ];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [
@@ -206,40 +213,55 @@ test("a numbered series off a shared root is one Main's: acmong2 over Acmong1, A
 });
 
 test("a Main with its own Farm is not swept under a stronger name only one of its Farms resembles", () => {
-  const governors = [pgov("1", "Alexander", 100e6), pgov("2", "Alex F1", 5e6), pgov("3", "Alexis", 50e6), pgov("4", "Alexis farm", 2e6)];
+  const governors = [M(pgov("1", "Alexander", 100e6)), pgov("2", "Alex F1", 5e6), M(pgov("3", "Alexis", 50e6)), pgov("4", "Alexis farm", 2e6)];
   assert.deepEqual(pairs(farmLinkSuggestions(governors)), [["2", "1"], ["4", "3"]]);
 });
 
-test("after a Dismiss the Farm is offered to the next related account, with that pair's own reason", () => {
-  const governors = [pgov("1", "Lord Lorenzoni", 100e6), pgov("2", "Lorenzo", 50e6), pgov("3", "Lorenzo F1", 5e6)];
+test("after a Dismiss the Farm is offered to the next related Main, with that pair's own reason", () => {
+  const governors = [M(pgov("1", "Lord Lorenzoni", 100e6)), M(pgov("2", "Lorenzo", 50e6)), pgov("3", "Lorenzo F1", 5e6)];
   assert.deepEqual(farmLinkSuggestions(governors).map((s) => [s.farmId, s.mainId, s.reason]), [["3", "1", '"lorenzo" is in Lord Lorenzoni']]);
   assert.deepEqual(farmLinkSuggestions(governors, [{ farmId: "3", mainId: "1" }]).map((s) => [s.farmId, s.mainId, s.reason]), [["3", "2", 'Farm marker "f1"']]);
 });
 
-test("a Farm of a suggested Farm goes on to that one's Main, and says through whom", () => {
-  const governors = [pgov("1", "Allfather", 100e6), pgov("2", "Odin", 50e6), pgov("3", "Odin F2", 5e6)];
+test("an unmarked account related only to another unmarked one goes on to that one's Main, and says through whom", () => {
+  const governors = [M(pgov("1", "Allfather", 100e6)), pgov("2", "Odin", 50e6), pgov("3", "Odin F2", 5e6)];
   const history = [{ id: "2", name: "Allfather F1" }];
   assert.deepEqual(farmLinkSuggestions(governors, [], history).map((s) => [s.farmId, s.mainId, s.reason]), [
     ["2", "1", 'Was "Allfather F1"'], ["3", "1", 'Via Odin: Farm marker "f2"'],
   ]);
 });
 
-test("a Main of linked Farms is never suggested as a Farm itself", () => {
-  const governors = [pgov("1", "Kami", 100e6), { ...pgov("2", "Kami F1", 5e6), kind: "farm", mainId: "1" }, pgov("3", "Kami 2", 200e6)];
+test("a marked Main is never suggested as a Farm, even of a stronger Main", () => {
+  const governors = [M(pgov("1", "Kami", 100e6)), M(pgov("3", "Kami 2", 200e6))];
   assert.deepEqual(farmLinkSuggestions(governors), []);
 });
 
+test("with no Main marked, nothing is suggested, however Farm-like the names", () => {
+  assert.deepEqual(farmLinkSuggestions([pgov("1", "Enes", 60e6), pgov("2", "Enes farm", 5e6), pgov("3", "Enes farm2", 2e6)]), []);
+});
+
 test("names with no letters left after normalising never pair", () => {
-  assert.deepEqual(farmLinkSuggestions([pgov("1", "乄", 3e6), pgov("2", "ᵛø", 2e6), pgov("3", "・", 1e6)]), []);
+  assert.deepEqual(farmLinkSuggestions([M(pgov("1", "乄", 3e6)), pgov("2", "ᵛø", 2e6), pgov("3", "・", 1e6)]), []);
 });
 
 test("a former name's root needs 3 letters, as a current name's does", () => {
-  assert.deepEqual(farmLinkSuggestions([pgov("1", "Bob", 100e6), pgov("2", "Al", 5e6)], [], [{ id: "1", name: "Al F2" }]), []);
+  assert.deepEqual(farmLinkSuggestions([M(pgov("1", "Bob", 100e6)), pgov("2", "Al", 5e6)], [], [{ id: "1", name: "Al F2" }]), []);
 });
 
 // Top 200: the rules that use it (who becomes Inactive) live in record_roster_snapshot and run
 // against tests/roster-snapshot-cases.json in supabase/tests; the site uses top200 for its flag.
 const row = (id, power) => ({ id, power });
+
+// The Council's Mark Mains list (KvK ticket 07): strongest first, 35M+ unless "show all", marked Mains always.
+test("the Mark Mains list shows 35M and up, strongest first, plus every marked Main whatever its power", () => {
+  const governors = [pgov("1", "Weak", 34.9e6), pgov("2", "Edge", 35e6), M(pgov("3", "Small Main", 10e6)), pgov("4", "Strong", 90e6), M(pgov("5", "No power", null))];
+  assert.deepEqual(mainsToMark(governors).map((g) => g.id), ["4", "2", "3", "5"]);
+});
+
+test("show all lists every Governor, no power last", () => {
+  const governors = [pgov("1", "Weak", 1e6), pgov("2", "None", null), pgov("3", "Strong", 90e6)];
+  assert.deepEqual(mainsToMark(governors, { all: true }).map((g) => g.id), ["3", "1", "2"]);
+});
 
 test("the Top 200 is the 200 highest-power Governors of a Roster Snapshot", () => {
   const rows = Array.from({ length: 202 }, (_, i) => row(String(i + 1), 100 + i)); // "1" and "2" are weakest
@@ -261,6 +283,13 @@ test("the default Mains ranking leaves Farms out and ranks the Mains among thems
   const governors = [main("a"), farm("f", "a"), main("b")];
   const rows = mainsRanking([entry("a", 30), entry("f", 20), entry("b", 10)], governors);
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["b", 2]]);
+});
+
+test("an unmarked Governor is left out of the Weekly Ranking; a needs-ID row stays", () => {
+  const governors = [main("a"), { id: "u", name: "Gov u", kind: "unmarked", mainId: null }, main("b")];
+  const entries = [entry("a", 30), entry("u", 25), { id: null, name: "Nameless", fortCount: 20 }, entry("b", 10)];
+  assert.deepEqual(mainsRanking(entries, governors).map((r) => [r.id, r.rank]), [["a", 1], [null, 2], ["b", 3]]);
+  assert.deepEqual(mainsRanking(entries, governors, { withFarms: true }).map((r) => [r.id, r.rank]), [["a", 1], [null, 2], ["b", 3]]);
 });
 
 test("with Farms shown, a Main with 30 forts and two Farms of 10 has a Group Score of 40 and the Mains rerank on it", () => {
