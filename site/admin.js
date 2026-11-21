@@ -35,16 +35,18 @@ const rewardItems = (items) => `<span class="reward-items">${items.map((x) => {
   return `<span class="reward-item">${r ? `<img src="${r.icon}" alt="${esc(r.name)}">` : ""}<b class="num">${esc(awardAmountLabel(x.item, x.amount))}</b> ${esc(r?.name ?? x.item)}</span>`;
 }).join("")}</span>`;
 
+// The sidebar's groups, in order: labels only, never links. Each task names its group.
+const TASK_GROUPS = ["Roster", "Forts", "KvK", "Events"];
 // Tasks not built yet show their planned steps. Filled in by later tickets of the kingdom-admin line.
 const TASKS = [
-  { id: "roster", label: "Roster Snapshot" },
-  { id: "mains", label: "Mains" },
-  { id: "farm-links", label: "Farm links" },
-  { id: "fort-week", label: "Fort Week" },
-  { id: "reward-promise", label: "Reward Promise" },
-  { id: "kvk", label: "KvK" },
-  { id: "fort-pause", label: "Fort Pause" },
-  { id: "gh-event", label: "GH Event", meta: "Top 10, Golden Heads", soon: {
+  { id: "roster", group: "Roster", label: "Roster Snapshot" },
+  { id: "mains", group: "Roster", label: "Mains" },
+  { id: "farm-links", group: "Roster", label: "Farm links" },
+  { id: "fort-week", group: "Forts", label: "Fort Week" },
+  { id: "reward-promise", group: "Forts", label: "Reward Promise" },
+  { id: "fort-pause", group: "Forts", label: "Fort Pause" },
+  { id: "kvk", group: "KvK", label: "KvK" },
+  { id: "gh-event", group: "Events", label: "GH Event", meta: "Top 10, Golden Heads", soon: {
     title: "Log a GH Event", body: "Log a GH Event's top 10 with Golden Heads.",
     steps: [["Name and dates", "One result per GH Event"], ["Enter the top 10", "Matched like a Fort Week"], ["Check Golden Heads", "Prefilled 20/10/5/4×7, editable"]] } },
 ];
@@ -93,11 +95,12 @@ async function showAdmin(session) {
   main.innerHTML = `
     <aside class="admin-side">
       <div class="side-label">Council desk</div>
-      <nav class="task-nav" aria-label="Council tasks">${TASKS.map((t) => `
+      <nav class="task-nav" aria-label="Council tasks">${TASK_GROUPS.map((g) => `
+        <div class="task-group">${esc(g)}</div>${TASKS.filter((t) => t.group === g).map((t) => `
         <a class="task" href="#${t.id}" data-task="${t.id}">
-          <span class="task-text"><span class="ell">${esc(t.label)}</span><small class="ell">${esc(t.meta ?? "Loading…")}</small></span>
+          <span class="task-text"><span class="ell">${esc(t.label)}</span><small class="task-meta"><span class="ell">${esc(t.meta ?? "Loading…")}</span></small></span>
           <span class="badge${t.soon ? " soon" : ""}">${t.soon ? "Soon" : ""}</span>
-        </a>`).join("")}
+        </a>`).join("")}`).join("")}
       </nav>
       <p class="side-note">Character ID is the only key. Nothing here merges two Governors by name.</p>
     </aside>
@@ -139,11 +142,12 @@ function showTask() {
 }
 window.addEventListener("hashchange", showTask);
 
-// The sidebar line and badge for a task. kind: "review" for unsaved work, "" for a count.
-function setTaskStatus(id, meta, badge = "", kind = "") {
+// The sidebar line and badge for a task. kind: "review" for unsaved work, "" for a count. art: an image
+// shown small before the line (the KvK task's key art), decorative.
+function setTaskStatus(id, meta, badge = "", kind = "", art = null) {
   const link = document.querySelector(`.task[data-task="${id}"]`);
   if (!link) return;
-  link.querySelector("small").textContent = meta;
+  link.querySelector("small").innerHTML = `${art ? `<img class="task-thumb" src="${esc(art)}" alt="">` : ""}<span class="ell">${esc(meta)}</span>`;
   const b = link.querySelector(".badge");
   b.textContent = badge;
   b.className = "badge" + (kind ? " " + kind : "");
@@ -1185,8 +1189,9 @@ async function showKvk(section, message = "", editId = null) {
   const waiting = kvks.filter((k) => !k.hasStartSnapshot && kvkState(k, now) !== "ended");
   const active = kvks.find((k) => kvkState(k, now) === "active");
   const activeWaits = waiting.some((k) => kvkState(k, now) === "active");
+  // The line names a KvK only while one is active; then its Story's key art comes first, if it has a Story.
   setTaskStatus("kvk", active ? `${active.name} active` : kvks.length ? `${kvks.length} set up` : "None set up",
-    activeWaits ? "Review" : "", activeWaits ? "review" : "");
+    activeWaits ? "Review" : "", activeWaits ? "review" : "", active ? kvkStory(active.story)?.art : null);
 
   // The KvK with the newest start day (kvks come newest first): a new KvK carries over its DKP weights.
   const previous = kvks[0] ?? null;

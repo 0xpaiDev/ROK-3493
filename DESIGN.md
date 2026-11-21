@@ -68,7 +68,7 @@ Reuse these before inventing new ones (classes in `styles.css`).
 
 Council admin patterns:
 
-- **Task sidebar**: one task visible at a time, each with a status line and a badge (Review / open count / Soon). The task sits in the URL hash.
+- **Task sidebar**: one task visible at a time, each with a status line and a badge (Review / open count / Soon). The task sits in the URL hash. Tasks sit under four `.task-group` headings, mono labels styled like `.side-label`, never links: Roster (Roster Snapshot, Mains, Farm links), Forts (Fort Week, Reward Promise, Fort Pause), KvK (KvK), Events (GH Event). Each task names its group next to `TASKS`. On a phone (760 px and below) each heading spans the 2-column task grid. While a KvK is active, the KvK task's status line starts with its Story's key art, a decorative `.task-thumb` (`--task-thumb-w` × `--task-thumb-h`, `object-fit: cover`, `--radius-sm`), the same size at every width, with the name ellipsised after it; a KvK without a Story gets none.
 - **Sticky save bar**: appears while anything is unsaved and summarises what Save will do; Discard is quiet and Save is primary. Nothing writes before Save.
 - **Mains list** (Mains task): a `.toolbar` with the Governor views (`.seg.views`) and a `.search` (any name in Name History or the Character ID, through everyone whatever the view), then a flat `.farm-list` strongest first in every view: Governor, power in `.num`, a `.tag` "Main" or `.tag.farm` "Farm of …", then Mark Main (secondary) or Unmark (quiet). A Farm has no button; it is unlinked on Farm links.
 - **Confirm / Dismiss rows**: the decision becomes a "Linked" / "Dismissed" label with Undo. Group by Main and offer "Confirm all N".
