@@ -48,6 +48,9 @@
   /* Reward item icons (King's Chests, resources). The chest art is 114 px, so never above 48 px */
   --reward-icon: 28px;
   --reward-icon-pick: 40px;
+  /* The KvK task's key-art thumbnail in the Council sidebar, the same at every width */
+  --task-thumb-w: 48px;
+  --task-thumb-h: 28px;
   /* Over a KvK's key art: clear at the top, the page ground under its name */
   --art-scrim: linear-gradient(180deg, rgba(8, 6, 14, .05) 0%, rgba(8, 6, 14, .55) 55%, rgba(8, 6, 14, .96) 100%);
   color-scheme: dark;
@@ -460,8 +463,10 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .admin-msg { margin: 0; min-height: 1.4em; color: var(--muted); }
 
 /* Task sidebar */
-.side-label { padding: 0 12px 8px; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.side-label, .task-group { padding: 0 12px 8px; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
 .task-nav { display: flex; flex-direction: column; gap: 2px; }
+.task-group { padding: 16px 12px 4px; }
+.task-group:first-child { padding-top: 8px; }
 .task {
   display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 8px 12px; border-radius: var(--radius-sm);
   color: var(--muted); font-size: 14px; font-weight: 500; transition: background var(--dur-fast), color var(--dur-fast);
@@ -470,6 +475,8 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 .task[aria-current] { color: var(--text); background: var(--accent-wash); box-shadow: inset 2px 0 0 var(--accent); }
 .task-text { flex: 1; min-width: 0; display: grid; }
 .task-text small { font-size: 12px; font-weight: 400; color: var(--faint); }
+.task-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.task-thumb { flex: none; width: var(--task-thumb-w); height: var(--task-thumb-h); object-fit: cover; border-radius: var(--radius-sm); }
 .task[aria-current] .task-text small { color: var(--muted); }
 .badge { flex: none; padding: 1px 8px; border-radius: var(--pill); font: 11px var(--mono); background: var(--accent-wash); color: var(--link); }
 .badge:empty { display: none; }
@@ -606,6 +613,7 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
 @media (max-width: 760px) {
   .admin-side { position: static; max-width: none; }
   .task-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .task-group { grid-column: 1 / -1; }
   .side-note { display: none; }
   .save-bar { padding-left: 16px; }
 }
