@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { kvkState, dkp, kvkStandings, KVK_DEFAULTS, currentKvk, checkKvk, kvkList, kvkCounting } from "../site/kingdom.js";
+import { kvkState, dkp, kvkStandings, KVK_DEFAULTS, currentKvk, checkKvk, kvkList, kvkCounting, proposeKvk } from "../site/kingdom.js";
 
 const CASES = JSON.parse(readFileSync(new URL("./kvk-cases.json", import.meta.url), "utf8")).cases;
 
@@ -138,4 +138,38 @@ test("once counting has begun with no Roster Snapshot in it yet, a KvK has count
 
 test("a KvK with no Counting Period set has no day counting begins", () => {
   assert.deepEqual(kvkCounting(k, "2026-12-01", snaps("2026-12-01")), { begins: null });
+});
+
+// ---- The KvK setup wizard's proposal (ticket 19) ----
+
+const heroicAnthem = { slug: "heroic-anthem", name: "Heroic Anthem" };
+
+test("the wizard proposes Heroic Anthem from Fri 20 Nov 2026: named for the Story and month, 52 days, one open Counting Period from the first Friday a week in", () => {
+  assert.deepEqual(proposeKvk(heroicAnthem, "2026-11-20", null), {
+    story: "heroic-anthem", name: "Heroic Anthem · Nov 2026", startsOn: "2026-11-20", endsOn: "2027-01-11",
+    periods: [{ startsOn: "2026-11-27", endsOn: null }],
+    powerCutoff: 20_000_000, weights: { t4Kill: 1, t5Kill: 2, t4Death: 4, t5Death: 8 },
+  });
+});
+
+test("a KvK starting on a Sunday gets its Counting Period from the Friday 12 days on", () => {
+  const p = proposeKvk(heroicAnthem, "2026-11-22", null);
+  assert.deepEqual(p.periods, [{ startsOn: "2026-12-04", endsOn: null }]);
+  assert.equal(p.endsOn, "2027-01-13");
+});
+
+test("a KvK starting late in December is named for December and runs into the next year", () => {
+  const p = proposeKvk({ slug: "song-of-troy", name: "Song of Troy" }, "2026-12-25", null);
+  assert.equal(p.name, "Song of Troy · Dec 2026");
+  assert.equal(p.story, "song-of-troy");
+  assert.equal(p.endsOn, "2027-02-15");
+  assert.deepEqual(p.periods, [{ startsOn: "2027-01-01", endsOn: null }]);
+});
+
+test("a new KvK carries over the last KvK's Power Cutoff and DKP weights", () => {
+  const last = { name: "Old", startsOn: "2026-06-01", endsOn: "2026-07-23", powerCutoff: 25_000_000,
+                 weights: { t4Kill: 0, t5Kill: 1, t4Death: 3, t5Death: 6 }, periods: [] };
+  const p = proposeKvk(heroicAnthem, "2026-11-20", last);
+  assert.equal(p.powerCutoff, 25_000_000);
+  assert.deepEqual(p.weights, { t4Kill: 0, t5Kill: 1, t4Death: 3, t5Death: 6 });
 });

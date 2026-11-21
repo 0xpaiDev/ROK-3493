@@ -1,5 +1,6 @@
 // Kingdom rules: pure functions over plain data. No DOM, no network.
 import { rewardItem } from "./rewards.js";
+import { kvkStory } from "./kvk-stories.js";
 
 // Weekly Ranking: highest Fort Count first (or highest `by`). Ties keep the stored order and share a rank number.
 export function rankWeek(entries, by = (e) => e.fortCount) {
@@ -457,9 +458,10 @@ export function fillWeeklyAwards(promise, ranking) {
 }
 
 // ---------- KvK (kvk SPEC) ----------
-// A KvK is { id, name, startsOn, endsOn, powerCutoff, weights, periods }, days as UTC dates (YYYY-MM-DD),
+// A KvK is { id, story, name, startsOn, endsOn, powerCutoff, weights, periods }, days as UTC dates (YYYY-MM-DD),
 // both ends included. weights are DKP weights { t4Kill, t5Kill, t4Death, t5Death }; periods are its
-// Counting Periods [{ startsOn, endsOn }], endsOn null while a period is open.
+// Counting Periods [{ startsOn, endsOn }], endsOn null while a period is open. story is its Story's slug
+// (site/kvk-stories.js), null only for a KvK set up before Stories.
 
 // The UTC day (YYYY-MM-DD) of a moment, or the day itself when given one.
 const utcDay = (now) => (typeof now === "string" && /^\d{4}-\d{2}-\d{2}$/.test(now) ? now : new Date(now).toISOString().slice(0, 10));
@@ -508,6 +510,36 @@ export const KVK_DEFAULTS = Object.freeze({
   weights: Object.freeze({ t4Kill: 1, t5Kill: 2, t4Death: 4, t5Death: 8 }),
 });
 
+// How long a Season of Conquest KvK runs: its end day is this many days after its start day. Every running
+// SoC Lost Kingdom on the community trackers was scheduled for 52 days, Friday to Monday (research file,
+// "Addendum 2026-11-21: Season of Conquest length"). The Council corrects it if the game says otherwise.
+export const KVK_LENGTH_DAYS = 52;
+
+// The first war (Pass 4) opens on a Friday about a week in: 3493's Heroic Anthem opened Fri 2026-11-20 and its
+// first war was Fri 2026-11-27 (research file, "Addendum 2026-11-21: unlock day offsets").
+const FIRST_WAR_AFTER_DAYS = 7;
+const FRIDAY = 5;
+
+// The day n days after iso (YYYY-MM-DD), in UTC.
+export const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
+
+// What the KvK setup wizard proposes for a new KvK of story ({ slug, name }) starting on startsOn, the day the
+// Lost Kingdom opens: its name ("Heroic Anthem · Nov 2026"), an end day KVK_LENGTH_DAYS later, one open Counting
+// Period from the first Friday at least a week after the start, and the Power Cutoff and DKP weights of
+// previousKvk (the last KvK set up), or KVK_DEFAULTS with none. Only a proposal: the Council edits it before Save.
+export function proposeKvk(story, startsOn, previousKvk) {
+  const weekIn = addDays(startsOn, FIRST_WAR_AFTER_DAYS);
+  const firstWar = addDays(weekIn, (FRIDAY - new Date(weekIn + "T00:00:00Z").getUTCDay() + 7) % 7);
+  const from = previousKvk ?? KVK_DEFAULTS;
+  return {
+    story: story.slug,
+    name: `${story.name} · ${MONTHS[Number(startsOn.slice(5, 7)) - 1]} ${startsOn.slice(0, 4)}`,
+    startsOn, endsOn: addDays(startsOn, KVK_LENGTH_DAYS),
+    periods: [{ startsOn: firstWar, endsOn: null }],
+    powerCutoff: from.powerCutoff, weights: { ...from.weights },
+  };
+}
+
 // A Governor's DKP: T4 and T5 kills and deaths over the Counting Periods, each times its weight.
 // A value not counted yet (null) counts as 0.
 export function dkp(row, weights) {
@@ -523,6 +555,11 @@ const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s);
 // (tests/kvk-cases.json keeps the two together).
 export function checkKvk(kvk, others = []) {
   if (!kvk.name?.trim()) return "A KvK needs a name.";
+  // Only a KvK set up before Stories (ticket 19) may have none.
+  // A blank Story is none, as save_kvk reads it.
+  const story = kvk.story?.trim() || null;
+  if (story == null && kvk.id == null) return "A new KvK needs its Story.";
+  if (story != null && !kvkStory(story)) return `There is no Story "${story}".`;
   if (!isDay(kvk.startsOn) || !isDay(kvk.endsOn)) return "A KvK needs a start day and an end day.";
   if (kvk.endsOn < kvk.startsOn) return `The KvK ends on ${dayLabel(kvk.endsOn)}, before it starts on ${dayLabel(kvk.startsOn)}.`;
   if (!(Number.isInteger(kvk.powerCutoff) && kvk.powerCutoff >= 0)) return "The Power Cutoff is a whole number from 0 up.";

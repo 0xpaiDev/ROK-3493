@@ -2,7 +2,8 @@
 // Row-level security decides who may write; this page only hides the tasks from non-Council users.
 import { createClient, navigatorLock } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
 import { SUPABASE_URL, SUPABASE_KEY, KVK_SELECT, kvkFromRow } from "./store.js";
-import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, mainsToMark, MAIN_POWER_HINT, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel } from "./kingdom.js";
+import { farmLinkSuggestions, fortWeekAt, fortWeekEnd, isFortWeekStart, rankWeek, namesToMatch, governorsTwice, checkPicks, isLiveWeek, isClosedWeek, checkWeeklyAward, awardsByWeek, parseAwardAmount, awardAmountLabel, awardAmountInput, checkRewardPromise, promiseToStartFrom, ordinal, PAID_ON, MAX_PLACE, mainsRanking, mainsToMark, MAIN_POWER_HINT, fillWeeklyAwards, fortPauseAt, checkKvk, kvkState, KVK_DEFAULTS, KVK_STATE_LABEL, dayLabel, proposeKvk, KVK_LENGTH_DAYS, addDays } from "./kingdom.js";
+import { KVK_STORIES, kvkStory } from "./kvk-stories.js";
 import { REWARD_ITEMS, rewardItem } from "./rewards.js";
 
 // The auth client serialises its work across tabs with a browser lock, and by default waits for it forever.
@@ -1158,19 +1159,24 @@ async function loadKvks() {
 
 // A KvK as the form holds it: numbers as typed, so a half-typed value stays put.
 const kvkToForm = (k) => ({
-  id: k?.id ?? null, name: k?.name ?? "", startsOn: k?.startsOn ?? "", endsOn: k?.endsOn ?? "",
+  id: k?.id ?? null, story: k?.story ?? null, name: k?.name ?? "", startsOn: k?.startsOn ?? "", endsOn: k?.endsOn ?? "",
   powerCutoff: awardAmountInput("power", k?.powerCutoff ?? KVK_DEFAULTS.powerCutoff),
   weights: Object.fromEntries(WEIGHT_FIELDS.map(([f]) => [f, String((k?.weights ?? KVK_DEFAULTS.weights)[f])])),
   periods: (k?.periods ?? []).map((p) => ({ startsOn: p.startsOn, endsOn: p.endsOn ?? "" })),
 });
 // The form as a KvK for checkKvk: a blank number is not one, so the rules module names it.
 const formToKvk = (f) => ({
-  id: f.id, name: f.name, startsOn: f.startsOn || null, endsOn: f.endsOn || null,
+  id: f.id, story: f.story || null, name: f.name, startsOn: f.startsOn || null, endsOn: f.endsOn || null,
   powerCutoff: parseAwardAmount(f.powerCutoff, "resource") ?? (f.powerCutoff.trim() === "0" ? 0 : NaN),
   weights: Object.fromEntries(WEIGHT_FIELDS.map(([w]) => [w, f.weights[w].trim() === "" ? NaN : Number(f.weights[w])])),
   periods: f.periods.map((p) => ({ startsOn: p.startsOn || null, endsOn: p.endsOn || null })),
 });
 
+// The KvK setup wizard's steps (ticket 19). Editing a saved KvK keeps the one form instead.
+const KVK_STEPS = ["Story", "Days", "Counting Periods", "Power Cutoff and DKP", "Review and Save"];
+
+// The task has three views: the list of KvKs ("list"), the setup wizard for a new KvK ("wizard"), and the
+// form for a saved one ("edit"). With no KvK yet the wizard opens at once.
 async function showKvk(section, message = "", editId = null) {
   let kvks;
   try {
@@ -1187,8 +1193,34 @@ async function showKvk(section, message = "", editId = null) {
   setTaskStatus("kvk", active ? `${active.name} active` : kvks.length ? `${kvks.length} set up` : "None set up",
     activeWaits ? "Review" : "", activeWaits ? "review" : "");
 
-  let form = kvkToForm(kvks.find((k) => k.id === editId));
+  // The KvK with the newest start day (kvks come newest first): a new KvK carries over its Power Cutoff and DKP weights.
+  const previous = kvks[0] ?? null;
+  const editing = kvks.find((k) => k.id === editId);
+  let mode = editing ? "edit" : kvks.length ? "list" : "wizard";
+  let form = kvkToForm(editing);
+  // The edit form offers "No Story" only to a KvK saved before Stories.
+  let hadStory = !!editing?.story;
+  let step = 1;
+  // What the wizard last proposed (proposeKvk, as the form holds it): a field still equal to it follows a new
+  // Story or start day; one the Council changed stays.
+  let proposed = null;
   let msgText = message;
+
+  function startWizard() {
+    mode = "wizard"; step = 1; proposed = null; msgText = "";
+    form = kvkToForm(previous && { powerCutoff: previous.powerCutoff, weights: previous.weights });
+  }
+  if (mode === "wizard") { startWizard(); msgText = message; }
+
+  // Proposes the name, end day and Counting Period from the Story and start day, keeping what the Council changed.
+  function propose() {
+    const story = kvkStory(form.story);
+    if (!story || !form.startsOn) return;
+    const next = kvkToForm(proposeKvk(story, form.startsOn, previous));
+    const same = (field) => !proposed || JSON.stringify(form[field]) === JSON.stringify(proposed[field]);
+    for (const field of ["name", "endsOn", "periods"]) if (same(field)) form[field] = structuredClone(next[field]);
+    proposed = next;
+  }
 
   const summary = () => {
     const problem = checkKvk(formToKvk(form), kvks);
@@ -1197,57 +1229,41 @@ async function showKvk(section, message = "", editId = null) {
     return { problem, html: `<b>${form.id ? "Replaces the saved KvK." : "Not saved yet."}</b> <span>${esc(form.name.trim())}, ${n} Counting ${n === 1 ? "Period" : "Periods"}.</span>` };
   };
 
-  function draw() {
-    const { problem, html } = summary();
-    const body = document.createElement("div");
-    body.innerHTML = `
-      <div class="reveal">
-        <div class="eyebrow">KvK</div>
-        <h1 class="task-title">${form.id ? `Edit ${esc(form.name || "the KvK")}` : "Set up a KvK"}</h1>
-        <p class="task-lede">Its start day's Roster Snapshot is the KvK Start Snapshot: each Governor's starting power, and who is at or above the Power Cutoff. Only kills and deaths on the days of its Counting Periods count. Move a period at any time and the standings follow.</p>
-      </div>
-      <p class="admin-msg" role="status">${esc(msgText)}</p>
-
-      ${kvks.length ? `<section class="card admin-card">
+  const kvkListCard = () => kvks.length ? `<section class="card admin-card">
         <h2>KvKs</h2>
         <ol class="aw-rows">${kvks.map((k) => `
           <li class="${k.id === form.id ? "editing" : ""}">
             <span class="who"><span class="ell">${esc(k.name)}</span><span class="tag">${KVK_STATE_LABEL[kvkState(k, now)]}</span></span>
-            <span class="aw"><span class="mono num">${esc(kvkDays(k))}</span>${k.hasStartSnapshot ? "" : `<br><small class="faint">Waiting for its start snapshot, the Roster Snapshot of ${esc(dayMonth(k.startsOn))}.</small>`}</span>
+            <span class="aw"><span class="mono num">${esc(kvkDays(k))}</span>${k.story ? "" : `<br><small class="faint">No Story yet: Edit to give it one.</small>`}${k.hasStartSnapshot ? "" : `<br><small class="faint">Waiting for its start snapshot, the Roster Snapshot of ${esc(dayMonth(k.startsOn))}.</small>`}</span>
             <span class="row-actions"><button class="btn quiet sm" type="button" data-kvk-edit="${k.id}">Edit<span class="sr-only"> ${esc(k.name)}</span></button></span>
           </li>`).join("")}
         </ol>
-        ${form.id ? `<p><button class="btn quiet sm" type="button" data-kvk-new>Set up a new KvK instead</button></p>` : ""}
-      </section>` : ""}
+        ${mode === "wizard" ? "" : `<p><button class="btn${mode === "list" ? " primary" : ""}" type="button" data-kvk-new>Set up a new KvK</button></p>`}
+      </section>` : "";
 
-      <form id="kvk-form" class="admin-stack" onsubmit="return false">
-        <section class="card admin-card">
-          <h2>Days and DKP</h2>
-          <div class="fields">
+  // The form's parts, shared by the wizard's steps and the edit form.
+  const nameField = () => `
             <label class="field wide">Name
-              <input name="kvkName" value="${esc(form.name)}" required autocomplete="off" placeholder="KvK 3, Heroic Anthem">
-            </label>
+              <input name="kvkName" value="${esc(form.name)}" required autocomplete="off" placeholder="Heroic Anthem · Nov 2026">
+            </label>`;
+  const dayFields = (withEnd = true) => `
             <label class="field">Start day (UTC)
               <input type="date" name="startsOn" value="${esc(form.startsOn)}" required>
-            </label>
+            </label>${withEnd ? `
             <label class="field">End day (UTC)
               <input type="date" name="endsOn" value="${esc(form.endsOn)}" required>
-            </label>
+            </label>` : ""}`;
+  const dkpFields = () => `
+          <div class="fields">
             <label class="field">Power Cutoff
               <input name="powerCutoff" value="${esc(form.powerCutoff)}" inputmode="decimal" autocomplete="off" placeholder="20M">
-            </label>
-          </div>
-          <div class="fields">${WEIGHT_FIELDS.map(([f, label]) => `
+            </label>${WEIGHT_FIELDS.map(([f, label]) => `
             <label class="field narrow">${label}
               <input name="w-${f}" value="${esc(form.weights[f])}" type="number" min="0" step="any" inputmode="decimal">
             </label>`).join("")}
           </div>
-          <p class="match">DKP weights: each T4 kill, T5 kill, T4 death and T5 death counts this many points.</p>
-        </section>
-
-        <section class="card admin-card">
-          <h2>Counting Periods</h2>
-          <p class="muted">Whole UTC days, both ends included. Leave the end empty while the fighting goes on: it counts up to the newest Roster Snapshot.</p>
+          <p class="match">DKP weights: each T4 kill, T5 kill, T4 death and T5 death counts this many points.</p>`;
+  const periodFields = () => `
           ${form.periods.map((p, i) => `
           <div class="fields" aria-label="Counting Period ${i + 1}">
             <label class="field">Period ${i + 1} from
@@ -1258,50 +1274,195 @@ async function showKvk(section, message = "", editId = null) {
             </label>
             <button class="btn quiet sm" type="button" data-period-remove="${i}">Remove<span class="sr-only"> period ${i + 1}</span></button>
           </div>`).join("") || `<p class="match">No Counting Period yet: nothing counts until one is added.</p>`}
-          <p><button class="btn" type="button" data-period-add>Add Counting Period</button></p>
-        </section>
-      </form>
-
+          <p><button class="btn" type="button" data-period-add>Add Counting Period</button></p>`;
+  const campsLine = (story) => `${story.camps.length} Camps: ${story.camps.join(", ")}.`;
+  const saveBar = () => {
+    const { problem, html } = summary();
+    return `
       <div class="save-bar" role="region" aria-label="KvK">
         <span class="pulse unsaved" aria-hidden="true"></span>
         <span class="sum">${html}</span>
         ${form.id ? `<button class="btn quiet" type="button" data-kvk-delete>Delete KvK</button>` : ""}
         <button class="btn primary" type="button" data-save${problem ? " disabled" : ""}>Save KvK</button>
       </div>`;
+  };
+
+  function editForm() {
+    return `
+      <form id="kvk-form" class="admin-stack" onsubmit="return false">
+        <section class="card admin-card">
+          <h2>Story, days and DKP</h2>
+          <div class="fields">
+            <label class="field wide">Story
+              <select name="story">
+                ${hadStory ? "" : `<option value=""${form.story ? "" : " selected"}>No Story (set up before Stories)</option>`}
+                ${KVK_STORIES.map((s) => `<option value="${s.slug}"${s.slug === form.story ? " selected" : ""}>${esc(s.name)}</option>`).join("")}
+              </select>
+            </label>
+            ${nameField()}
+          </div>
+          <div class="fields">${dayFields()}</div>
+          ${dkpFields()}
+        </section>
+
+        <section class="card admin-card">
+          <h2>Counting Periods</h2>
+          <p class="muted">Whole UTC days, both ends included. Leave the end empty while the fighting goes on: it counts up to the newest Roster Snapshot.</p>
+          ${periodFields()}
+        </section>
+      </form>
+      ${saveBar()}`;
+  }
+
+  // Which wizard steps can be opened: the Story first, then a start day.
+  const canGo = (n) => n === 1 || (!!kvkStory(form.story) && (n === 2 || !!form.startsOn));
+
+  function wizard() {
+    const story = kvkStory(form.story);
+    const steps = `<ol class="wiz-steps">${KVK_STEPS.map((label, i) => `
+          <li class="${i + 1 === step ? "on" : i + 1 < step ? "done" : ""}">
+            <button type="button" data-step="${i + 1}"${canGo(i + 1) ? "" : " disabled"}${i + 1 === step ? ' aria-current="step"' : ""}><span class="mono">${i + 1}</span> <span class="wl">${label}</span></button>
+          </li>`).join("")}</ol>`;
+    let body;
+    if (step === 1) {
+      body = `
+          <h2>Which Story?</h2>
+          <p class="muted">The KvK's map and rules, as the game names them.</p>
+          <div class="story-grid" role="group" aria-label="Stories">${KVK_STORIES.map((s) => `
+            <button type="button" class="story-card${s.slug === form.story ? " on" : ""}" data-story="${s.slug}" aria-pressed="${s.slug === form.story}">
+              <img src="${s.poster}" alt="" width="316" height="556" loading="lazy" decoding="async">
+              <span>${esc(s.name)}</span>
+            </button>`).join("")}
+          </div>
+          ${story ? `<p class="match"><b>${esc(story.name)}</b>: ${esc(campsLine(story))}</p>` : ""}
+          <p class="match">Art © Lilith Games</p>`;
+    } else if (step === 2) {
+      body = `
+          <h2>Days</h2>
+          <p class="muted">The start day is the day the Lost Kingdom opens. Its Roster Snapshot is the KvK Start Snapshot: each Governor's starting power, and who is at or above the Power Cutoff.</p>
+          <div class="fields">${dayFields(!!form.startsOn)}</div>
+          ${form.startsOn ? `<p class="match">End day: start + ${KVK_LENGTH_DAYS} days. Scheduled length seen on community trackers; correct it if the game says otherwise.</p>
+          <div class="fields">${nameField()}</div>` : ""}`;
+    } else if (step === 3) {
+      body = `
+          <h2>Counting Periods</h2>
+          <p class="muted">Whole UTC days, both ends included. Leave the end empty while the fighting goes on: it counts up to the newest Roster Snapshot. Nothing counts until you save.</p>
+          <div class="note" role="note"><span>Estimated from community timing: Pass 4 opens on a Friday–Saturday about a week in. Adjust once you know.</span></div>
+          ${periodFields()}`;
+    } else if (step === 4) {
+      body = `
+          <h2>Power Cutoff and DKP</h2>
+          <p class="muted">${previous ? `Carried over from ${esc(previous.name)}.` : "The defaults: no KvK was set up before."}</p>
+          ${dkpFields()}`;
+    } else {
+      const periods = form.periods.length
+        ? form.periods.map((p) => !p.startsOn ? "no start day" : p.endsOn ? `${dayLabel(p.startsOn)} – ${dayLabel(p.endsOn)}` : `from ${dayLabel(p.startsOn)}, open`).join("; ")
+        : "none yet";
+      body = `
+          <h2>Review and Save</h2>
+          <dl class="review">
+            <dt>Story</dt><dd>${esc(story.name)}<br><small class="faint">${esc(campsLine(story))}</small></dd>
+            <dt>Name</dt><dd>${esc(form.name)}</dd>
+            <dt>Days</dt><dd class="mono num">${form.startsOn && form.endsOn ? esc(kvkDays(form)) : "not set"}</dd>
+            <dt>Counting Periods</dt><dd class="mono num">${esc(periods)}</dd>
+            <dt>Power Cutoff</dt><dd class="mono num">${esc(form.powerCutoff)}</dd>
+            <dt>DKP weights</dt><dd class="mono num">${WEIGHT_FIELDS.map(([f, label]) => `${label} ×${esc(form.weights[f])}`).join(" · ")}</dd>
+          </dl>`;
+    }
+    const last = step === KVK_STEPS.length;
+    const nav = `<div class="wiz-nav">
+          ${step > 1 ? `<button class="btn quiet" type="button" data-step="${step - 1}">Back</button>` : ""}
+          ${last ? "" : `<button class="btn primary" type="button" data-step="${step + 1}"${canGo(step + 1) ? "" : " disabled"}>Next: ${KVK_STEPS[step]}</button>`}
+        </div>`;
+    return `
+      <form id="kvk-form" class="admin-stack" onsubmit="return false">
+        <section class="card admin-card wizard" aria-label="Set up a KvK">
+          ${steps}
+          ${body}
+          ${nav}
+        </section>
+      </form>
+      ${last ? saveBar() : ""}`;
+  }
+
+  function draw() {
+    const title = mode === "edit" ? `Edit ${esc(form.name || "the KvK")}` : mode === "wizard" ? "Set up a KvK" : "KvKs";
+    const body = document.createElement("div");
+    body.innerHTML = `
+      <div class="reveal">
+        <div class="eyebrow">KvK</div>
+        <h1 class="task-title">${title}</h1>
+        <p class="task-lede">Its start day's Roster Snapshot is the KvK Start Snapshot: each Governor's starting power, and who is at or above the Power Cutoff. Only kills and deaths on the days of its Counting Periods count. Move a period at any time and the standings follow.</p>
+      </div>
+      <p class="admin-msg" role="status">${esc(msgText)}</p>
+      ${mode === "wizard" ? wizard() : ""}
+      ${kvkListCard()}
+      ${mode === "edit" ? editForm() : ""}`;
     section.replaceChildren(body);
     wire(body);
   }
 
+  // Reads the fields on screen into the form; the wizard shows only some of them at a time.
   function readForm(body) {
     const f = body.querySelector("#kvk-form");
+    if (!f) return;
+    const val = (name, was) => (f.elements[name] ? f.elements[name].value : was);
     form = {
-      ...form, name: f.kvkName.value, startsOn: f.startsOn.value, endsOn: f.endsOn.value, powerCutoff: f.powerCutoff.value,
-      weights: Object.fromEntries(WEIGHT_FIELDS.map(([w]) => [w, f[`w-${w}`].value])),
-      periods: form.periods.map((_, i) => ({ startsOn: f[`p-start-${i}`].value, endsOn: f[`p-end-${i}`].value })),
+      ...form, story: val("story", form.story) || null, name: val("kvkName", form.name), startsOn: val("startsOn", form.startsOn),
+      endsOn: val("endsOn", form.endsOn), powerCutoff: val("powerCutoff", form.powerCutoff),
+      weights: Object.fromEntries(WEIGHT_FIELDS.map(([w]) => [w, val(`w-${w}`, form.weights[w])])),
+      periods: form.periods.map((p, i) => ({ startsOn: val(`p-start-${i}`, p.startsOn), endsOn: val(`p-end-${i}`, p.endsOn) })),
     };
   }
 
   function wire(body) {
     const msg = body.querySelector(".admin-msg");
+    const f = body.querySelector("#kvk-form");
     // Typing keeps the form; the save bar redraws on change, so focus stays put.
-    body.querySelector("#kvk-form").addEventListener("input", () => readForm(body));
-    body.querySelector("#kvk-form").addEventListener("change", () => {
+    f?.addEventListener("input", () => readForm(body));
+    f?.addEventListener("change", (e) => {
+      const startWas = form.startsOn;
       readForm(body);
-      const { problem, html } = summary();
-      body.querySelector(".save-bar .sum").innerHTML = html;
-      body.querySelector("[data-save]").disabled = !!problem;
+      // In the wizard a new start day proposes the end day, name and Counting Period, and shows them.
+      if (mode === "wizard" && e.target.name === "startsOn" && form.startsOn !== startWas) {
+        propose();
+        draw();
+        section.querySelector('[name="startsOn"]')?.focus();
+        return;
+      }
+      const bar = body.querySelector(".save-bar");
+      if (bar) {
+        const { problem, html } = summary();
+        bar.querySelector(".sum").innerHTML = html;
+        bar.querySelector("[data-save]").disabled = !!problem;
+      }
+      body.querySelectorAll(".wizard [data-step]").forEach((b) => { b.disabled = !canGo(Number(b.dataset.step)); });
     });
     body.querySelectorAll("[data-kvk-edit]").forEach((b) => b.addEventListener("click", () => {
-      form = kvkToForm(kvks.find((k) => k.id === Number(b.dataset.kvkEdit)));
-      msgText = "";
+      const k = kvks.find((x) => x.id === Number(b.dataset.kvkEdit));
+      mode = "edit"; form = kvkToForm(k); hadStory = !!k.story; msgText = "";
       draw();
     }));
-    body.querySelector("[data-kvk-new]")?.addEventListener("click", () => { form = kvkToForm(null); msgText = ""; draw(); });
-    body.querySelector("[data-period-add]").addEventListener("click", () => {
+    body.querySelector("[data-kvk-new]")?.addEventListener("click", () => { startWizard(); draw(); });
+    body.querySelectorAll("[data-story]").forEach((b) => b.addEventListener("click", () => {
+      readForm(body);
+      form.story = b.dataset.story;
+      propose();
+      step = 2;
+      draw();
+      section.querySelector('[name="startsOn"]')?.focus();
+    }));
+    body.querySelectorAll(".wizard [data-step]").forEach((b) => b.addEventListener("click", () => {
+      readForm(body);
+      step = Number(b.dataset.step);
+      draw();
+      section.querySelector(".wizard")?.scrollIntoView({ block: "nearest" });
+    }));
+    body.querySelector("[data-period-add]")?.addEventListener("click", () => {
       readForm(body);
       // A new period starts the day after the last one ends, or on the KvK's start day.
       const last = form.periods.at(-1);
-      const next = last?.endsOn ? new Date(Date.parse(last.endsOn + "T00:00:00Z") + 864e5).toISOString().slice(0, 10) : last ? "" : form.startsOn;
+      const next = last?.endsOn ? addDays(last.endsOn, 1) : last ? "" : form.startsOn;
       form.periods.push({ startsOn: next, endsOn: "" });
       draw();
       section.querySelector(`[name="p-start-${form.periods.length - 1}"]`)?.focus();
@@ -1311,7 +1472,7 @@ async function showKvk(section, message = "", editId = null) {
       form.periods.splice(Number(b.dataset.periodRemove), 1);
       draw();
     }));
-    body.querySelector("[data-save]").addEventListener("click", async (e) => {
+    body.querySelector("[data-save]")?.addEventListener("click", async (e) => {
       readForm(body);
       const k = formToKvk(form);
       const problem = checkKvk(k, kvks);
@@ -1319,7 +1480,7 @@ async function showKvk(section, message = "", editId = null) {
       e.target.disabled = true;
       msg.textContent = "Saving…";
       const { data: id, error } = await supabase.rpc("save_kvk", { kvk: {
-        id: k.id, name: k.name.trim(), starts_on: k.startsOn, ends_on: k.endsOn, power_cutoff: k.powerCutoff,
+        id: k.id, story: k.story, name: k.name.trim(), starts_on: k.startsOn, ends_on: k.endsOn, power_cutoff: k.powerCutoff,
         weights: { t4_kill: k.weights.t4Kill, t5_kill: k.weights.t5Kill, t4_death: k.weights.t4Death, t5_death: k.weights.t5Death },
         periods: k.periods.map((p) => ({ starts_on: p.startsOn, ends_on: p.endsOn })),
       } });
