@@ -59,24 +59,44 @@ test("a Governor's DKP is 0 before any Counting Period has counted", () => {
   assert.equal(dkp(gov("a", 0, null, null, null, null), KVK_DEFAULTS.weights), 0);
 });
 
-test("a new KvK takes a 20M Power Cutoff", () => {
-  assert.equal(KVK_DEFAULTS.powerCutoff, 20_000_000);
+test("a new KvK takes only DKP weights from the defaults: the Power Cutoff is retired", () => {
+  assert.deepEqual(Object.keys(KVK_DEFAULTS), ["weights"]);
 });
 
-const k = { startsOn: "2026-11-23", endsOn: "2027-01-20", powerCutoff: 20_000_000, weights: KVK_DEFAULTS.weights, periods: [] };
+const k = { startsOn: "2026-11-23", endsOn: "2027-01-20", weights: KVK_DEFAULTS.weights, periods: [] };
+// The Council's marks for the standings' views (ticket 21): every Governor in these tests is a Main unless named.
+const mains = (rows, others = {}) => new Map(rows.map((r) => [r.id, others[r.id] ?? "main"]));
+const standings = (rows, opts = {}, marks = {}) => kvkStandings(rows, k, { kinds: mains(rows, marks), view: "mains", ...opts });
 
 test("standings rank by DKP, highest first, with each Governor's DKP", () => {
-  const rows = kvkStandings([gov("a", 30e6, 10, 0, 0, 0), gov("b", 25e6, 0, 0, 0, 5), gov("c", 40e6, 0, 3, 0, 0)], k);
+  const rows = standings([gov("a", 30e6, 10, 0, 0, 0), gov("b", 25e6, 0, 0, 0, 5), gov("c", 40e6, 0, 3, 0, 0)]);
   assert.deepEqual(rows.map((r) => [r.id, r.rank, r.dkp]), [["b", 1, 40], ["a", 2, 10], ["c", 3, 6]]);
 });
 
-test("standings keep only Governors at or above the Power Cutoff in the KvK Start Snapshot", () => {
-  const rows = kvkStandings([gov("at", 20e6, 1, 0, 0, 0), gov("below", 19_999_999, 99, 0, 0, 0), gov("none", null, 99, 0, 0, 0)], k);
-  assert.deepEqual(rows.map((r) => r.id), ["at"]);
+test("the Mains view ranks every Main whatever their power, and no Farm or Unmarked Governor, however strong", () => {
+  const rows = standings([gov("small", 5e6, 1, 0, 0, 0), gov("farm", 90e6, 99, 0, 0, 0), gov("nobody", 90e6, 99, 0, 0, 0)], {}, { farm: "farm", nobody: "unmarked" });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.kind]), [["small", 1, "main"]]);
+});
+
+test("a Main missing from the KvK Start Snapshot is in Mains with no starting power", () => {
+  const rows = standings([gov("late", null, 3, 0, 0, 0), gov("a", 30e6, 1, 0, 0, 0)]);
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.startPower]), [["late", 1, null], ["a", 2, 30e6]]);
+});
+
+test("Mains + Farms ranks Mains and Farms together, flat, each tagged by kind; Others holds only the Unmarked", () => {
+  const all = [gov("m", 30e6, 1, 0, 0, 0), gov("f", 10e6, 5, 0, 0, 0), gov("u", 50e6, 9, 0, 0, 0)];
+  const marks = { f: "farm", u: "unmarked" };
+  assert.deepEqual(standings(all, { view: "mainsAndFarms" }, marks).map((r) => [r.id, r.rank, r.kind]), [["f", 1, "farm"], ["m", 2, "main"]]);
+  assert.deepEqual(standings(all, { view: "others" }, marks).map((r) => [r.id, r.rank]), [["u", 1]]);
+});
+
+test("a Governor the marks don't know is Unmarked, so in Others", () => {
+  const rows = kvkStandings([gov("x", 30e6, 1, 0, 0, 0)], k, { kinds: new Map(), view: "others" });
+  assert.deepEqual(rows.map((r) => [r.id, r.kind]), [["x", "unmarked"]]);
 });
 
 test("Governors tied on DKP share a rank, and the next one skips past them", () => {
-  const rows = kvkStandings([gov("a", 30e6, 8, 0, 0, 0), gov("b", 25e6, 0, 0, 2, 0), gov("c", 40e6, 16, 0, 0, 0), gov("d", 21e6, 1, 0, 0, 0)], k);
+  const rows = standings([gov("a", 30e6, 8, 0, 0, 0), gov("b", 25e6, 0, 0, 2, 0), gov("c", 40e6, 16, 0, 0, 0), gov("d", 21e6, 1, 0, 0, 0)]);
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["c", 1], ["a", 2], ["b", 2], ["d", 4]]);
 });
 
@@ -86,23 +106,23 @@ test("the KvK list puts the upcoming KvK first, then the Active one, then past o
   assert.deepEqual(list.map((k) => [k.name, k.state]), [["Next", "upcoming"], ["KvK 1", "active"], ["Past", "ended"], ["Older", "ended"]]);
 });
 
-test("\"show all\" brings in Governors below the Power Cutoff and those not in the KvK Start Snapshot, ranked with the rest", () => {
-  const rows = kvkStandings([gov("at", 20e6, 1, 0, 0, 0), gov("below", 19_999_999, 99, 0, 0, 0), gov("none", null, 3, 0, 0, 0)], k, { all: true });
-  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.startPower]), [["below", 1, 19_999_999], ["none", 2, null], ["at", 3, 20e6]]);
+test("All ranks every standings row, Main, Farm or Unmarked, with or without starting power", () => {
+  const rows = standings([gov("m", 20e6, 1, 0, 0, 0), gov("f", 1e6, 99, 0, 0, 0), gov("none", null, 3, 0, 0, 0)], { view: "all" }, { f: "farm", none: "unmarked" });
+  assert.deepEqual(rows.map((r) => [r.id, r.rank, r.startPower]), [["f", 1, 1e6], ["none", 2, null], ["m", 3, 20e6]]);
 });
 
 test("sorted by another column, the table ranks on it, highest first, and ties share a rank", () => {
-  const rows = kvkStandings([gov("a", 30e6, 0, 4, 0, 0), gov("b", 25e6, 50, 1, 0, 0), gov("c", 40e6, 0, 4, 9, 0)], k, { sort: "t5Kills" });
+  const rows = standings([gov("a", 30e6, 0, 4, 0, 0), gov("b", 25e6, 50, 1, 0, 0), gov("c", 40e6, 0, 4, 9, 0), gov("u", 1e6, 0, 99, 0, 0)], { sort: "t5Kills" }, { u: "unmarked" });
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["c", 1], ["b", 3]]);
 });
 
 test("sorted by starting power, a Governor without starting power comes last", () => {
-  const rows = kvkStandings([gov("none", null, 0, 0, 0, 0), gov("a", 30e6, 0, 0, 0, 0), gov("b", 0, 0, 0, 0, 0)], k, { all: true, sort: "startPower" });
+  const rows = standings([gov("none", null, 0, 0, 0, 0), gov("a", 30e6, 0, 0, 0, 0), gov("b", 0, 0, 0, 0, 0)], { sort: "startPower" });
   assert.deepEqual(rows.map((r) => [r.id, r.rank]), [["a", 1], ["b", 2], ["none", 3]]);
 });
 
 test("sorted by Governor, the table goes A to Z and each Governor keeps their DKP rank", () => {
-  const rows = kvkStandings([{ ...gov("1", 30e6, 5, 0, 0, 0), name: "zed" }, { ...gov("2", 30e6, 9, 0, 0, 0), name: "Ánna" }, { ...gov("3", 30e6, 1, 0, 0, 0), name: "bo" }], k, { sort: "name" });
+  const rows = standings([{ ...gov("1", 30e6, 5, 0, 0, 0), name: "zed" }, { ...gov("2", 30e6, 9, 0, 0, 0), name: "Ánna" }, { ...gov("3", 30e6, 1, 0, 0, 0), name: "bo" }, { ...gov("4", 30e6, 99, 0, 0, 0), name: "al" }], { sort: "name" }, { 4: "farm" });
   assert.deepEqual(rows.map((r) => [r.name, r.rank]), [["Ánna", 1], ["bo", 3], ["zed", 2]]);
 });
 
@@ -148,7 +168,7 @@ test("the wizard proposes Heroic Anthem from Fri 20 Nov 2026: named for the Stor
   assert.deepEqual(proposeKvk(heroicAnthem, "2026-11-20", null), {
     story: "heroic-anthem", name: "Heroic Anthem · Nov 2026", startsOn: "2026-11-20", endsOn: "2027-01-11",
     periods: [{ startsOn: "2026-11-27", endsOn: null }],
-    powerCutoff: 20_000_000, weights: { t4Kill: 1, t5Kill: 2, t4Death: 4, t5Death: 8 },
+    weights: { t4Kill: 1, t5Kill: 2, t4Death: 4, t5Death: 8 },
   });
 });
 
@@ -166,10 +186,10 @@ test("a KvK starting late in December is named for December and runs into the ne
   assert.deepEqual(p.periods, [{ startsOn: "2027-01-01", endsOn: null }]);
 });
 
-test("a new KvK carries over the last KvK's Power Cutoff and DKP weights", () => {
+test("a new KvK carries over only the last KvK's DKP weights", () => {
   const last = { name: "Old", startsOn: "2026-06-01", endsOn: "2026-07-23", powerCutoff: 25_000_000,
                  weights: { t4Kill: 0, t5Kill: 1, t4Death: 3, t5Death: 6 }, periods: [] };
   const p = proposeKvk(heroicAnthem, "2026-11-20", last);
-  assert.equal(p.powerCutoff, 25_000_000);
+  assert.equal("powerCutoff" in p, false);
   assert.deepEqual(p.weights, { t4Kill: 0, t5Kill: 1, t4Death: 3, t5Death: 6 });
 });

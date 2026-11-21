@@ -1,6 +1,6 @@
 // Reads the Kingdom from Supabase with the public key. Read-only: no rules here, only reshaping
 // rows into the plain data the pages and the kingdom rules module take.
-import { fortWeekEnd, top200, currentKvk } from "./kingdom.js";
+import { fortWeekEnd, currentKvk } from "./kingdom.js";
 
 export const SUPABASE_URL = "https://xjgswlqzdpmnhhnitucr.supabase.co";
 // Publishable (anon) key: safe to ship, row-level security only lets it read.
@@ -43,9 +43,9 @@ export async function rowsIfTable(table, query) {
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
 // A KvK as the kingdom rules take it (checkKvk, kvkStandings in kingdom.js); the admin page reads it the same way.
-export const KVK_SELECT = "id,story,name,starts_on,ends_on,power_cutoff,weight_t4_kill,weight_t5_kill,weight_t4_death,weight_t5_death,kvk_counting_period(starts_on,ends_on)";
+export const KVK_SELECT = "id,story,name,starts_on,ends_on,weight_t4_kill,weight_t5_kill,weight_t4_death,weight_t5_death,kvk_counting_period(starts_on,ends_on)";
 export const kvkFromRow = (k) => ({
-  id: k.id, story: k.story ?? null, name: k.name, startsOn: k.starts_on, endsOn: k.ends_on, powerCutoff: Number(k.power_cutoff),
+  id: k.id, story: k.story ?? null, name: k.name, startsOn: k.starts_on, endsOn: k.ends_on,
   weights: { t4Kill: Number(k.weight_t4_kill), t5Kill: Number(k.weight_t5_kill), t4Death: Number(k.weight_t4_death), t5Death: Number(k.weight_t5_death) },
   periods: [...(k.kvk_counting_period ?? [])].sort((a, b) => a.starts_on.localeCompare(b.starts_on)).map((p) => ({ startsOn: p.starts_on, endsOn: p.ends_on })),
 });
@@ -108,7 +108,6 @@ export async function loadKingdom() {
 
   // The latest Roster Snapshot, plus Inactive and Migrated Governors who are no longer in it. Kill Points and
   // Alliance Helps are stored but not shown: the export reports 0 Kill Points for almost everyone.
-  const inTop200 = new Set(top200(snapshotRows.map((r) => ({ id: r.character_id, power: r.power }))));
   const listed = new Set(snapshotRows.map((r) => r.character_id));
   const roster = [
     ...snapshotRows.map((r) => {
@@ -117,7 +116,6 @@ export async function loadKingdom() {
         id: r.character_id,
         name: g?.current_name,
         status: g ? cap(g.status) : null,
-        top200: inTop200.has(r.character_id),
         power: r.power,
         highestPower: r.highest_power,
         resources: r.resources_gathered,
@@ -125,7 +123,7 @@ export async function loadKingdom() {
     }),
     ...governors
       .filter((g) => g.status !== "current" && !listed.has(g.character_id))
-      .map((g) => ({ id: g.character_id, name: g.current_name, status: cap(g.status), top200: false, power: null, highestPower: null, resources: null })),
+      .map((g) => ({ id: g.character_id, name: g.current_name, status: cap(g.status), power: null, highestPower: null, resources: null })),
   ];
 
   const kvkRows = kvk.map((r) => ({
@@ -145,7 +143,7 @@ export async function loadKingdom() {
     fortWeeks,
     ghEvents,
     kvk: kvkRows,
-    // KvKs the Council set up, newest first: { id, name, startsOn, endsOn, powerCutoff, weights, periods }.
+    // KvKs the Council set up, newest first: { id, story, name, startsOn, endsOn, weights, periods }.
     kvks,
     // The KvK tab's KvK and its totals: { kvkId, rows: [{ id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths }] }.
     kvkTotals: shown ? { kvkId: shown.id, rows: totals } : null,

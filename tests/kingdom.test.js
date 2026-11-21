@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks, fortPauseAt, mainsToMark } from "../site/kingdom.js";
+import { rankWeek, fortAverage, fortWeekEnd, fortWeekAt, findInRanking, farmLinkSuggestions, top200, mainsRanking, governorsTwice, isFortWeekStart, namesToMatch, isLiveWeek, liveReadingIds, checkWeeklyAward, awardsByWeek, awardsOf, homeWeek, parseAwardAmount, awardAmountLabel, checkRewardPromise, awardAmountInput, livePromise, promiseToStartFrom, ordinal, fillWeeklyAwards, checkPicks, fortPauseAt, mainsToMark, inView, GOVERNOR_VIEWS, GOVERNOR_VIEW_LABEL } from "../site/kingdom.js";
 
 const entry = (id, fortCount) => ({ id, name: "Gov " + id, fortCount });
 
@@ -249,18 +249,52 @@ test("a former name's root needs 3 letters, as a current name's does", () => {
 });
 
 // Top 200: the rules that use it (who becomes Inactive) live in record_roster_snapshot and run
-// against tests/roster-snapshot-cases.json in supabase/tests; the site uses top200 for its flag.
+// against tests/roster-snapshot-cases.json in supabase/tests.
 const row = (id, power) => ({ id, power });
 
-// The Council's Mark Mains list (KvK ticket 07): strongest first, 35M+ unless "show all", marked Mains always.
-test("the Mark Mains list shows 35M and up, strongest first, plus every marked Main whatever its power", () => {
-  const governors = [pgov("1", "Weak", 34.9e6), pgov("2", "Edge", 35e6), M(pgov("3", "Small Main", 10e6)), pgov("4", "Strong", 90e6), M(pgov("5", "No power", null))];
-  assert.deepEqual(mainsToMark(governors).map((g) => g.id), ["4", "2", "3", "5"]);
+// The Council's Mark Mains list (KvK ticket 07, ticket 21): the four Governor views, each strongest first,
+// no power last. Power never decides who is in a view.
+const F = (g, mainId = null) => ({ ...g, kind: "farm", mainId });
+
+test("the Mark Mains list opens on the Mains, whatever their power, strongest first, no power last", () => {
+  const governors = [pgov("1", "Strong", 90e6), M(pgov("2", "Small Main", 5e6)), F(pgov("3", "Big Farm", 90e6)), M(pgov("4", "No power", null)), M(pgov("5", "Main", 60e6))];
+  assert.deepEqual(mainsToMark(governors).map((g) => g.id), ["5", "2", "4"]);
 });
 
-test("show all lists every Governor, no power last", () => {
-  const governors = [pgov("1", "Weak", 1e6), pgov("2", "None", null), pgov("3", "Strong", 90e6)];
-  assert.deepEqual(mainsToMark(governors, { all: true }).map((g) => g.id), ["3", "1", "2"]);
+test("each view of the Mark Mains list is sorted by power, with no power floor", () => {
+  const governors = [pgov("1", "Weak", 1e6), pgov("2", "None", null), M(pgov("3", "Main", 40e6)), F(pgov("4", "Farm", 90e6), "3"), F(pgov("5", "Unlinked", 2e6))];
+  assert.deepEqual(mainsToMark(governors, { view: "mainsAndFarms" }).map((g) => g.id), ["4", "3", "5"]);
+  assert.deepEqual(mainsToMark(governors, { view: "others" }).map((g) => g.id), ["1", "2"]);
+  assert.deepEqual(mainsToMark(governors, { view: "all" }).map((g) => g.id), ["4", "3", "5", "1", "2"]);
+});
+
+// The four Governor views (ticket 21): by the Council's marks alone, never by power.
+test("a 5M Main is in Mains and a 90M Farm is not", () => {
+  assert.equal(inView(M(pgov("1", "Small", 5e6)), "mains"), true);
+  assert.equal(inView(F(pgov("2", "Big", 90e6), "1"), "mains"), false);
+  assert.equal(inView(pgov("3", "Strong", 90e6), "mains"), false);
+});
+
+test("Mains + Farms holds every Main and Farm, an unlinked Farm too, and no Unmarked Governor", () => {
+  assert.equal(inView(M(pgov("1", "Main", 5e6)), "mainsAndFarms"), true);
+  assert.equal(inView(F(pgov("2", "Farm", 1e6), "1"), "mainsAndFarms"), true);
+  assert.equal(inView(F(pgov("3", "Unlinked", 1e6)), "mainsAndFarms"), true);
+  assert.equal(inView(pgov("4", "Nobody", 90e6), "mainsAndFarms"), false);
+});
+
+test("Others holds only Unmarked Governors, and a Governor with no kind on record is Unmarked", () => {
+  assert.equal(inView(pgov("1", "Nobody", 90e6), "others"), true);
+  assert.equal(inView({ id: "2" }, "others"), true);
+  assert.equal(inView(M(pgov("3", "Main", 5e6)), "others"), false);
+  assert.equal(inView(F(pgov("4", "Farm", 1e6)), "others"), false);
+});
+
+test("All holds everyone", () => {
+  for (const g of [M(pgov("1", "Main", 5e6)), F(pgov("2", "Farm", 1e6)), pgov("3", "Nobody", null), { id: "4" }]) assert.equal(inView(g, "all"), true);
+});
+
+test("the views are Mains, Mains + Farms, Others and All, in that order", () => {
+  assert.deepEqual(GOVERNOR_VIEWS.map((v) => [v, GOVERNOR_VIEW_LABEL[v]]), [["mains", "Mains"], ["mainsAndFarms", "Mains + Farms"], ["others", "Others"], ["all", "All"]]);
 });
 
 test("the Top 200 is the 200 highest-power Governors of a Roster Snapshot", () => {

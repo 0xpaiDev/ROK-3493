@@ -23,7 +23,7 @@ _Avoid_: player, governor (for the person)
 The one Governor an Owner treats as their primary account. Only the Council makes a Governor a Main.
 
 **Unmarked**:
-A Governor the Council has made neither a Main nor a Farm: an absent or dead account, or one that doesn't matter for ranking. Every new Governor starts Unmarked.
+A Governor the Council has made neither a Main nor a Farm: an absent or dead account, or one that doesn't matter for ranking. Every new Governor starts Unmarked. Filters call them Others.
 
 **Farm**:
 A Governor its Owner keeps to support their Main, usually by gathering resources.
@@ -108,8 +108,8 @@ _Avoid_: Baseline, MM Snapshot
 A span of whole days inside a KvK when kills and deaths count, because the war is being fought for objectives. A KvK can have several; kills outside them, such as fights during preparation, are ignored.
 _Avoid_: Fight Period
 
-**Power Cutoff**:
-The power, set by the Council for each KvK, at or above which a Governor in the KvK Start Snapshot counts as taking part. It stands in for City Hall 25, which the Roster Snapshot does not record.
+**Pass 4**:
+The game's name for the first war of a Story, about a week after the KvK starts. The first Counting Period usually opens with it.
 
 **Kills**:
 Enemy troops a Governor killed or Severely Wounded, counted by tier. Neutral units such as barbarians are not Kills.

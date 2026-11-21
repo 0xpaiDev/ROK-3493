@@ -183,6 +183,8 @@ tr.is-away .linkish, tr.is-away b { color: var(--muted); }
 .seg button { border: 0; background: none; padding: 8px 16px; min-height: 36px; border-radius: 999px; cursor: pointer; color: var(--muted); font-weight: 500; font-size: 14px; }
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--accent); color: var(--on-metal); font-weight: 600; }
+/* The four Governor views (Mains · Mains + Farms · Others · All), each with its count */
+.seg.views small { margin-left: 4px; font-size: 12px; }
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 .chip {
   border: 1px solid var(--line-2); background: var(--surface); color: var(--muted);
@@ -654,6 +656,12 @@ dialog::backdrop { background: rgba(5, 2, 10, .72); backdrop-filter: blur(3px); 
   .stat:nth-child(n+3) { border-top: 1px solid var(--line-2); }
 }
 @media (max-width: 640px) {
+  /* On a phone the Governor views take their own full-width row, the search under it; a label may wrap
+     inside its button, the count sits under it, and nothing scrolls sideways */
+  .toolbar .seg.views { display: flex; width: 100%; border-radius: var(--radius-md); }
+  .seg.views button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 4px 8px; line-height: 1.25; border-radius: var(--radius-sm); }
+  .seg.views small { display: block; margin-left: 0; }
+  .toolbar .search { flex-basis: 100%; min-width: 0; }
   .wrap { padding: 0 16px; }
   .page { padding-top: 28px; }
   .kvk-banner { min-height: 168px; padding: 16px; }

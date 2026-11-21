@@ -205,13 +205,26 @@ export function farmLinkSuggestions(governors, dismissed = [], history = []) {
   return unmarked.filter((p) => mainOf.has(p.id)).map((p) => ({ farmId: p.id, mainId: mainOf.get(p.id).main.id, reason: mainOf.get(p.id).reason }));
 }
 
-// The Council's Mark Mains list (KvK ticket 07): Governors { id, name, kind, mainId, power }, strongest first,
-// no power last. By default only those at MAIN_POWER_HINT and up, since a Main below it is rare, plus every
-// marked Main whatever its power; all lists everyone. The hint never decides: only the Council marks a Main.
-export const MAIN_POWER_HINT = 35e6;
-export function mainsToMark(governors, { all = false } = {}) {
+// The four Governor views every list of Governors offers (ticket 21), in the order the filters show them.
+// They go by the Council's marks alone, never by power: "mains" (marked Main), "mainsAndFarms" (Main or Farm,
+// a Farm without a link too), "others" (Unmarked: neither Main nor Farm) and "all".
+export const GOVERNOR_VIEWS = Object.freeze(["mains", "mainsAndFarms", "others", "all"]);
+export const GOVERNOR_VIEW_LABEL = Object.freeze({ mains: "Mains", mainsAndFarms: "Mains + Farms", others: "Others", all: "All" });
+
+// Whether a Governor ({ kind }) is in a view. A Governor with no kind on record is Unmarked.
+export function inView(governor, view) {
+  const kind = governor?.kind;
+  if (view === "mains") return kind === "main";
+  if (view === "mainsAndFarms") return kind === "main" || kind === "farm";
+  if (view === "others") return kind !== "main" && kind !== "farm";
+  return true;
+}
+
+// The Council's Mark Mains list (KvK ticket 07): the Governors { id, name, kind, mainId, power } in a view
+// (Mains by default), strongest first, no power last.
+export function mainsToMark(governors, { view = "mains" } = {}) {
   return governors
-    .filter((g) => all || g.kind === "main" || (g.power ?? 0) >= MAIN_POWER_HINT)
+    .filter((g) => inView(g, view))
     .sort((a, b) => (b.power ?? -1) - (a.power ?? -1) || (a.id < b.id ? -1 : 1));
 }
 
@@ -458,7 +471,7 @@ export function fillWeeklyAwards(promise, ranking) {
 }
 
 // ---------- KvK (kvk SPEC) ----------
-// A KvK is { id, story, name, startsOn, endsOn, powerCutoff, weights, periods }, days as UTC dates (YYYY-MM-DD),
+// A KvK is { id, story, name, startsOn, endsOn, weights, periods }, days as UTC dates (YYYY-MM-DD),
 // both ends included. weights are DKP weights { t4Kill, t5Kill, t4Death, t5Death }; periods are its
 // Counting Periods [{ startsOn, endsOn }], endsOn null while a period is open. story is its Story's slug
 // (site/kvk-stories.js), null only for a KvK set up before Stories.
@@ -505,8 +518,8 @@ export function homeShows({ pauses, kvks, now }) {
 }
 
 // What a new KvK starts with. The database holds the same defaults (kvk in supabase/migrations).
+// The database also keeps a Power Cutoff per KvK, retired (ticket 21): nothing reads it, and save_kvk fills its default.
 export const KVK_DEFAULTS = Object.freeze({
-  powerCutoff: 20_000_000,
   weights: Object.freeze({ t4Kill: 1, t5Kill: 2, t4Death: 4, t5Death: 8 }),
 });
 
@@ -525,7 +538,7 @@ export const addDays = (iso, n) => new Date(Date.parse(iso + "T00:00:00Z") + n *
 
 // What the KvK setup wizard proposes for a new KvK of story ({ slug, name }) starting on startsOn, the day the
 // Lost Kingdom opens: its name ("Heroic Anthem · Nov 2026"), an end day KVK_LENGTH_DAYS later, one open Counting
-// Period from the first Friday at least a week after the start, and the Power Cutoff and DKP weights of
+// Period from the first Friday at least a week after the start, and the DKP weights of
 // previousKvk (the last KvK set up), or KVK_DEFAULTS with none. Only a proposal: the Council edits it before Save.
 export function proposeKvk(story, startsOn, previousKvk) {
   const weekIn = addDays(startsOn, FIRST_WAR_AFTER_DAYS);
@@ -536,7 +549,7 @@ export function proposeKvk(story, startsOn, previousKvk) {
     name: `${story.name} · ${MONTHS[Number(startsOn.slice(5, 7)) - 1]} ${startsOn.slice(0, 4)}`,
     startsOn, endsOn: addDays(startsOn, KVK_LENGTH_DAYS),
     periods: [{ startsOn: firstWar, endsOn: null }],
-    powerCutoff: from.powerCutoff, weights: { ...from.weights },
+    weights: { ...from.weights },
   };
 }
 
@@ -562,7 +575,6 @@ export function checkKvk(kvk, others = []) {
   if (story != null && !kvkStory(story)) return `There is no Story "${story}".`;
   if (!isDay(kvk.startsOn) || !isDay(kvk.endsOn)) return "A KvK needs a start day and an end day.";
   if (kvk.endsOn < kvk.startsOn) return `The KvK ends on ${dayLabel(kvk.endsOn)}, before it starts on ${dayLabel(kvk.startsOn)}.`;
-  if (!(Number.isInteger(kvk.powerCutoff) && kvk.powerCutoff >= 0)) return "The Power Cutoff is a whole number from 0 up.";
   const w = kvk.weights ?? {};
   if (!["t4Kill", "t5Kill", "t4Death", "t5Death"].every((k) => Number.isFinite(w[k]) && w[k] >= 0)) return "Each DKP weight is a number from 0 up.";
   const days = `the KvK's days, ${dayLabel(kvk.startsOn)} to ${dayLabel(kvk.endsOn)}`;
@@ -592,21 +604,25 @@ export function checkKvk(kvk, others = []) {
   return null;
 }
 
-// A KvK's table: the Governors of its KvK Start Snapshot at or above its Power Cutoff, ranked by DKP,
-// highest first. Ties keep the order given and share a rank. rows are the KvK totals read
-// (kvk_standings in supabase/migrations): { id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths };
+// A KvK's table: the Governors of one view (GOVERNOR_VIEWS, "all" by default) ranked by DKP, highest first.
+// Ties keep the order given and share a rank. rows are the KvK totals read (kvk_standings in
+// supabase/migrations), the whole Kingdom: { id, name, status, startPower, t4Kills, t5Kills, t4Deaths, t5Deaths };
 // startPower is null for a Governor counted in a Counting Period but not in the KvK Start Snapshot.
-// all ("show all") keeps every row: those below the Power Cutoff and those without starting power too.
+// kinds maps a Character ID to its kind ("main", "farm", "unmarked"); one it doesn't know is Unmarked.
+// Each row comes back with its kind and DKP.
 // sort is the column ranked on, highest first: "dkp" (the default), "startPower", "t4Kills", "t5Kills",
 // "t4Deaths" or "t5Deaths". No starting power ranks below any. "name" lists the Governors A to Z, each
 // keeping their DKP rank.
-export function kvkStandings(rows, kvk, { all = false, sort = "dkp" } = {}) {
-  const taking = rows
-    .filter((r) => all || (r.startPower != null && r.startPower >= kvk.powerCutoff))
-    .map((r) => ({ ...r, dkp: dkp(r, kvk.weights) }));
-  if (sort === "name") return rankWeek(taking, (r) => r.dkp).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en", { sensitivity: "base" }));
-  return rankWeek(taking, (r) => r[sort] ?? -1);
+export function kvkStandings(rows, kvk, { view = "all", sort = "dkp", kinds = new Map() } = {}) {
+  const shown = rows
+    .map((r) => ({ ...r, kind: kinds.get(r.id) ?? "unmarked", dkp: dkp(r, kvk.weights) }))
+    .filter((r) => inView(r, view));
+  if (sort === "name") return rankWeek(shown, (r) => r.dkp).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "", "en", { sensitivity: "base" }));
+  return rankWeek(shown, (r) => r[sort] ?? -1);
 }
+
+// Home during a Fort Pause: the KvK's top 10 Mains by DKP (kvkStandings); the KvK tab has the full table.
+export const homeKvkTop = (rows, kvk, kinds) => kvkStandings(rows, kvk, { view: "mains", kinds }).slice(0, 10);
 
 // How far a KvK's table has counted at now, given the days the store has a Roster Snapshot for (snapshotDays,
 // YYYY-MM-DD). Before its first Counting Period starts: { begins } with that period's start day, or null when

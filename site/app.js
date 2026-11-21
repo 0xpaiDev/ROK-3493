@@ -1,4 +1,4 @@
-import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings, homeShows, kvkList, kvkCounting, dayLabel, KVK_STATE_LABEL } from "./kingdom.js";
+import { mainsRanking, rowScore, fortAverage, fortWeekAt, fortWeekEnd, findInRanking, isLiveWeek, awardsByWeek, awardsOf, homeWeek, awardAmountLabel, livePromise, ordinal, fortPauseAt, kvkState, kvkStandings, homeKvkTop, inView, GOVERNOR_VIEWS, GOVERNOR_VIEW_LABEL, homeShows, kvkList, kvkCounting, dayLabel, KVK_STATE_LABEL } from "./kingdom.js";
 import { loadKingdom } from "./store.js";
 import { rewardItem } from "./rewards.js";
 import { kvkStory } from "./kvk-stories.js";
@@ -115,6 +115,19 @@ import { kvkStory } from "./kvk-stories.js";
     return rec.mainId ? `<span class="tag farm" title="Farm of ${esc(record.get(rec.mainId)?.name)}">Farm</span>` : `<span class="tag farm">Farm · unlinked</span>`;
   };
   const farmsOf = (id) => D.governors.filter((x) => x.kind === "farm" && x.mainId === id);
+  // The Council's marks by Character ID, for the Governor views (GOVERNOR_VIEWS); one not on record is Unmarked.
+  const kinds = new Map(D.governors.map((x) => [x.id, x.kind]));
+  const kindOf = (g) => ({ kind: g?.id ? kinds.get(g.id) : undefined });
+  // In the mixed views (Mains + Farms, All) a Main is tagged "Main" and a Farm "Farm"; Others carry no tag.
+  const kindTag = (g, view) => view !== "mainsAndFarms" && view !== "all" ? ""
+    : kindOf(g).kind === "main" ? `<span class="tag">Main</span>` : farmTag(g);
+  // The four Governor views as a .seg, each with how many Governors it holds (counts by view); attr is the
+  // data attribute the click handler reads.
+  const viewSeg = (attr, on, counts) => `<div class="seg views" role="group" aria-label="Which Governors">${GOVERNOR_VIEWS.map((v) =>
+    `<button data-${attr}="${v}" class="${v === on ? "on" : ""}" aria-pressed="${v === on}">${GOVERNOR_VIEW_LABEL[v]} <small class="num">${counts[v]}</small></button>`).join("")}</div>`;
+  const viewCounts = (list) => Object.fromEntries(GOVERNOR_VIEWS.map((v) => [v, list.filter((g) => inView(kindOf(g), v)).length]));
+  const anyMain = D.governors.some((x) => x.kind === "main");
+  const NO_MAINS = "No Mains marked yet. All lists everyone.";
   // Name History only adds names to Governors already shown somewhere.
   D.nameHistory.forEach((n) => governors.has(n.id) && get(n.id, n.name));
   // A Main with a Weekly Award has a popup even if it was never ranked or in a Roster Snapshot.
@@ -166,7 +179,7 @@ import { kvkStory } from "./kvk-stories.js";
 
   // ---------- views ----------
   // Fort Rankings opens on the week home shows, so home's "All N Mains →" and Find links land on it.
-  const state = { fortView: "weekly", withFarms: false, fortWeek: homeI >= 0 ? homeI : weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterAll: false, kvkFilter: "all", kvkSort: "dkp", kvkAll: false, kvkQ: "", find: "" };
+  const state = { fortView: "weekly", withFarms: false, fortWeek: homeI >= 0 ? homeI : weeks.length - 1, avgSort: "avg", rosterQ: "", rosterSort: "power", rosterLimit: 50, rosterView: "mains", kvkFilter: "all", kvkSort: "dkp", kvkView: "mains", kvkQ: "", find: "" };
 
   function podium(rows, { live = false } = {}) {
     const step = (r, place) => {
@@ -231,24 +244,21 @@ import { kvkStory } from "./kvk-stories.js";
   // else Fort Rankings, with the pause line when paused without a KvK.
   const homeShown = homeShows({ pauses: D.fortPauses, kvks: D.kvks, now });
 
-  // Why a KvK's table is empty without "show all": nobody reached its Power Cutoff.
-  const noneAtCutoff = (k) => `No Governor had ${big(k.powerCutoff)} power in the KvK Start Snapshot.`;
-  // Home during a Fort Pause: the KvK's name, its top DKP standings and a link to the full table.
+  // Home during a Fort Pause: the KvK's name, its top 10 Mains by DKP and a link to the full table.
   // The store loads totals for currentKvk, which is this KvK whenever one has started.
   function homeKvk(k) {
     const totals = D.kvkTotals?.kvkId === k.id ? D.kvkTotals.rows : [];
-    const rows = kvkStandings(totals, k);
+    const rows = homeKvkTop(totals, k, kinds);
     const day = dayLabel;
-    const top = Math.min(10, rows.length);
-    const empty = totals.length ? noneAtCutoff(k)
+    const empty = totals.length ? `${anyMain ? "No Main is in this KvK's standings." : "No Mains marked yet."} The full table on the KvK tab lists everyone.`
       : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
     return `<div class="wrap page">
       <div class="section-head reveal"><div><div class="eyebrow">KvK · ${KVK_STATE_LABEL[kvkState(k, now)]}</div><h1>${esc(k.name)}</h1>
         <p class="muted">${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Governors ranked by DKP over the Counting Periods.</p></div></div>
       ${pauseNote}
       <section class="card reveal reveal-next">
-        <div class="card-head"><div><div class="eyebrow">DKP standings</div><h2>${rows.length ? `Top ${top}` : "Standings"}</h2></div><a href="#kvk">Full table on the KvK tab →</a></div>
-        ${rows.length ? kvkTable(rows.slice(0, top)) : `<p class="empty">${empty}</p>`}
+        <div class="card-head"><div><div class="eyebrow">DKP standings</div><h2>${rows.length ? `Top ${rows.length} Mains` : "Standings"}</h2></div><a href="#kvk">Full table on the KvK tab →</a></div>
+        ${rows.length ? kvkTable(rows) : `<p class="empty">${empty}</p>`}
       </section></div>`;
   }
 
@@ -487,7 +497,7 @@ import { kvkStory } from "./kvk-stories.js";
     return `<div class="wrap page">${open === LAST_KVK ? lastKvk(head, list) : kvkPage(open, head, list)}</div>`;
   }
 
-  // One KvK set up by the Council: its days and rules, then its table, sortable, searchable, with "show all".
+  // One KvK set up by the Council: its days and rules, then its table, sortable, searchable, in four views.
   function kvkPage(k, head, list) {
     const phase = kvkState(k, now);
     const day = dayLabel;
@@ -496,29 +506,22 @@ import { kvkStory } from "./kvk-stories.js";
       : "none set yet";
     const lede = `${phase === "upcoming" ? "Starts" : KVK_STATE_LABEL[phase]} · ${esc(day(k.startsOn))} – ${esc(day(k.endsOn))}. Counting Periods: ${esc(periods)}.
       DKP is T4 kills ×${k.weights.t4Kill}, T5 kills ×${k.weights.t5Kill}, T4 deaths ×${k.weights.t4Death} and T5 deaths ×${k.weights.t5Death} over the Counting Periods.
-      Governors at or above ${big(k.powerCutoff)} power in the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
+      Start power is from the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
     const totals = D.kvkTables?.[k.id] ?? [];
     const counting = kvkCounting(k, now, D.snapshotDays);
     const countLine = "days" in counting
       ? `<p class="muted count-line">Counted ${counting.days} day${counting.days === 1 ? "" : "s"} of its Counting Periods${D.newestSnapshotOn ? `, through the Roster Snapshot of ${esc(day(D.newestSnapshotOn))}` : ""}.</p>`
       : `<div class="note">${ICON_INFO}<span>${counting.begins ? `Counting begins on ${esc(day(counting.begins))}. Until then every Governor's kills and deaths read 0.` : "No Counting Period is set yet, so every Governor's kills and deaths read 0."}</span></div>`;
-    const all = kvkStandings(totals, k, { all: true, sort: state.kvkSort });
-    const taking = kvkStandings(totals, k, { sort: state.kvkSort });
-    const shown = state.kvkAll ? all : taking;
+    const view = state.kvkView;
+    const shown = kvkStandings(totals, k, { view, sort: state.kvkSort, kinds });
     const q = state.kvkQ.trim();
     const rows = q ? findInRanking(shown, D.nameHistory, q) : shown;
-    const noneTaking = `${noneAtCutoff(k)} "Show all" lists everyone.`;
     const empty = phase === "upcoming" ? `The table fills from the Roster Snapshot of ${esc(day(k.startsOn))}.`
-      : totals.length ? noneTaking
       : `Waiting for the KvK Start Snapshot, the Roster Snapshot of ${esc(day(k.startsOn))}.`;
-    const tools = `<div class="toolbar">
-        <div class="seg" role="group" aria-label="Which Governors">
-          <button data-kvkall="0" class="${state.kvkAll ? "" : "on"}" aria-pressed="${!state.kvkAll}">${big(k.powerCutoff)}+ (${taking.length})</button>
-          <button data-kvkall="1" class="${state.kvkAll ? "on" : ""}" aria-pressed="${state.kvkAll}">Show all ${all.length}</button>
-        </div><input class="search" id="kq" type="search" placeholder="Name or Character ID" aria-label="Search the KvK table" value="${esc(state.kvkQ)}" autocomplete="off" spellcheck="false"></div>`;
-    const table = rows.length ? kvkTable(rows, state.kvkSort)
-      : q ? `<p class="empty">No Governor matches “${esc(q)}”${state.kvkAll ? "" : `. "Show all" also searches Governors below ${big(k.powerCutoff)}`}.</p>`
-      : `<p class="empty">${state.kvkAll || !totals.length ? empty : noneTaking}</p>`;
+    const tools = `<div class="toolbar">${viewSeg("kvkview", view, viewCounts(totals))}<input class="search" id="kq" type="search" placeholder="Name or Character ID" aria-label="Search the KvK table" value="${esc(state.kvkQ)}" autocomplete="off" spellcheck="false"></div>`;
+    const table = rows.length ? kvkTable(rows, state.kvkSort, view)
+      : q ? `<p class="empty">No Governor matches “${esc(q)}”${view === "all" ? "" : " here. All also searches everyone"}.</p>`
+      : `<p class="empty">${view === "mains" && !anyMain ? NO_MAINS : "No Governor in this view."}</p>`;
     // A KvK with a Story shows its key art behind its name; one set up before Stories shows the plain head.
     const story = kvkStory(k.story);
     const top = story
@@ -529,7 +532,7 @@ import { kvkStory } from "./kvk-stories.js";
       : head(esc(k.name), lede);
     return `${top}${list}
       <section class="card">${countLine}${totals.length ? tools : ""}${totals.length ? table : `<p class="empty">${empty}</p>`}
-        ${state.kvkAll && totals.some((r) => r.startPower == null) ? `<p class="faint">A Governor without starting power was not in the KvK Start Snapshot.</p>` : ""}
+        ${rows.some((r) => r.startPower == null) ? `<p class="faint">A Governor without start power was not in the KvK Start Snapshot.</p>` : ""}
       </section>`;
   }
 
@@ -556,7 +559,8 @@ import { kvkStory } from "./kvk-stories.js";
 
   // A KvK's standings as a table (kvkStandings rows), shared by the KvK tab and Home during a Fort Pause.
   // With sort (the KvK tab), every column header sorts the table on it; Home's top 10 passes none.
-  function kvkTable(rows, sort) {
+  // view tags each Main and Farm in the mixed views.
+  function kvkTable(rows, sort, view) {
     const away = (r) => r.status === "Inactive" || r.status === "Migrated";
     const th = (key, text, cls = "r") => sort
       ? `<th class="${cls} ${sort === key ? "sorted" : ""}"><button data-kvksort="${key}">${text}</button></th>`
@@ -566,7 +570,7 @@ import { kvkStory } from "./kvk-stories.js";
           <thead><tr><th>#</th>${th("name", "Governor", "")}${th("startPower", "Start power")}${th("dkp", "DKP")}${th("t4Kills", "T4 kills")}${th("t5Kills", "T5 kills")}${th("t4Deaths", "T4 deaths")}${th("t5Deaths", "T5 deaths")}</tr></thead>
           <tbody>${rows.map((r) => `<tr class="${away(r) ? "is-away" : ""}">
             <td class="faint num mono">${r.rank}</td>
-            <td class="name-cell">${who(byKey(r.id))} ${away(r) ? `<span class="tag away">${esc(r.status)}</span>` : ""}</td>
+            <td class="name-cell">${who(byKey(r.id))} ${kindTag(byKey(r.id), view)}${away(r) ? `<span class="tag away">${esc(r.status)}</span>` : ""}</td>
             <td class="r num">${big(r.startPower)}</td>
             <td class="r num"><b>${big(r.dkp)}</b></td>
             <td class="r num">${big(r.t4Kills)}</td>
@@ -581,32 +585,29 @@ import { kvkStory } from "./kvk-stories.js";
     const q = state.rosterQ.trim().toLowerCase();
     const sorters = { power: (g) => g.roster.power, highestPower: (g) => g.roster.highestPower, resources: (g) => g.roster.resources, fort: (g) => g.avg };
     const all = [...governors.values()].filter((g) => g.roster);
-    const top = all.filter((g) => g.roster.top200);
+    const view = state.rosterView;
     const away = (g) => g.roster.status === "Inactive" || g.roster.status === "Migrated";
-    // Top 200 by default; a search looks through everyone so nobody is unfindable.
-    const list = (state.rosterAll || q ? all : top)
+    // Mains by default; a search looks through everyone so nobody is unfindable.
+    const list = (q ? all : all.filter((g) => inView(kindOf(g), view)))
       .filter((g) => !q || g.id?.includes(q) || g.names.some((n) => n.toLowerCase().includes(q)))
       .sort((a, b) => (sorters[state.rosterSort](b) || 0) - (sorters[state.rosterSort](a) || 0));
     const th = (k, label) => `<th class="r ${state.rosterSort === k ? "sorted" : ""}"><button data-rostersort="${k}">${label}</button></th>`;
     return `<div class="wrap page">
       <div class="section-head reveal"><div><div class="eyebrow">Kingdom 3493</div><h1>Roster</h1>
-        <p class="muted">The Top 200 by power from the latest Roster Snapshot; "All" adds the rest, and Inactive and Migrated Governors. Search by any name a Governor has used, or by Character ID.</p></div></div>
-      <div class="toolbar"><div class="seg" role="group" aria-label="Which Governors">
-          <button data-rosterall="0" class="${state.rosterAll ? "" : "on"}" aria-pressed="${!state.rosterAll}">Top 200</button>
-          <button data-rosterall="1" class="${state.rosterAll ? "on" : ""}" aria-pressed="${state.rosterAll}">All ${all.length}</button>
-        </div><input class="search" id="rq" type="search" placeholder="Name or Character ID" aria-label="Search the roster" value="${esc(state.rosterQ)}" autocomplete="off" spellcheck="false"></div>
+        <p class="muted">Governors by power from the latest Roster Snapshot, with Inactive and Migrated ones. Mains, Farms and Others go by the Council's marks. Search by any name a Governor has used, or by Character ID: it looks through everyone.</p></div></div>
+      <div class="toolbar">${viewSeg("rosterview", view, viewCounts(all))}<input class="search" id="rq" type="search" placeholder="Name or Character ID" aria-label="Search the roster" value="${esc(state.rosterQ)}" autocomplete="off" spellcheck="false"></div>
       <section class="card">
         <div class="table-wrap"><table>
           <thead><tr><th>#</th><th>Governor</th><th>Character ID</th>${th("power", "Power")}${th("highestPower", "Highest")}${th("resources", "Resources")}${th("fort", "Fort Average")}</tr></thead>
           <tbody>${list.slice(0, state.rosterLimit).map((g, n) => `<tr class="${away(g) ? "is-away" : ""}">
             <td class="faint num mono">${n + 1}</td>
-            <td class="name-cell">${who(g)} ${away(g) ? `<span class="tag away">${esc(g.roster.status)}</span>` : ""}</td>
+            <td class="name-cell">${who(g)} ${kindTag(g, q ? "all" : view)}${away(g) ? `<span class="tag away">${esc(g.roster.status)}</span>` : ""}</td>
             <td class="pid num">${esc(g.id)}</td>
             <td class="r num"><b>${big(g.roster.power)}</b></td>
             <td class="r num">${big(g.roster.highestPower)}</td>
             <td class="r num">${big(g.roster.resources)}</td>
             <td class="r num">${g.avg != null ? one(g.avg) : '<span class="muted">–</span>'}</td>
-          </tr>`).join("") || `<tr><td colspan="7" class="empty">No Governor matches “${esc(state.rosterQ)}”</td></tr>`}</tbody>
+          </tr>`).join("") || `<tr><td colspan="7" class="empty">${q ? `No Governor matches “${esc(state.rosterQ)}”` : view === "mains" && !anyMain ? NO_MAINS : "No Governor in this view."}</td></tr>`}</tbody>
         </table></div>
         ${list.length > state.rosterLimit ? `<button class="btn more" data-more>Show more (${list.length - state.rosterLimit} left)</button>` : ""}
       </section></div>`;
@@ -774,8 +775,8 @@ import { kvkStory } from "./kvk-stories.js";
     else if (t.dataset.kvk) state.kvkFilter = t.dataset.kvk;
     else if (t.dataset.kvkopen) history.replaceState(null, "", `#kvk/${t.dataset.kvkopen}`);
     else if (t.dataset.kvksort) state.kvkSort = t.dataset.kvksort;
-    else if (t.dataset.kvkall) state.kvkAll = t.dataset.kvkall === "1";
-    else if (t.dataset.rosterall) { state.rosterAll = t.dataset.rosterall === "1"; state.rosterLimit = 50; }
+    else if (t.dataset.kvkview) state.kvkView = t.dataset.kvkview;
+    else if (t.dataset.rosterview) { state.rosterView = t.dataset.rosterview; state.rosterLimit = 50; }
     else if ("more" in t.dataset) state.rosterLimit += 50;
     else return;
     render();
